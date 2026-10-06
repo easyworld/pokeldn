@@ -7,6 +7,7 @@ from pokeldn.pokemon import BuilderError
 
 
 def main(argv=None):
+    runner.utf8_output()
     tools = {tool.key: tool for game in catalog.GAMES for tool in game.tools}
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="list available tools")
