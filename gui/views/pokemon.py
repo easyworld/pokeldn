@@ -20,20 +20,24 @@ class PokemonPicker:
     """Pick a species and PKHeX builds a legal one for the game; or check a file someone brings."""
 
     def __init__(self, app, game: str, value: dict | None, on_change, version: str = "", on_team=None,
-                 on_more=None, glow=None):
+                 on_more=None, glow=None, trainer: dict | None = None):
         """`on_team(sets)` places the sets after the first of a pasted team and says where they went;
-        `on_more(paths)` places the files dropped with the first. `glow()` is what lights under a drag."""
+        `on_more(paths)` places the files dropped with the first. `glow()` is what lights under a drag.
+        `trainer` replaces the app's own as the Pokemon's original trainer."""
         self.app, self.game, self.on_change, self.version = app, game, on_change, version
+        self.trainer = trainer
         self.on_team, self.on_more = on_team, on_more
         self.value = dict(value or {})
         self.species = t.dropdown([], None, on_select=self._pick, enable_filter=True, editable=True,
                                   menu_height=320, hint_text='正在加载种类…', disabled=True)
         self.species.trailing_icon = PixelActivity('正在加载种类')
         self.level = t.field(value=str(self.value.get("level") or ""), hint='自动', mono=True, width=90,
+                             digits=True, limit=3,
                              on_change=lambda e: self._set("level", e.control.value))
         self.sprite = Sprite(app, int(self.value.get("species") or 0), bool(self.value.get("shiny")))
         self.shiny = t.switch(bool(self.value.get("shiny")), self._shiny)
         self.nickname = t.field(value=self.value.get("nickname", ""), hint='昵称（可选）', expand=True,
+                                limit=10 if game == "frlg" else 12,
                                 on_change=lambda e: self._set("nickname", e.control.value))
         self.build_button = t.button('生成', self._build, disabled=True)
         self.options = OfferOptions(self)
@@ -117,7 +121,8 @@ class PokemonPicker:
 
         def work():
             try:
-                info = SERVICE.make(self.game, self.value["species"], self.app.settings.trainer(self.game),
+                info = SERVICE.make(self.game, self.value["species"],
+                                            self.trainer or self.app.settings.trainer(self.game),
                                             level, bool(self.value.get("shiny")),
                                             self.value.get("nickname", ""), VERSIONS.get(self.version, ""),
                                             self.value.get("options"))
@@ -599,6 +604,7 @@ class OfferOptions:
 
         for stat, name in STATS:
             box = t.field(value=str(values.get(stat, "")), hint="-", mono=True, expand=True,
+                          digits=True, limit=3,
                           on_change=lambda e, stat=stat: changed(e, stat))
             boxes.append(t.labeled_control(name, box, expand=True))
         if not values:
@@ -620,7 +626,8 @@ class OfferOptions:
         return ""
 
 
-NAME_LISTS = {"species": "species", "move": "moves", "item": "items", "ball": "balls"}
+NAME_LISTS = {"species": "species", "move": "moves", "item": "items", "ball": "balls",
+              "bag": "bag"}     # the items a Sword/Shield gift may carry
 EMPTY = "-"
 
 

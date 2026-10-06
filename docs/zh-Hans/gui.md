@@ -40,6 +40,37 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 清理包括应用程序的 `session/` 工作文件（捕获、串行跟踪、临时提议和会话元数据）、`logs/` 以及 `pokemon/` 中未使用的生成或导入的提议。保留不到一分钟的已构建提议，因此仍在完成的构建可以保存其选择。保留已保存工具设置和队列引用的提议。接收到的文件及其选定的文件夹、开关键、选定的固件和设置都会被保留，包括当它们存储在清理文件夹下时。 即使在“已接收”文件夹发生更改后，宝可梦记录和二进制转储仍会保留在应用程序的命名临时提议之外。生成的提议由构建者的时间戳和随机后缀标识。符号链接被跳过；保留检查后更改的文件。空的子文件夹将被删除。
 
 在清理之前完成所有活动会话、闪存或电路板检查。清理在后台运行，并推迟新的会话和闪烁，直到完成。报告无法删除的文件并可以重试。宝可梦精灵缓存在高级设置下有自己的清除缓存按钮。
+## Your saves
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+The FireRed and LeafGreen Mystery Gift tool's Your save tab backs the console's save up, or puts one
+back, over the Wonder Cards, Friend path ([Save backup and restore](frlg_gift.md#save-backup-and-restore)).
+The saves live in `Documents/pokeldn/Saves` (`pokeldn.app.saves`), one `.sav` each with a `.json`
+beside it holding its name, where it came from and the console's game code. Clear local files never
+touches the folder; with `POKELDN_DATA` set, the library is `Saves` inside that folder instead.
+
+| action | what happens |
+|---|---|
+| Back up from the Switch | the launcher writes `backup-<run>.sav` and its `.json`; a backup the link cut short is kept in `Saves/.partial` and the next one goes on from it |
+| Put a save on the Switch | the chosen save goes to `--save-restore`; Start stays blocked until one is chosen |
+| `+`, or a `.sav` dropped on the card | the file is copied in; a 16-byte emulator footer is dropped, any other size than 128 KB is refused |
+| Rename, Export .sav, Delete | the name is cosmetic and kept in the `.json`; Delete removes both files from this computer only |
+| View and edit | PKHeX reads the trainer, party and PC boxes; see below |
+
+During a run the Session panel draws the launcher's `[save] backup N of 128 KB` or
+`[save] restore N of M sectors` lines as a progress bar, and the list refreshes when the run ends.
+
+A restore is blocked when the save has no whole copy, and when PKHeX finds a party Pokemon not legal,
+until Restore anyway is turned on. A save's name defaults to the trainer and the cartridge, which only
+a backup knows.
+
+The editor changes the trainer's name, gender, money and coins, and the party: reorder, remove, or add
+a Pokemon PKHeX builds for this save's own trainer (name, ID, secret ID and language). Each party
+Pokemon shows PKHeX's verdict; Check legality runs it over one box, which takes seconds. Keep as a new
+save writes the result through PKHeX, which recomputes every sector checksum, checks that the game's
+own sector test passes and adds it to the library as a new entry; the original is unchanged.
+
 ## 宝可梦精灵
 
 精灵是 `sprites.front_default` 和 `sprites.front_shiny` 后面的 96x96 PNG
@@ -70,16 +101,24 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 设置有开关和清空缓存的按钮。 `POKELDN_SPRITE_BASE` 替换精灵主机，用于测试（`tests/test_sprites.py`）。
 ## 更新
 
-启动时，应用程序会在后台询问 `api.github.com/repos/Decryptu/pokeldn/releases/latest` 最新的稳定版本，并有 5 秒超时。应用程序 `pokeldn.__version__` 上方的标签会向侧边栏添加更新条目；它会打开发行说明或从发行版（`pokeldn-macos-arm64.zip`、`pokeldn-windows-x64.exe`、`pokeldn-linux-x64.tar.gz`）下载此计算机的存档，如果不适合，则从发行页下载。用户用下载替换应用程序；设置、按键和接收到的宝可梦住在外面。
+> 本节已随上游更新，以下内容暂保留英文。
 
-|情况|行为 |
+At launch the app asks `api.github.com/repos/Decryptu/pokeldn/releases/latest` for the newest stable
+release, in the background with a 5 s timeout. A tag above the app's `pokeldn.__version__` adds an
+Update entry to the sidebar; it opens the release notes or downloads this computer's archive from the
+release (`pokeldn-macos-arm64.zip`, `pokeldn-windows-x64.zip`, `pokeldn-linux-x64.tar.gz`), or the
+release page when none fits. The user replaces the app with the download; settings, keys and received
+Pokemon live outside it.
+
+| situation | behaviour |
 |---|---|
-|预发布或草稿，或不是 `vX.Y.Z` | 的标签不提供|
-|无网络，HTTP错误，回复说不是发布|启动时没有显示任何内容；现在查说GitHub没有回复 |
-|设置、更新关闭 |启动时无请求；现在检查还问|
+| pre-release or draft, or a tag that is not `vX.Y.Z` | not offered |
+| no network, HTTP error, reply that is not a release | nothing shown at launch; Check now says GitHub did not answer |
+| Settings, Updates off | no request at launch; Check now still asks |
 
-该请求不携带用户数据。 GitHub 允许每个地址每小时 60 个未经身份验证的请求。
-`POKELDN_UPDATE_URL` 替换端点，用于测试 (`tests/test_app_update.py`)。
+The request carries no user data. GitHub allows 60 unauthenticated requests per hour per address.
+`POKELDN_UPDATE_URL` replaces the endpoint, for tests (`tests/test_app_update.py`).
+
 ## 文件掉落
 
 从桌面拖动的文件落在这些目标上：
@@ -110,7 +149,10 @@ python gui/main.py
  源签出没有固件映像（`gui/firmware` 是构建输出）。 Board 页面的“下载固件”从带有经典 ESP32 映像和 `SHA256SUMS` 的最新非草稿版本中获取每个已知映像，对照该版本的 `SHA256SUMS` 检查每个映像，并仅在全部匹配时才写入它们。早于芯片的版本没有任何图像。来自较旧版本的映像可以携带较旧的串行协议；然后板检查报告固件已过期。
 ## 构建一个桌面应用程序
 
-要打包应用程序，请为 `esp32`、`esp32s3`、`esp32c3` 和 `esp32c6` 安装 ESP-IDF v6.1 并激活其环境。使用单独的配置构建所有四个映像：
+> 本节已随上游更新，以下内容暂保留英文。
+
+To package an app, install ESP-IDF v6.1 for `esp32`, `esp32s3`, `esp32c3` and `esp32c6` and activate its
+environment. Build all four images with separate configurations:
 
 ```sh
 mkdir -p gui/firmware
@@ -130,18 +172,71 @@ idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" build
 idf.py -B build/esp32c6 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c6.bin"
 cd ../..
 python scripts/build_client.py
+python scripts/build_unicorn.py
 python scripts/pack_app.py
 ```
- 绝对输出路径将图像保存在`gui/firmware` 中。加壳器需要所有四个镜像以及来自 `scripts/build_client.py` 的客户端；冻结的应用程序检查验证所有内容都包含在内，并且捆绑的客户端是否带有 `flet_drop`。发布工作流程单独构建每个目标，并将所有四个映像提供给每个桌面加壳器。
 
-应用程序版本为`pokeldn.__version__`。它出现在“设置”以及 macOS 和 Windows 包元数据中。在准备发布之前将其与 `.github/release-notes.md` 一起更新。该工作流程为三个桌面下载和四个固件映像生成 `SHA256SUMS`。手动工作流程运行会产生工件； `v*` 标签发布了一个名为 `pokeldn vX.Y.Z` 的版本
-`.github/release-notes.md` 作为其正文，第一行必须是 `# pokeldn X.Y.Z`（工作流程和
-`tests/test_release.py` 检查一下），并且每次都使用相同的八个文件。仅带有连字符的标签（例如 `v0.3.0-rc1`）被标记为预发布； GitHub 在存储库侧栏中将最新的其他版本显示为“最新”。
+The absolute output paths keep the images in `gui/firmware`. The packer requires all four images,
+the client from `scripts/build_client.py` and the Unicorn from `scripts/build_unicorn.py` (needs CMake); the frozen app check verifies all are included and
+that the bundled client carries `flet_drop`. The release workflow builds each target separately
+and supplies all four images to every desktop packer.
 
-Flet 1.0.2 的加壳程序对 macOS 查看器进行了重新签名，但没有其现有权利。在元数据更改后对查看器进行签名时，`scripts/pack_flet.py` 中的打包包装器会保留它们。冻结支票从嵌入式查看器中读取密封的`com.apple.security.files.user-selected.read-write`权利；如果没有它，选择 `prod.keys` 会引发 `ENTITLEMENT_NOT_FOUND`。
+The app version is `pokeldn.__version__`. It appears in Settings and in the macOS and Windows
+package metadata. Update it and `.github/release-notes.md` together before preparing a release.
+The workflow produces `SHA256SUMS` for the three desktop downloads and four firmware images.
+Manual workflow runs produce artifacts; `v*` tags publish a release named `pokeldn vX.Y.Z` with
+`.github/release-notes.md` as its body, whose first line must be `# pokeldn X.Y.Z` (the workflow and
+`tests/test_release.py` check it), and with the same eight files every time.
+Only tags with a hyphen, such as `v0.3.0-rc1`, are marked as pre-releases; GitHub shows the
+newest other release as Latest in the repository sidebar.
 
-Linux 引导加载程序将 `LD_LIBRARY_PATH` 设置为解压的捆绑包，该捆绑包携带构建机器的 `libstdc++.so.6` (Ubuntu 22.04)。首先加载，它使 Fedora 44 的 Mesa 没有 EGL 客户端扩展，并且 Flet 查看器在 libepoxy 中中止 (`No provider of eglGetPlatformDisplayEXT`)。
-`pokeldn/app/paths.py` 为应用程序启动的每个程序恢复用户的 `LD_LIBRARY_PATH`，并将 `FLET_LINUX_DISTRO` 设置为捆绑查看器的版本：否则，Flet 将通过 glibc 选择查看器并下载捆绑包中未包含的查看器。冻结检查在 Linux 上断言两者。
+The apps are one-folder PyInstaller builds: `pokeldn.app` on macOS, a `pokeldn` folder holding
+`pokeldn` or `pokeldn.exe` and `_internal` on Linux and Windows. A single file unpacks its whole bundle (about 180 MB) to a temporary folder at every launch, and every
+run is the app relaunching itself, so a run paid it again. On an M4 the one-folder app reaches the
+Games page in 0.7 s instead of 2.9 s, and a run's process starts in 0.08 s instead of 1.5 s. Flet's
+packer refuses `--onedir` on macOS; `scripts/pack_app.py` passes it to PyInstaller after Flet's own
+`--onefile`, and the later flag wins. The bundle's Python process never checks in with the Dock: as a
+foreground app it shows a second icon that bounces until the app quits. The packer sets
+`LSBackgroundOnly` in its `Info.plist`, so only the viewer has a Dock icon, as under the single-file
+bootloader.
 
-该应用程序捆绑了 Unicorn，用于离线检查。它按名称加载其架构模块，因此加壳器收集其子模块并将平台的库添加到 `unicorn/lib` 本身：PyInstaller 的库模式匹配 `lib*.so`，而不是 Linux 的 `libunicorn.so.2`。 PyInstaller 的 Windows 引导加载程序与 Control Flow Guard (DllCharacteristics `0xC160`) 链接，Unicorn 在其第一个 `uc_mem_map` ([unicorn#2281](https://github.com/unicorn-engine/unicorn/issues/2281)) 上以 `0xC0000409` 结束 CFG 进程； 64 MiB 线程堆栈不会改变它。加壳器清除`pokeldn.exe`中的`GUARD_CF`，给出`0x8160`，
-`python.exe`。冻结支票在每个平台上的独角兽下都运行一个发票。 Unicorn 在那里引发并处理自己的访问冲突：永远不要在冻结检查中启用 `faulthandler`，它会将该异常记录到 stderr 并使检查失败。
+| part | size | what keeps it small |
+|---|---|---|
+| Flet viewer (`scripts/build_client.py`) | 33 MB | no optional Flet extension (video, maps, camera, webview and the rest; the app draws core controls only), and on macOS only the build machine's architecture |
+| Unicorn (`scripts/build_unicorn.py`) | 3 MB | the installed release built from source with the ARM and ARM64 engines only; the wheel's library carries every CPU family (16 MB) |
+| PKHeX helper (`services/pkhex`) | 18 MB | partial trimming: framework code PKHeX.Core never reaches is dropped |
+| Python | | the packer excludes Flet's web server, auth and image extras (`flet_web`, FastAPI, Uvicorn, Pydantic, httpx, Pillow) and pytest |
+
+Trimming turns off reflection-based JSON in .NET; the helper's replies need it, so the project turns it
+back on (`JsonSerializerIsReflectionEnabledByDefault`). Without it every command answers
+`JsonTypeInfo metadata for type 'System.String' was not provided`. Flet's macOS project runs
+`dart run rive_native:setup` on every build; with Rive gone that step fails, so the client build
+replaces it with `exit 0`.
+
+The viewer is unpacked once per build into `~/.flet/client/flet-desktop-full-<version>-<fingerprint>`,
+and Flet never removes an older build's folder. At each launch the frozen app marks its own folder
+with `pokeldn-drop` and removes the other folders carrying that marker or, from earlier macOS builds,
+a `pokeldn.app` (`gui/flet_client.py`); another Flet app's viewer stays.
+
+Flet 1.0.2's packer re-signs the macOS viewer without its existing entitlements. The packaging
+wrapper in `scripts/pack_flet.py` retains them when signing the viewer after its metadata changes.
+The frozen check reads the sealed `com.apple.security.files.user-selected.read-write` entitlement
+from the embedded viewer; without it, choosing `prod.keys` raises `ENTITLEMENT_NOT_FOUND`.
+
+The Linux bootloader sets `LD_LIBRARY_PATH` to the bundle folder, which carries the build
+machine's `libstdc++.so.6` (Ubuntu 22.04). Loaded first, it leaves Fedora 44's Mesa with no EGL
+client extensions, and the Flet viewer aborts in libepoxy (`No provider of eglGetPlatformDisplayEXT`).
+`pokeldn/app/paths.py` restores the user's `LD_LIBRARY_PATH` for every program the app starts, and
+sets `FLET_LINUX_DISTRO` to the bundled viewer's build: Flet otherwise picks a viewer by glibc and
+downloads one the bundle does not carry. The frozen check asserts both on Linux.
+
+The app bundles Unicorn for Check offline. It loads its architecture modules by name, so the
+packer collects its submodules and adds the ARM-only library to `unicorn/lib` itself, under the wheel's
+file names; the frozen check asserts ARM64 is there and x86 is not. PyInstaller's Windows bootloader
+is linked with Control Flow Guard (DllCharacteristics `0xC160`), and Unicorn ends a CFG process
+with `0xC0000409` on its first `uc_mem_map`
+([unicorn#2281](https://github.com/unicorn-engine/unicorn/issues/2281)); a 64 MiB thread stack
+does not change it. The packer clears `GUARD_CF` in `pokeldn.exe`, giving `0x8160`, the flags of
+`python.exe`. The frozen check runs a payload under Unicorn on every platform. Unicorn raises and
+handles an access violation of its own there: never enable `faulthandler` in the frozen check, it
+logs that exception to stderr and fails the check.

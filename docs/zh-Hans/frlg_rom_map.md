@@ -3,6 +3,7 @@ title: The ROM map
 parent: FireRed and LeafGreen
 nav_order: 4
 ---
+
 # ROM 映射
 
 这里的每个地址都是通过神秘礼物链接（`memory-dump`、`memory-scan`、`table-scan`、`call-chain`，在[游戏机上的代码](frlg_rom.md)上）从游戏机自己的盒带上读出的。
@@ -51,30 +52,45 @@ Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
 
 ## 英文墨盒
 
-神秘礼物主机发送基于自己地址的英文火红（`BPRE`）和英文叶绿（`BPGE`）代码。 `pokeldn/frlg/rom/builds.py` 每个盒可容纳一张桌子（`BPRF`、`BPGF`、`BPRE`、
-`BPGE`、`BPRS`)：IWRAM 全局变量、ROM 函数、钩子或字段存根调用、函数
-`call-chain` 名称和 ROM 数据指针均赠送。
+> 本节已随上游更新，以下内容暂保留英文。
 
-主机从游戏机的游戏代码`MysteryGiftLinkGameData`中选择表格
-[mystery_gift.c:369]，在发送任何与地址相关的内容之前到达。为每个构建构建一个其字节在不同版本之间不同的发票；没有表格的游戏机，或运行排除的游戏机（`--console-build CODE`，或针对其他版本的 `--version`），将被拒绝，且不会发送任何内容。独立构建的税务适用于任何游戏机。
+The Mystery Gift host sends English FireRed (`BPRE`) and English LeafGreen (`BPGE`) code built on their
+own addresses. `pokeldn/frlg/rom/builds.py` holds one table per cartridge (`BPRF`, `BPGF`, `BPRE`,
+`BPGE`, `BPRS`, `BPGS`, `BPRD`, `BPGD`, `BPRI`, `BPGI`, `BPRJ`, `BPGJ`): the IWRAM globals, the ROM functions a payload, hook or field stub calls, the functions
+`call-chain` names, and the ROM data pointers a gift carries.
 
-英文地址来自 `pokefirered_switch.elf` 和 `pokeleafgreen_switch.elf`，每个地址都根据零售映像进行检查：按字节计算的函数，按使用它的文字池的 IWRAM 全局，与法文盒带上的同一池配对。
+The host picks the table from the game code in the console's `MysteryGiftLinkGameData`
+[mystery_gift.c:369], which arrives before anything address-dependent is sent. A payload whose bytes
+differ between builds is built for each; a console with no table, or one the run excludes
+(`--console-build CODE`, or `--version` against the other version), is refused with nothing sent. A
+build-independent payload goes to any console.
 
-|地区 |法语到英语 |
+English addresses come from `pokefirered_switch.elf` and `pokeleafgreen_switch.elf`, each checked
+against the retail image: a function by its bytes, an IWRAM global by the literal pools that use it,
+paired with the same pool on the French cartridge.
+
+| region | French to English |
 |---|---|
-| EWRAM |不变|
-| IWRAM 0x03000000..0x03001B6F |不变|
-| IWRAM 0x03002370..0x0300602F 英语，来自 `gMain`（0x030022D0 法语，0x03002380 英语）| +0xB0 |
-| IWRAM 0x03006090..0x03007583 英语、`gSoundInfo`（0x03005F80 法语）至 `gFlash` | +0x110 |
-| IWRAM 0x03007590 及以上：堆栈、中断向量 |不变|
-| ROM |无单一偏移；每个函数都会被查找|
+| EWRAM | unchanged |
+| IWRAM 0x03000000..0x03001B6F | unchanged |
+| IWRAM 0x03002370..0x0300602F English, from `gMain` (0x030022D0 French, 0x03002380 English) | +0xB0 |
+| IWRAM 0x03006090..0x03007583 English, `gSoundInfo` (0x03005F80 French) to `gFlash` | +0x110 |
+| IWRAM 0x03007590 and up: the stack, the interrupt vector | unchanged |
+| ROM | no single offset; every function is looked up |
 
-英文值：`gRngValue` 0x030042D0、`gSaveBlock1Ptr` 0x030042D8、`gSaveBlock2Ptr` 0x030042DC、
-`gIntrTable[4]` 0x030027E0、`gLastWrittenSector` 0x03004650、`gSaveCounter` 0x03004660。英文叶绿的RAM是英文火红的；驻留钩子的地址仅 `m4aSoundMain` 移动（0x081E07C4 相对于 0x081E07E8）。
+English values: `gRngValue` 0x030042D0, `gSaveBlock1Ptr` 0x030042D8, `gSaveBlock2Ptr` 0x030042DC,
+`gIntrTable[4]` 0x030027E0, `gLastWrittenSector` 0x03004650, `gSaveCounter` 0x03004660. English
+LeafGreen's RAM is English FireRed's; of a resident hook's addresses only `m4aSoundMain` moves
+(0x081E07C4 against 0x081E07E8).
 
-`tests/test_frlg_english_cartridges.py` 通过每个卡带自己的 `Client_RunBufferScript` 在两个零售映像上运行英文有效负载；当 `scratchpad/frlg_en/` 没有图像时它会跳过。
+`tests/test_frlg_english_cartridges.py` runs the English payloads on both retail images through each
+cartridge's own `Client_RunBufferScript`; it skips when `scratchpad/frlg_en/` holds no image.
 
-英文火红（USA v0，`0100554023408000`）在其游戏数据中报告`BPRE`，接受并显示神奇配合，并运行英文`call-chain`：`SpeciesToNationalPokedexNum`在`0x08046A41`对物种277回答252，并且`VarGet` 在 `0x08071CD5` 返回。在模拟游戏机上进行验证；两个会话均以成功消息结束，这会保存 [mystery_gift_menu.c:1379]。
+English FireRed (USA v0, `0100554023408000`) reports `BPRE` in its game data, accepts and shows a
+Wonder Card, and runs an English `call-chain`: `SpeciesToNationalPokedexNum` at `0x08046A41` answers
+252 for species 277, and `VarGet` at `0x08071CD5` returns. Verified on an emulated console; both
+sessions end in a success message, which saves [mystery_gift_menu.c:1379].
+
 ## BIOS 包装器
 
 `libagbsyscall.s` 按照分解顺序 [src/libagbsyscall.s] 作为 THUMB `svc N ; bx lr` 对的一个块进行链接，在两个墨盒上相同，0x24 在叶绿上较低：
@@ -270,6 +286,32 @@ ROM 是 agbcc 构建的，并结束 THUMB 函数 `pop {r4,r5,r6}; pop {r1}; bx r
 
 调用胶合板为 `bx rN` 加对齐，每个四个字节：r0 0x081E2224、r1 0x081E2228 和 r3
 0x081E2230 测量，因此 0x081E2234 是 `_call_via_r4` 和 0x081E223C `_call_via_r6`。
+## Save backup and restore
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+`LoadGameSave` [decomp:src/save.c:803] and `gRfu.sendQueue.count` [link_rfu_2.c:3131] on every
+cartridge, matched to the English revision 0x0A ELF with `bl` targets and literal-pool words masked.
+`LoadGameSave` opens `push {r4-r6, lr}; lsls r0, r0, #24` (`70 b5 00 06`) and pools
+`gDecompressionBuffer`, `0x0201C000` on all twelve. The queue count is read by a 12-byte leaf,
+`ldr r0, =gRfu; ldr r1, =0x8D2; adds r0, r0, r1; ldrb r0, [r0]; bx lr`, one copy per cartridge.
+
+| cartridge | `LoadGameSave` | `gRfu` | `gRfu.sendQueue.count` |
+|---|---|---|---|
+| `BPRE` | `0x080DDBF4` | `0x03005590` | `0x03005E62` |
+| `BPGE` | `0x080DDBC8` | `0x03005590` | `0x03005E62` |
+| `BPRF` | `0x080DDFD4` | `0x030054E0` | `0x03005DB2` |
+| `BPGF` | `0x080DDFA8` | `0x030054E0` | `0x03005DB2` |
+| `BPRD`, `BPRI` | `0x080DDF14` | `0x030054E0` | `0x03005DB2` |
+| `BPGD`, `BPGI` | `0x080DDEE8` | `0x030054E0` | `0x03005DB2` |
+| `BPRS` | `0x080DDFFC` | `0x030054E0` | `0x03005DB2` |
+| `BPGS` | `0x080DDFD0` | `0x030054E0` | `0x03005DB2` |
+| `BPRJ` | `0x080DED68` | `0x03005520` | `0x03005DF2` |
+| `BPGJ` | `0x080DED3C` | `0x03005520` | `0x03005DF2` |
+
+`sSaveSlotLayout` agrees on all twelve except sector id 4: 3816 bytes on the Latin cartridges,
+3776 on the Japanese ones.
+
 # 阅读游戏机的脚本
 
 使用 `gScriptCmdTable` 测量的和从反压缩宏生成的操作数宽度（`scripts/gen_scrcmd_args.py` → `pokeldn/frlg/rom/scrcmd_args.py`：每个 `.macro` 将其操作码作为
@@ -365,32 +407,54 @@ ROM 是 agbcc 构建的，并结束 THUMB 函数 `pop {r4,r5,r6}; pop {r1}; bx r
 | `CalculateMonStats` | `0x08041B78` |最后一次通话|
 ## 西班牙火红墨盒
 
-西班牙火红基地v0（`0100EB702342C000`，显示版本1.0.0）包含`FireRed_s.gba`，游戏代码`BPRS`，修订版0x0A。 16 MiB ROM 具有 SHA-256
-`d4dee5aeb5313e073d6067bee37278b0204886958467633978bb746bbe3d5b76`。其包的四个 NCA 签名、节头哈希、PFS0 和 IVFC 块哈希以及 CNMT 内容哈希进行验证。控件标题为“宝可梦火红版（西班牙语版）”和“宝可梦 Edición Rojo Fuego”。
+> 本节已随上游更新，以下内容暂保留英文。
 
-`builds.BPRS` 提供西班牙本土礼品、活动宝可梦和居民挂钩的地址。
-`vendor/gblink-cards/symbols.json` 提供 167 个卡片符号；生成器的语言 ID 为 7。主机在发送拓扑之前从游戏机的游戏数据中选择 `BPRS`。西班牙叶绿 (`BPGS`) 没有经过验证的地址表，并且因构建相关的有效负载而被拒绝。
+Spanish FireRed base v0 (`0100EB702342C000`, display version 1.0.0) contains `FireRed_s.gba`,
+game code `BPRS`, revision 0x0A. The 16 MiB ROM has SHA-256
+`d4dee5aeb5313e073d6067bee37278b0204886958467633978bb746bbe3d5b76`.
+Its package's four NCA signatures, section-header hashes, PFS0 and IVFC block hashes, and CNMT
+content hashes verify. The control titles are “Pokémon FireRed Version (Spanish Ver.)” and
+“Pokémon Edición Rojo Fuego”.
 
-函数通过唯一的主体窗口与字节相同的英语分解进行匹配，然后通过带有指针字和屏蔽的 THUMB BL 操作数的指令序列进行匹配。从相应的映射函数的文字池中读取 RAM 或数据指针。共享指令序列的小函数需要单独的引用：`IsEnoughMoney` 在 0x080A376C 处调用 `GetMoney`；
-`SpeciesToNationalPokedexNum` at 0x080469A8 读取 0x0824B9DE 处的表，其物种 277 条目返回 252。这些地址是单独找到的； ROM 偏移量在一个版本内会有所不同。
+`builds.BPRS` supplies the Spanish addresses for native gifts, event Pokemon and resident hooks.
+`vendor/gblink-cards/symbols.json` supplies the 167 card symbols; the generator's language id is 7.
+The host selects `BPRS` from the console's game data before it sends a payload. Spanish LeafGreen (`BPGS`) has its own measured table in
+[The international revision 0x0A cartridges](#the-international-revision-0x0a-cartridges).
 
-|符号|西班牙语火红 |
+Functions are matched against the byte-identical English decomp by unique body windows, then by
+instruction sequences with pointer words and THUMB BL operands masked. A RAM or data pointer is
+read from the corresponding mapped function's literal pool. Small functions sharing an instruction
+sequence need a separate reference: `IsEnoughMoney` calls `GetMoney` at 0x080A376C;
+`SpeciesToNationalPokedexNum` at 0x080469A8 reads the table at 0x0824B9DE, whose species 277 entry
+returns 252. These addresses are found individually; ROM offsets vary within one build.
+
+| symbol | Spanish FireRed |
 |---|---|
-| `gRngValue`、`gSaveBlock1Ptr`、`gSaveBlock2Ptr` | 0x03004220、0x03004228、0x0300422C |
-| `gMain`、`gIntrTable[4]`、`gSoundInfo` | 0x030022D0、0x03002730、0x03005F80 |
-| `VBlankIntr`，`Client_RunBufferScript` | 0x0800071C，0x08148CD0 |
-| `CreateMon`、`GetMonData3`、`Random` | 0x08041164、0x080432F8、0x080486C4 |
-| `CB1_Overworld`、`CB2_Overworld`、`RunTextPrinters` | 0x08059E5C、0x08059EDC、0x08002D50 |
-| `m4aSoundMain`，`ReadFlash` | 0x081E089C，0x081E224C |
-| `MapGridGetElevationAt`，`MapGridGetCollisionAt` | 0x0805C658，0x0805C6D8 |
-|剪切、岩石粉碎、力量消息返回指针| 0x081C1909、0x081C19FD、0x081C1AE6 |
+| `gRngValue`, `gSaveBlock1Ptr`, `gSaveBlock2Ptr` | 0x03004220, 0x03004228, 0x0300422C |
+| `gMain`, `gIntrTable[4]`, `gSoundInfo` | 0x030022D0, 0x03002730, 0x03005F80 |
+| `VBlankIntr`, `Client_RunBufferScript` | 0x0800071C, 0x08148CD0 |
+| `CreateMon`, `GetMonData3`, `Random` | 0x08041164, 0x080432F8, 0x080486C4 |
+| `CB1_Overworld`, `CB2_Overworld`, `RunTextPrinters` | 0x08059E5C, 0x08059EDC, 0x08002D50 |
+| `m4aSoundMain`, `ReadFlash` | 0x081E089C, 0x081E224C |
+| `MapGridGetElevationAt`, `MapGridGetCollisionAt` | 0x0805C658, 0x0805C6D8 |
+| Cut, Rock Smash, Strength message return pointers | 0x081C1909, 0x081C19FD, 0x081C1AE6 |
 
-字段移动返回指针遵循其脚本的八字节 `loadword` 和消息调用序列。徽章检查指向 0x081C1901、0x081C19F5 和 0x081C1ADE 处的消息脚本。翻译后的文本长度会改变每条消息与其简历脚本之间的距离。
+The field-move return pointers follow their scripts' eight-byte `loadword` and message-call sequence.
+The badge checks point to the message scripts at 0x081C1901, 0x081C19F5 and 0x081C1ADE.
+The translated text lengths change the distance between each message and its resume script.
 
-所有 44 个卡都通过模拟主机/客户端对话进行接收，并在该 ROM 上的 mGBA 中绑定到 Mom。发货的4倍速卡蹦床安装0x0203FC01在`gIntrTable[4]`并保留
-0x0800071D 在 0x0203FBFC。在 R 按下、释放、然后按下时，它分别调度三个、三个和零个额外的全局回调对，以及四个、四个和零个文本运行，每个帧调用一个原始的 V-blank 处理程序 (`tests/test_team_cards.py`)。
+All 44 cards receive through a simulated host/client conversation and run bound to Mom in mGBA
+on this ROM. The shipped 4× speed card's trampoline installs 0x0203FC01 in `gIntrTable[4]` and keeps
+0x0800071D at 0x0203FBFC. On R press, release, then press, it dispatches respectively three, three
+and zero extra overworld callback pairs, and four, four and zero text runs, with one original V-blank
+handler call each frame (`tests/test_team_cards.py`).
 
-`tests/test_frlg_english_cartridges.py`、`tests/test_noclip.py` 和 `tests/test_follower.py` 包括 `scratchpad/frlg_es/FireRed_s.gba` 处的西班牙图像；当映像不存在时，ROM 支持的检查会跳过。卡带自己的神秘礼物客户端从训练探针返回，用语言 7 创建一个校验和的皮卡丘，调用 `GetVarPointer`，安装一个常驻钩子并加载保存在保存中的钩子。冲突和跟随者检查也使用西班牙地址表运行。
+`tests/test_frlg_english_cartridges.py`, `tests/test_noclip.py` and `tests/test_follower.py` include the
+Spanish image at `scratchpad/frlg_es/FireRed_s.gba`; ROM-backed checks skip when the image is absent.
+The cartridge's own Mystery Gift client returns from the trainer probe, creates a checksummed
+Pikachu with language 7, calls `GetVarPointer`, installs a resident hook and loads the hook kept
+in the save. The collision and follower checks also run with the Spanish address table.
+
 # 法语 Easy Chat 词汇
 
 所有 1006 个与语言相关的 Easy Chat 单词均从游戏机的 ROM 中读出。
@@ -445,3 +509,91 @@ easychat_french.check(ids, strict=True)              # raises on anything unread
 
 叶绿的整个 Easy Chat 区域比火红移动了 −0x1C4，具有相同的词汇：22 个条目，每个计数相等，并且一组的 `string-gather` 在相同的槽中读取相同的单词。
 `easychat_french` 两个控制台的答案。
+## The international revision 0x0A cartridges
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+The six language editions each contain a 16 MiB GBA ROM with header revision `0x0A`. The host
+has address tables for both versions in English, French, German, Italian, Spanish and Japanese.
+
+Functions are paired with the English revision 0x0A ELF by unique instruction windows, masking
+relative calls and pointer literals where necessary. RAM globals and pointer tables are read
+from the corresponding literal pools. The field-move script families are paired as command
+sequences, with their ROM pointers masked; localized text follows those sequences.
+`SpeciesToNationalPokedexNum` is paired with both neighboring conversion functions because
+the three leaf functions share an instruction sequence.
+
+| cartridge | ROM file | SHA-256 |
+|---|---|---|
+| `BPRD` | `FireRed_d.gba` | `04f43a43f7cf9109561cd1744d108f50202c931ce31b30abaa6f18950824d20d` |
+| `BPRE` | `FireRed_e.gba` | `d32c8df8702293716ad8de68755fe5903161f4829a0a2e486bfa7e74a0b62e94` |
+| `BPRF` | `FireRed_f.gba` | `9edf7a3137536b0ccf024a732025da9a0ea1330eb9fd13b2ffed19f5e008c147` |
+| `BPRI` | `FireRed_i.gba` | `cf7fa25cf57fbf12f24709efdd1d1aa8056efb4e9b6520ac7d068d3de13ff135` |
+| `BPRJ` | `FireRed_j.gba` | `e2cdfb0415ef09e887e9d27b925ff02a713a92f004843490cf6b88b68db6cd01` |
+| `BPRS` | `FireRed_s.gba` | `d4dee5aeb5313e073d6067bee37278b0204886958467633978bb746bbe3d5b76` |
+| `BPGD` | `LeafGreen_d.gba` | `eb0e340b5efb3ccb7bab104183d2050fa834261dd816c5ad8221e4e98c04342b` |
+| `BPGE` | `LeafGreen_e.gba` | `993a8a5695a4f7e4dfe8ceec55beb43e020e82b492854d457d4aa3f864d20f08` |
+| `BPGF` | `LeafGreen_f.gba` | `751346c16c0cf3a3ec601d6c2d3c482b54609c5d00ca74f2f668d75b31b8efde` |
+| `BPGI` | `LeafGreen_i.gba` | `b99b9c58c83a61b5bd8a1a69b6f21ce0cfab8d1f6065b53b81a323801c9b2895` |
+| `BPGJ` | `LeafGreen_j.gba` | `a2aa939a23a36610902be51169042efac78f2f6db6a433e06443a2ee09d4f19e` |
+| `BPGS` | `LeafGreen_s.gba` | `a943ecfd6560115b184dc244daed71ba328a67334f343eb35b39932c3ce7c731` |
+
+| symbol | German FireRed | German LeafGreen | Italian FireRed | Italian LeafGreen | Spanish LeafGreen |
+|---|---|---|---|---|---|
+| `gmain` | `0x030022D0` | `0x030022D0` | `0x030022D0` | `0x030022D0` | `0x030022D0` |
+| `sb1ptr` | `0x03004228` | `0x03004228` | `0x03004228` | `0x03004228` | `0x03004228` |
+| `sb2ptr` | `0x0300422C` | `0x0300422C` | `0x0300422C` | `0x0300422C` | `0x0300422C` |
+| `rng` | `0x03004220` | `0x03004220` | `0x03004220` | `0x03004220` | `0x03004220` |
+| `vblank_intr` | `0x08000730` | `0x08000730` | `0x08000730` | `0x08000730` | `0x0800071C` |
+| `create_mon` | `0x08041178` | `0x08041178` | `0x08041164` | `0x08041164` | `0x08041164` |
+| `client_run_buffer_script` | `0x08148BA4` | `0x08148B80` | `0x08148BE4` | `0x08148BC0` | `0x08148CAC` |
+| `save_slot_layout` | `0x083FCEC0` | `0x083FCCFC` | `0x083F464C` | `0x083F4488` | `0x083F7674` |
+
+The ROM-backed tests run each supported cartridge's `Client_RunBufferScript`, `CreateMon`,
+`GetVarPointer`, `VBlankIntr` and saved-hook loader. The collision tests call the cartridge's
+`MapGridGetCollisionAt` and `MapGridGetElevationAt` after installing the hook.
+
+Spanish FireRed's `EventScript_CurrentTooFast` starts at `0x081AA346`, with `lockall` (`0x69`).
+The former card table pointed at `0x081AA347`, the following `loadword` (`0x0F`). The generated
+HM card now uses the script's entry.
+
+### Japanese layout
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+Japanese FireRed and LeafGreen use a different EWRAM layout. Their party begins at
+`0x020241E0`, player avatar at `0x02036FA8`, object events at `0x02036D68`, palette fade at
+`0x020379E8`, and wild-encounter disable byte at `0x02038624`.
+`RunTextPrinters` at `0x08002D38` reads its array pointer `0x02020030` from the literal at
+`0x08002D60` and advances by `0x20` at `0x08002D94`. The international array advances by `0x24`.
+
+Both Japanese cartridges use `gMain` at `0x030022E0`, `gSaveBlock1Ptr` at `0x03004238`,
+`gSaveBlock2Ptr` at `0x0300423C`, `gRngValue` at `0x03004230` and `gIntrTable[4]` at `0x03002740`.
+`gSpecialVar_0x8000` is `0x02036FE8`; the party count is at `0x02023F85`.
+
+Japanese SaveBlock1 is `0x3D40` bytes; international SaveBlock1 is `0x3D68`. The final chunk,
+sector id 4, covers `0xEC0` bytes in Japanese and `0xEE8` internationally. Save injection and
+native flash patching use the selected cartridge's length. `RamScript` retains its offsets:
+checksum `0x361C`, magic `0x3620`, script body `0x3624`. The chunk length is read from each
+ROM's `sSaveSlotLayout` in the ROM-backed checksum test.
+
+Japanese Wonder Cards occupy 164 bytes and Wonder News 224 bytes. `BPRJ`'s
+`SaveWonderCard` at `0x081481F4` copies and checksums 164 bytes; `BPGJ` uses `0x081481CC`.
+The corresponding validation routines are `0x08148250` and `0x08148228`. Both routines save
+and validate an app-generated card in the ROM-backed tests. The card CRC is at SaveBlock1
+`+0x3204`, its data at `+0x3208`; news data starts at `+0x3124`.
+`BufferCardText` at `0x08149934` reads title bytes 10..27, subtitle 28..40, four 20-byte body
+lines at 41..120 and two 20-byte footers at 121..160. Built-in distributions use this compact
+layout for Japanese cartridges. The native `.wc3` layout is described in [Gift files](gifts.md#native-formats).
+
+Both Japanese cartridges execute the native client, `CreateMon`, variable lookup, VBlank handler
+and saved-hook loader under Unicorn. `CreateMon` produces the Japanese nickname ピカチュウ for
+species 25. Japanese names use the kana table and the five-character trainer-name limit;
+Latin accents share byte values with kana. Built-in gift prose stays in Roman text, with accents
+removed on Japanese cartridges. Dialogue prose wraps at 26 characters, with a page break
+after two lines, because the Japanese dialogue font is wider. The Japanese Team cards use their source's Japanese struct
+sizes and dynamic menu widths; two prompts are shortened to fit the RAM-script limit.
+
+The added German and Italian pairs, Spanish LeafGreen and Japanese pair have mGBA card checks.
+These are offline checks against the extracted cartridge ROMs; their Switch wireless delivery
+has not been checked on retail hardware.

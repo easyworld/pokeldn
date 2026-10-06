@@ -3,6 +3,7 @@ title: Legends Arceus
 nav_order: 8
 has_children: true
 ---
+
 # 传说 阿尔宙斯
 
 宝可梦传奇：阿尔宙斯（2022，游戏 ID `01001f5010dfa000`）是一款原生 Switch 游戏，Pia 静态链接到 `main`。
@@ -218,61 +219,126 @@ ack 是会话类型 1，25 个字节：类型字节、主机位置 id、游戏�
 `0x738bc0` 通过常量 id 更新或创建每个站，然后设置 `JoinMeshJob+0x7c` 并发送类型 6。然后加入的游戏机运行 RTT、克隆时钟和流广播可靠流。
 ## 维持网格
 
-当游戏的匹配步骤超时（加入请求后 10.2 秒）时，加入的游戏机将离开，除非 0x81 数据交换首先完成（[游戏的读取器和预处理程序阶段](#the-games-reader-and-the-pre-handler-phase)）。 RTT（0x58）为11字节：kind，八字节时间戳，两字节目标；接受目标为 0 的 kind-1 回波。
+> 本节已随上游更新，以下内容暂保留英文。
 
-可靠流广播 (0x81) 携带 `pokeldn/ldn/reliable5.py` 滑动窗口：9 或 13 字节标头，然后是应用程序数据，或者在清除应用程序数据标志的情况下，
-`2 + 21 * count` 字节。 ack 的前导类型字节仅读取了位 0；每个 21 字节条目是一个站字节、一个大端 u16 确认 ID、一个大端 u16 和一个 16 字节掩码。消费者（`BroadcastReliableSlidingWindow` vf13 `0x742730`）读取其自己的站索引处的条目，并要求其站字节等于发送者的索引：在索引1处确认加入方的主机发送至少两个条目，每个站字节为0。id和掩码遵循[确认](#acknowledgement)。
+A joined console leaves when the game's DataExchangeStart step times out, 10.2 s after its join request,
+unless the 0x81 data exchange completes first ([The game's reader and the pre-handler
+phase](#the-games-reader-and-the-pre-handler-phase)). RTT (0x58) is 11 bytes: kind, eight-byte timestamp,
+two-byte target; a kind-1 echo with target 0 is accepted.
 
-消费者将每个条目的第二个半字存储在`[window + 0x528 + 2 * station]`（`0x742828..0x742830`）中，在类型位0上设置`[window+0x4b8]`，并通过0x7c窗口的`0x74f0ec`（`0x742880`）应用ID。发送路径 vf11 `0x742304` 从其目标位图中删除半字为 `0xffff` 或位于窗口基数或高于窗口基数或槽为空 (`0x74238c..0x74242c`) 的每个站，并将其交给 ack 发送方 `0x74ea00`：除非设置了 `[window+0x4b8]`，否则什么也不做；空位图将其清除并标记 `[window+0x4c0]`；否则是 AckMessage，序列
-`0xffff`，长度`2 + 21 * count` (`0x74eb64..0x74eb94`)，每个占用站一个条目(`0x74eba0..0x74ec2c`，序列化为`0x74ec80`、`0x743160`)。半字仅门确认，从不重传。游戏机的 0x81 应用消息在每个捕获的连接（30）中都携带序列 1，因此主机确认名为 `ack_id 2`； a 主机仍然确认超过收到的最高序列。
+Stream Broadcast Reliable (0x81) carries the `pokeldn/ldn/reliable5.py` sliding window: the
+9-or-13-byte header, then application data or, with the application-data flag clear, a bulk ack of
+`2 + 21 * count` bytes. The ack's leading type byte has only bit 0 read; each 21-byte entry is a
+station byte, a big-endian u16 acknowledgement id, a big-endian u16 and a 16-byte mask. The consumer
+(`BroadcastReliableSlidingWindow` vf13 `0x742730`) reads the entry at its own station index and
+requires its station byte to equal the sender's index: a host acking a joiner at index 1 sends at
+least two entries with every station byte 0. The id and mask follow [Acknowledgement](#acknowledgement).
 
-游戏机用一条 INITIALIZED 数据消息（标志 `0x0f`，seq 1）和第二条消息打开其流；它的 ack 大约每秒一次，携带一个主机流 ID，当主机处于静默状态时该 ID 会上升。应用具有游戏机站索引的目标位图位（位 1，计数 2）的主机数据；在发送站检查时错误的位被丢弃。
+The consumer stores each entry's second halfword at `[window + 0x528 + 2 * station]`
+(`0x742828..0x742830`), sets `[window+0x4b8]` on type bit 0, and applies the id through the 0x7c
+window's `0x74f0ec` (`0x742880`). The send path vf11 `0x742304` drops from its destination bitmap
+every station whose halfword is `0xffff` or at or above the window base, or whose slot is empty
+(`0x74238c..0x74242c`), and hands it to the ack sender `0x74ea00`: nothing unless `[window+0x4b8]`
+is set; an empty bitmap clears it and stamps `[window+0x4c0]`; otherwise an AckMessage, sequence
+`0xffff`, length `2 + 21 * count` (`0x74eb64..0x74eb94`), one entry per occupied station
+(`0x74eba0..0x74ec2c`, serialised by `0x74ec80`, `0x743160`). The halfword only gates
+acknowledgements, never retransmission. A console's 0x81 application message carried sequence 1 in
+every captured join (30), so a host acknowledgement names `ack_id 2`; a host still acknowledges one
+past the highest sequence received.
+
+The console opens its stream with an INITIALIZED data message (flags `0x0f`, seq 1) and a second
+one; its ack, about once a second, carries a host-stream id that climbs while the host is silent. Host data
+with the destination bitmap bit of the console's station index (bit 1, count 2) is applied; the
+wrong bit is dropped at the sender-station check.
+
 ### 静默站检查
 
 会话启动 `0x729d3c` 将启动设置的 `+0x28c` 复制到 `SessionProtocol+0xd8` (`0x72a098`)，没有下限（Z-A 的下限为 4000 毫秒），并将 `+0x290` 传递到发送静默限制（`0x746fe4`：负数失败，0x10407，0 变为 1000 ms）。每次更新 `0x73564c` 都会列出处于状态 2 的每个站，其最后一个数据包 (`ClusterStation+0x88`) 早于 `[SessionProtocol+0xd8]` 毫秒，在主机和加入方上都是如此。一旦第一个条目已存在 3000 毫秒 (`0x735364`)，`0x7359ac` 就会在列表上起作用：主机将每个电台交给 `KickoutManageJob` (`0x73cad4`)；列表中命名为主机的方加入将主机视为已消失 (`0x735b28`)。设置的 `+0x28c` 读取 10000 毫秒（托管搜索的模拟游戏机上的 `0x72a09c` 处的 `w9 = 0x2710`），如 Z-A 中所示。盒子屏幕上的无声主机在大约 13 秒内绘制伙伴留下的消息：10000 毫秒和 3000 毫秒宽限期。
 ## 游戏的读取器和预处理程序阶段
 
-游戏在 `main+0x2ca4f30` (`0x741494`) 上轮询其读取器（在一个测量窗口中进行 365 次调用）：两个循环 0x7C 和 0x80 共享一个处理程序表。 0x81 上的主机数据永远不会到达它。消息的前八个字节是两个 u32 处理程序密钥；匹配的处理程序接收其余的密钥，并且丢弃不匹配的密钥。
+> 本节已随上游更新，以下内容暂保留英文。
 
-在交换搜索屏幕上，处理程序表是空的（读取后为 `ldr x8, [x19+0xd0]; cbz x8`），因此每条消息都未读而被耗尽。 `0x2ca5264` 在流程步骤 0x1e 注册处理程序，在超时的会话中从未到达；离开菜单时，处理程序数组指针为空。经过测量，阅读器在空闲时每秒循环约 2.5 次。游戏的九个 Pia 调用站点仅解析 0x68，
-0x7C和0x80（三个读取循环，四个发送路径）； 0x77 时钟流量是 Pia 自己的。
+The game polls its reader at `main+0x2ca4f30` (`0x741494`) (365 calls in one measured window): two
+loops, 0x7C and 0x80, share one handler table. Host data on 0x81 never reaches it. A message's first eight bytes are a two-u32 handler key; the
+matched handler receives the rest, and an unmatched key is discarded.
 
-十秒离开是游戏匹配序列的失败分支，位于 Pia 网格连接之上；交换场景是其成功的分支。交换流程是`0x13d5bfc`, 踏入`[flow+0xa4]`, 跳转表`0x397c118`对于步骤0x15到0x22。步0x17来电`0x26bdcac`，它构建了序列`[manager+0x70]`;步0x18通过 vtable 插槽 9 轮询（`0x12b3290`), 当未完成-子节点计数器时为 true`[request+0x70]`为零。该流不读取网络、会话或网格字段。步0x1e注册处理程序（`0x13d5f94 -> 0x26d8c2c -> 0x2bcb8c8 -> 0x2ca5264`）。序列的步骤，按名称字符串`0x26bdcac`与其函子配对：
+At the trade search screen the handler table is empty (`ldr x8, [x19+0xd0]; cbz x8` after the read),
+so every message is drained unread. `0x2ca5264` registers handlers at flow step 0x1e, never reached
+in a session that times out; the handler-array pointer is nulled on leaving the menu. The reader
+loops ticked about 2.5 times a second while idle, measured. The game's nine Pia call sites resolve only 0x68,
+0x7C and 0x80 (three read loops, four send paths); the 0x77 clock traffic is Pia's own.
+
+The ten-second leave is the failure branch of the game's matching sequence, above the Pia mesh join;
+the trade scene is its success branch. The trade flow is `0x13d5bfc`, step at `[flow+0xa4]`,
+jump table `0x397c118` for steps 0x15 to 0x22. Step 0x17 calls `0x26bdcac`, which builds the sequence
+at `[manager+0x70]`; step 0x18 polls it through vtable slot 9 (`0x12b3290`), true when the
+outstanding-child counter `[request+0x70]` is zero. The flow reads no network, session or mesh field.
+Step 0x1e registers the handlers (`0x13d5f94 -> 0x26d8c2c -> 0x2bcb8c8 -> 0x2ca5264`). The sequence's
+steps, by the name strings `0x26bdcac` pairs with their functors:
 
     LoginRelayServer     looked up before the sequence is built; a missing one returns false
-    Matching             the first child, the one a timed-out session waits on
-    DataExchangeStart
+    Matching             the matchmaking, from the TradeMatchmakingConfig record
+    DataExchangeStart    the two-round data exchange and its 10.0 s deadline
     OnCancelDataExchange
     OnSuccess            the trade scene
     OnFailure            event 8, flow step 0x23 (table `0x397c134`), the leave
     OnCancel
     Cleanup
- 步骤0x18的第二个门是`0x13de870`，`[obj+0x7c] == 1`在持久网络菜单对象上，通过case-0设置当前页面更新`0x13de888`（`[obj+0x88]`; ViewTop） `[obj+0x90]`
-`0x13de950`，ViewAlert `[obj+0x98]` `0x13de9d8`，ViewInMatching `[obj+0xa0]` `0x13dea28`，由
-`0x13de3cc`（来自 `netm` 布局）在其 `+0x5bc` 中报告结果 1。只有玩家输入才会写入：来自InputDecide和InputBack的1（`0x13dc7b4`、`0x13dc7ec`、`0x13dd3ec`，安装在`0x13dc0a4`，
-`0x13dc1a0`，`0x13dc9a0`），2和3为`button_00`和`button_01`（`0x13ddcb4`），其中设置
-`[obj+0x7c] = 2` 和 `[obj+0x84]`。第一个门，子节点计数器，在 `0x13d6130` 处读取 0。
 
-Matching 子节点的起始点 `0x26c5288` 将数据交换对象存储在 `[matching+0x118]` 处，并在操作系统时钟周期 (`0x26c539c`) 上在 `[matching+0x120]` 处启动秒表。一旦至少有两个站的记录到达并且每个占用的时隙都有一个（`0x26c6b70`、`0x26c6c04`），其更新`0x26c6988`就完成；否则，它将经过的秒数与文字 10.0 进行比较（`0x26c6a94` 处的 `fmov d1, #10.0`，在加入请求后 10.2 秒测量），并使请求失败
-`net_contents::p2p::ErrorLeaveAnyone`（vtable `0x416c628`，由`0x26c6d30`构建）。运行失败
-`0x13d654c -> 0x13d6384 -> 0x2c43d78 -> 0x2ca0a10 -> Session::LeaveAsync (0x72a6dc)`，然后是错误 7 对话框。 `0x26d4ae8` 位于结果回调 `0x26d4aa0` 中，用于测试错误
-`gflnet::request::Error::Timeout`，然后 `ErrorLeaveAnyone` (`0x26d4e04`)，然后
-`gflnet::npln::NplnResult`;每个错误都会通过它。唯一的`Error::Timeout`生产者是观察者
-`0x2bdb754`，由 `0x2bda8cc` 在两个 WaitMember 步骤中武装：25000 ms (`0x2bda24c`) 和
-`3000 + rand % 1000` 毫秒 (`0x2c491b8`)。完成回调为`[request+0x90] -> 0x26d69e8 -> 0x26d6a88`。
+Step 0x18's second gate is `0x13de870`, `[obj+0x7c] == 1` on the persistent network-menu object,
+set by the case-0 update `0x13de888` when the current page (`[obj+0x88]`; ViewTop `[obj+0x90]`
+`0x13de950`, ViewAlert `[obj+0x98]` `0x13de9d8`, ViewInMatching `[obj+0xa0]` `0x13dea28`, built by
+`0x13de3cc` from the `netm` layouts) reports result 1 in its `+0x5bc`. Only player input writes it: 1
+from InputDecide and InputBack (`0x13dc7b4`, `0x13dc7ec`, `0x13dd3ec`, installed at `0x13dc0a4`,
+`0x13dc1a0`, `0x13dc9a0`), 2 and 3 for `button_00` and `button_01` (`0x13ddcb4`), which set
+`[obj+0x7c] = 2` and `[obj+0x84]`. The first gate, the child counter, reads 0 at `0x13d6130`.
 
-匹配的子节点在网格连接后等待流广播可靠（0x81）端口0和1上的两轮数据交换：每个站以类型0x0f消息打开流，并用44字节确认
-`0000002c ffff`消息在标志0xa0（[加入游戏机网络](#joining-a-consoles-network)）下，并发送一个74字节类型的0x1f内容记录，携带以`484b6264`开头的64字节的蜱。匹配在对等方的第二轮记录上完成（测量后 17 毫秒），将 `OnSuccess` (`0x26d5f64`) 入队；仅确认流的主机会超时。加入的游戏机会自动打开其流，并在主机之后发送其内容记录（在主机之后 86 毫秒，测量）；托管游戏机首先在加入方打开的流上发送其记录。交换框（399 字节的 7 类记录）稍后交叉
-0x7c。
+The DataExchangeStart step's start `0x26c5288` (built by `0x26be3f0`, called at `0x26bde74` after
+the step's name; Matching is `0x26be354`) stores the data-exchange object at `[step+0x118]` and
+starts a stopwatch at `[step+0x120]` on the OS tick (`0x26c539c`). Its update `0x26c6988`
+completes once at least two stations' records have arrived and every occupied slot has one
+(`0x26c6b70`, `0x26c6c04`); otherwise it compares the elapsed seconds with the literal 10.0
+(`fmov d1, #10.0` at `0x26c6a94`, measured 10.2 s after the join request) and fails the request with
+`net_contents::p2p::ErrorLeaveAnyone` (vtable `0x416c628`, built by `0x26c6d30`). The failure runs
+`0x13d654c -> 0x13d6384 -> 0x2c43d78 -> 0x2ca0a10 -> Session::LeaveAsync (0x72a6dc)`, then the
+Error 7 dialog. `0x26d4ae8` is in the result callback `0x26d4aa0`, which tests the error against
+`gflnet::request::Error::Timeout`, then `ErrorLeaveAnyone` (`0x26d4e04`), then
+`gflnet::npln::NplnResult`; every error passes it. The step starts only on an established session:
+`0x26c564c` returns false unless the station object at `[exchange+0x80]` reports one and an own
+station index other than 0xfd. The only `Error::Timeout` producer is the watcher `0x2bdb754`, armed
+by `0x2bda8cc` in two WaitMember steps of the matchmaking: 25000 ms (`0x2bda24c`, request
+`0x2bcd394`, target 2) and `3000 + rand % 1000` ms (`0x2c491b8`, `0x2c4874c`, the target from the
+matchmaking record). A WaitMember step completes once the session's member count (vfunc `+0xd8`)
+reaches its target byte `+0x88` (`0x2c1a8f0..0x2c1a920`), and nothing extends its timer. A seated
+hosting slot therefore ends on the 10.0 s deadline: the stopwatch starts after matchmaking returns,
+and its failure leaves the session with host migration. The completion callback is `[request+0x90] -> 0x26d69e8 -> 0x26d6a88`.
 
-一条消息在它的末尾处结束；该带不会将消息与四个字节对齐（5.27-5.45 会对齐），而仅将数据包填充（[读取和写入数据包](#reading-and-writing-a-packet)）。应答游戏机流打开的主机将两条消息捆绑在一个数据包中：端口 0 上的记录，然后在端口 1 上打开其自己的流，并根据标头命名大小、协议和端口并继承消息标志。 `bin/pla_host.py` 每次加入都会发送一次该捆绑包；空中丢失，游戏机在 10.2 秒超时时显示错误 7。
+The DataExchangeStart step waits for a two-round data exchange on Stream Broadcast Reliable (0x81), ports 0
+and 1, after the mesh join: each station opens the stream with a type-0x0f message, acknowledges with the 44-byte
+`0000002c ffff` message under flags 0xa0 ([Joining a console's network](#joining-a-consoles-network))
+and sends one 74-byte type-0x1f content record carrying a 64-byte payload beginning `484b6264`. The step completes on the
+peer's second-round record (17 ms after it, measured), enqueuing `OnSuccess` (`0x26d5f64`); a host
+that only acknowledges the stream gets the timeout. A joining console opens its stream unprompted and
+sends its content record after the host's (86 ms after it, measured); a hosting console sends its
+record first, on the joiner's stream open. The trade box (a 399-byte type-7 record) crosses later on
+0x7c.
 
-|协议|标头目的地 |页脚|
+A message ends where its payload ends; this band does not align messages to four bytes (5.27-5.45
+does), and only the packet pads ([Reading and writing a packet](#reading-and-writing-a-packet)). A
+host answering the console's stream open bundles two messages in one packet: the record on port 0,
+then its own stream open on port 1 under a header naming size, protocol and port and inheriting the
+message flags. `bin/pla_host.py` sends that bundle once per join; lost on the air, the console shows
+Error 7 at the 10.2 s timeout.
+
+| protocols | header destination | footer |
 |---|---|---|
-|会话、克隆时钟、可靠 |对等方的变量 id |无 |
-| RTT，流媒体广播可靠 |网格目的地 0x0001 |收件人的变量 id，明文 |
+| Session, Clone Clock, Reliable | the peer's variable id | none |
+| RTT, Stream Broadcast Reliable | mesh destination 0x0001 | the recipient's variable id, plaintext |
 
-发送到标头中对等方变量 id 的 0x81 消息永远不会到达游戏。除了发送者的站索引外，64 字节内容在同一保存对的两个方向上都是相同的；每个玩家的字节数未知。
+A 0x81 message addressed to the peer's variable id in the header never reaches the game. The 64-byte
+content payload is identical in both directions of a same-save pair except for the sender's station
+index; which bytes are per-player is unknown.
+
 ## 游戏可靠渠道
 
 数据交换后，交换流到达 `0x13d5cac`，在游戏的网络对象上测试 `[net+0xb8] > 1`。对象根据游戏在 0x7c 上读取的内容前进：状态 0 到 1
@@ -825,5 +891,8 @@ Pia 内部没有计时器先于第一个类型 3（[pia.md](pia.md)，离开会�
 `--leave-after SECONDS`使`bin/pla_host.py`将带有自己id的请假发送到每个加入的站点并结束运行； `--stay-after-leave` 保持网络正常运行、安静，并在游戏机在交换后离开后继续运行。叶子的形状固定在捕获的四片游戏机叶子上。
 ## 未解决
 
-- 坐席托管时段是否在 10.0 秒匹配截止时间或 WaitMember 计时器结束。
-- 游戏机在离开网络和显示场地之间的 3.6 秒内做了什么。
+> 本节已随上游更新，以下内容暂保留英文。
+
+- What the matchmaking WaitMember counts as a member (session vfunc `+0xd8`): a first migrating
+  0x11 8.3 s after the seat puts the 10.0 s stopwatch start before the seat.
+- What the console does in the 3.6 s between leaving the network and showing the field.

@@ -1,20 +1,12 @@
-# pokeldn 0.9.1
+# pokeldn 0.12.1
 
 This desktop app trades with seven Pokemon game families on a Switch or Switch 2
 through an ESP32 radio connected by USB. Nothing is installed on the console.
 
 ## What is new
 
-- Clearer Game boosts and Mom restore instructions, plus explanations of Trainer ID, Secret ID,
-  party IVs and EVs. Preset names and descriptions wrap so their instructions stay visible.
-- Native Sword/Shield `.wc8` files open correctly when their binary checksum starts with a JSON
-  opening brace.
-- Pokemon preparation retries an interrupted legality analysis with a fresh helper.
-- Legends Arceus preparation includes species available only in a Hisuian form.
-
-Everything from 0.9.0 is included: the 171 official Sword/Shield event cards, native `.wc3` and `.wc8`
-gift files, the official FireRed/LeafGreen distribution eggs and event Pokemon, the GB-Link Team's custom cards, and Sword/Shield outfits, money
-and Gigantamax Pokemon.
+- Windows: a board that does not answer at first no longer leaves its port locked, so the retries
+  stop failing with "Access is denied", and the error names every attempt's cause.
 
 The firmware is unchanged (1.4.0); a board flashed by 0.7.0 or later needs no reflash.
 
@@ -26,7 +18,7 @@ meant for commercial or promotional use; see the License section of the README.
 | Computer | File |
 |---|---|
 | macOS, Apple silicon | `pokeldn-macos-arm64.zip` |
-| Windows, x64 | `pokeldn-windows-x64.exe` |
+| Windows, x64 | `pokeldn-windows-x64.zip` |
 | Linux, x64 | `pokeldn-linux-x64.tar.gz` |
 
 Each app includes PKHeX.Core and firmware for classic ESP32, ESP32-S3, ESP32-C3 and ESP32-C6. Python, .NET
@@ -36,7 +28,7 @@ The separate `pokeldn-radio*.bin` files are merged firmware images for manual fl
 
 ## First run
 
-1. Extract the macOS or Linux archive, or launch the Windows executable.
+1. Extract the archive for your computer. On Windows, run `pokeldn.exe` inside the extracted `pokeldn` folder.
    - macOS: the app is unsigned, so the first launch is blocked. Open it once and close the warning,
      then open System Settings, Privacy & Security, scroll down to Security and press Open Anyway next
      to pokeldn, then confirm with your password. Later launches open normally.

@@ -3,18 +3,31 @@ title: FireRed and LeafGreen
 nav_order: 4
 has_children: true
 ---
+
 # 火红和叶绿
 
-Switch版本的火红和叶绿是在模拟器内运行的原始GBA ROM，因此堆叠了两个链路层：
+> 本节已随上游更新，以下内容暂保留英文。
 
-|层|谁的|记录于 |
+The Switch release of FireRed and LeafGreen is the original GBA ROM running inside an emulator, so
+two link layers are stacked:
+
+| layer | whose | documented in |
 |---|---|---|
-| LDN 和 Pia |模拟器的，与所有其他 Switch 游戏共享 | [无线层](ldn.md) |
-| GBA链路：RFU帧、席位、块发送| ROM的|这些页面 |
+| LDN and Pia | the emulator's, shared with every other Switch title | [The wireless layer](ldn.md) |
+| the GBA link: RFU frames, seats, block sends | the ROM's | these pages |
 
-[pret/pokefirered](https://github.com/pret/pokefirered) 是 `REVISION >= 0xA` 整个游戏级协议的权威。盒头，读出两个控制台：软件版本`0x0A`，游戏代码`BPRF`（火红，法语）和`BPGF`（叶绿，法语）。
+[pret/pokefirered](https://github.com/pret/pokefirered) is authoritative for the whole game-level
+protocol at `REVISION >= 0xA`. Cartridge header, read off both consoles: software version `0x0A`,
+game code `BPRF` (FireRed, French) and `BPGF` (LeafGreen, French). The host also selects measured
+ROM and RAM addresses for the English, German, Italian, Spanish and Japanese pairs, twelve
+cartridges in total. Mystery Gift detects the language from the cartridge code after the
+player chooses pokeldn in the Friend list; the Basic screen shows this beside the version. The added languages have offline ROM and mGBA checks; wireless delivery
+on those editions still requires retail verification. See [The cartridge maps](frlg_rom_map.md#the-international-revision-0x0a-cartridges).
 
-关联后离开约三秒的游戏机，一旦 Pia 会话完成，就会得到一个没有 6、9 和 12 Mbit/s 的关联响应（[frlg_link.md](frlg_link.md)，广告速率设置）；缺少 Pia 类型 2 连接响应会产生相同的症状。
+A console that leaves about three seconds after associating, once the Pia session has finalized,
+was given an association response without 6, 9 and 12 Mbit/s ([frlg_link.md](frlg_link.md), The
+advertised rate set); a missing Pia type 2 Join Response gives the same symptom.
+
 ## 什么有效
 
 在实机硬件上，在两个卡带上，主机服务于游戏机提供的每项活动：双向神秘礼物、作为主机交换和加入方、整个联合房间，包括全链路战斗、新闻神奇、有线电视俱乐部斗兽场和来访的战斗塔训练家。

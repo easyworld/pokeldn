@@ -60,7 +60,7 @@ class SettingsView:
         speed = t.dropdown([("921600", '921600（默认）'), ("1500000", '1500000（更快，需要优质数据线）')],
                            str(s.baud), on_select=lambda e: self.save("baud", int(e.control.value)))
 
-        def number(name, label, valid):
+        def number(name, label, valid, size):
             def store(e):
                 try:
                     value = int(e.control.value)
@@ -69,14 +69,15 @@ class SettingsView:
                 if valid(value):
                     self.save(name, value)
             return ft.Column([t.text(label, 11, t.MUTED),
-                              t.field(value=str(getattr(s, name)), mono=True, on_change=store)],
+                              t.field(value=str(getattr(s, name)), mono=True, digits=True, limit=size,
+                                      on_change=store)],
                              spacing=4, expand=True)
 
         gba = lambda v: 0 <= v <= 65535   # noqa: E731
         trainer = ft.Column([
             ft.Row([
                 ft.Column([t.text('姓名', 11, t.MUTED),
-                           t.field(value=s.ot, on_change=lambda e: self.save("ot", e.control.value[:12]))],
+                           t.field(value=s.ot, limit=12, on_change=lambda e: self.save("ot", e.control.value[:12]))],
                           spacing=4, expand=True),
                 ft.Column([t.text('语言', 11, t.MUTED),
                            t.dropdown(list(LANGUAGES), str(s.language),
@@ -84,10 +85,10 @@ class SettingsView:
                           spacing=4, expand=True),
             ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
             ft.Row([
-                number("tid", "ID（火红／叶绿）", gba),
-                number("sid", '里 ID', gba),
-                number("switch_tid", "ID（Switch 游戏）", lambda v: switch_ids_valid(v, s.switch_sid)),
-                number("switch_sid", '里 ID', lambda v: switch_ids_valid(s.switch_tid, v)),
+                number("tid", "ID（火红／叶绿）", gba, 5),
+                number("sid", '里 ID', gba, 5),
+                number("switch_tid", "ID（Switch 游戏）", lambda v: switch_ids_valid(v, s.switch_sid), 6),
+                number("switch_sid", '里 ID', lambda v: switch_ids_valid(s.switch_tid, v), 4),
             ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
         ], spacing=10)
 

@@ -228,7 +228,7 @@ accepted. `pokeldn.za.host` resets its round with each trade.
 |---|---|---|
 | 5 | session update `0x95f600` (`0x95f680`) | own state 3 or 4, byte +0x148 set, timer +0x138 at least 1.5 s, partner state 4 or 5, `0x963710` true |
 | 6 | delegate invoke `0xdfda8c`, filled at `0x964e78` | the exchange worker's state-6 delegate |
-| 7 | `0x2dc4b94`, installed by `0x964f0c` | the worker's state-7 delegate |
+| 7 | `0x2dc4b94`, installed by `0x964f0c` | the worker's state-7 delegate; unreachable in 2.0.2 |
 
 `0x9610a4` (caller `0x95fdbc`) runs at own state 5 or more when the worker at +0xd0 is absent or its
 +9 is 0 or 0x10: it calls the callable at session+0x48 with (+0x118, +0x120, +0x128), builds the
@@ -258,8 +258,15 @@ partner's step at +0x70, valid when +0x71 is set.
 | 13 | `0x960d00` | wait for the partner's 0xe | 14 |
 | 14 | `0x960de8` | +0x10 == 0: the state-6 delegate (`0x963810`); else the state-7 delegate (`0x9a0b00`); then `0x9637b8` | 0x10 |
 
-Own state 6 is the exchange completed with no error at worker+0x10, after both stations passed the
-`0200b901XX` steps 3, 6, 0x0b and 0x0e. A station whose +0x15 is clear waits the random 2..302
+Own state 6 is the exchange completed, after both stations passed the `0200b901XX` steps 3, 6, 0x0b
+and 0x0e. Handler 14 picks the state-7 delegate when the worker's error word +0x10 is non-zero, and
+nothing in 2.0.2 writes a non-zero value there: its only stores zero it, in the constructor
+`0x966ba4` (`0x966bcc`) and the start `0x965660` (`0x9656a0`). The worker's abort phase +0xc is read
+by the session tick `0x95f6e4` (`0x95f738`): 1 asks the trade object to cancel (`0x9636f8` sets trade
+object +0x44 = 1) and parks the worker at step 0xf; 2 waits for trade object +0x44 == 3, then sets
+step 14 and phase 3 (`0x95f7e0`). No code stores 1, so the abort phase never starts and no path
+through the worker reaches own state 7. A store through a computed address is not excluded; a write
+breakpoint on worker+0x10 would settle it. A station whose +0x15 is clear waits the random 2..302
 updates before its 0x0b. What `0xdd07cc` returns and how the stored halfword maps onto the `b901XX`
 bytes are untraced.
 
@@ -936,6 +943,31 @@ the type 9 with a type 10 48 ms later, the host sent Net 0x11 sequence 3 and the
 With the type 10 and the 0x12 sent at once, a retail host sent the 0x11 0.04 s after its type 9
 and then Net 0x40 (`01 40 00 00`, source 0) every 0.3 s for 4.06 s while the joiner stayed on its
 network; no second type 9 came.
+
+The Net 0x11 is the leaving host's connection status in the migration form of
+`NetDestroyNetworkJob` (`0x2516444`, flag at job+0xd8, set when the disconnecting station is host,
+`0x2503c44`): `0x2501930` bumps the sequence (NetProtocol+0x15c) and byte 29, the is-migrating byte,
+is 1 while the NetHostMigration state NetProtocol+0x12d0 is 1 (`0x250f084`). It asks every client
+for a Net 0x12 of that sequence; a client stores the sequence, sets NetProtocol+0x308 and answers
+(`0x2503164`, `0x25035c0`). The host waits up to 4000 ms for every 0x12, then sends the 0x40 every
+300 ms for 4000 ms, or 2000 ms when the wait expired, until it is alone, and destroys its network
+(`0x251693c`, `0x25169f8`).
+
+The 0x40 starts the next host's work: `0x2503d44`, on a station that is not host, calls
+NetHostMigration start `0x25099a4`, which picks the next host (`0x2505d10`) and runs
+`NetHostMigrationJob` (`0x2509da0`). On LDN it leaves the old network (`0x2503b14`); the next host
+opens a network (`0x2507050`) and waits 6000 ms for the remaining clients, dropping any that do not
+come back (`0x250acf0`); a client waits 1000 ms and reconnects. Success clears NetProtocol+0x12d0
+and stores result 1 or 2 (host) or 3 (client) at NetProtocol+0x12d4; failure stores 4 with error
+`0xc406`.
+
+A Link Trade ends at the handover. The type-9 handler `0x2550684` removes the leaving host's station
+(`0x2548500`) before starting `ProcessHostMigrationJob`, which drops the session's station count
+(session+0x110). The trade scene update `0x95f398` runs the trade only while that count is above 1
+(`0x95f45c`) and otherwise ends it with reason 3 (`0x95f508`), the ending a partner's leave request
+also reaches. In a two-station trade the leaver is the only partner, so the trade ends whatever the
+migration does, and the leaving console destroys its network.
+
 Leaving on that first 0x40, the joiner was off the network 0.09 s after the type 9 (no trade, the
 player backing out of the box).
 
@@ -954,12 +986,11 @@ is no local-wireless path.
   Trade search with one joiner reached it from CloseParticipation.
 - Whether a shipped script calls the binding `0x1673170` that stores any integer into L, and what the
   language-select table `[x0+0x50]` holds (breakpoint `0x16734c0`, read at `0x2c204ac`).
-- What writes the exchange worker's error word +0x10, which selects own state 7 .
 - Whether an optional timed close (`--hold-after-trade`) can leave the console without an error
   while it is still seated. The default host waits for the console's departure ([Hosting](#hosting)).
   A leaving retail host sends the type 9 first ([A host leaving](#a-host-leaving)); the timed close
   in `bin/za_host.py` sends none.
-- What the Net 0x11 sequence 3 after a type 9 asks of the next host (`NetHostMigrationJob`, vtable
-  slots from `0x2509d60`), and whether a retail session can continue trading after the handover.
+- What a retail Z-A shows and keeps after its trade ends at a handover it receives: the partner-left
+  message, and whether the network it recreates stays open for a new joiner (`0x961a40` onward).
 - What a station does with a protocol-0 message, and the keepalive's header bytes (`04 00` by the
   header diff). A capture of a seated station the console has nothing else to send to.

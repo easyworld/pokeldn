@@ -3,6 +3,7 @@ title: ESP32 radio
 parent: Hardware and setup
 nav_order: 1
 ---
+
 # ESP32 收音机
 
 USB 串行上的 ESP32 板是无线收发设备。运行`firmware/esp32/`，承载LDN的供应商动作帧和以太网帧；广告加密、LDN 身份验证、IP 和 Pia 保留在主机上。 `pokeldn.ldn.esp32_wlan` 为 LDN 库提供了一个由板卡支持的工厂，因此 `ldn.scan`，
@@ -431,20 +432,35 @@ S3、C3 和 C6 通过 USB 串行/JTAG 使用相同的 COBS、CRC 和 CREDIT 协�
 `POKELDN_ESP32_BAUD` 在所有目标上均被接受，并且仅更改经典 ESP32 的线路速率。
 ## 跑步
 
-`POKELDN_RADIO=esp32:<port>` 将每个启动器的 `ldn` 调用放在板上。 `esp32:auto` 采用唯一存在的 USB 串行端口（`/dev/cu.usbserial-*`、`/dev/cu.SLAB_USBtoUART*`、
-`/dev/cu.wchusbserial*`、`/dev/cu.usbmodem*`、`/dev/ttyUSB*`、`/dev/ttyACM*`； Windows 上的 USB COM 端口），并且拒绝在多个端口之间进行选择，因为打开端口可以重置其板。每个进程打开一次端口，并释放 DTR 和 RTS； macOS 上的 CP2102 板无论如何都会在打开时重置，因此主机会在切换到 921600 之前重试 HELLO 5 秒。
+> 本节已随上游更新，以下内容暂保留英文。
 
-在板上，启动器跳过每个 nl80211 步骤：`--phy auto` 解析为 `esp32`，没有删除 vif，没有 `iw`、`ip`、`nmcli` 或 `sysctl` 运行，并且加入方的`--mac`成为板站的地址。 macOS 上不需要 root。扫描会跳过 5 GHz 通道（36 个及以上）：主板仅为 2.4 GHz，因此无法访问托管在 5 GHz 上的游戏机。 FRLG 主机不注入信标；该板的接入点信标本身。
+`POKELDN_RADIO=esp32:<port>` puts every launcher's `ldn` calls on the board. `esp32:auto` takes the
+only USB serial port present (`/dev/cu.usbserial-*`, `/dev/cu.SLAB_USBtoUART*`,
+`/dev/cu.wchusbserial*`, `/dev/cu.usbmodem*`, `/dev/ttyUSB*`, `/dev/ttyACM*`; USB COM ports on Windows)
+and refuses to choose between several, since opening a port can reset its board. The port is opened once
+per process with DTR and RTS released; a CP2102 board on macOS resets on open regardless, so the host
+retries HELLO for 5 s before switching to 921600. Windows opens a COM port exclusively: a second open
+while any handle is held, in this process or another, fails with `PermissionError(13, 'Access is
+denied.')`, so a board that never answers HELLO closes its port before the launcher retries.
 
-`POKELDN_ESP32_TRACE=FILE` 附加每条串行消息，每行一行：Unix 时间、`>` (主机) 或 `<` (板)、键入和十六进制的宽度。
+On the board the launchers skip every nl80211 step: `--phy auto` resolves to `esp32`, no vif is
+deleted, no `iw`, `ip`, `nmcli` or `sysctl` runs, and a joiner's `--mac` becomes the board station's
+address. No root is needed on macOS. A scan skips 5 GHz channels (36 and up): the board is 2.4 GHz
+only, so a console hosting on 5 GHz cannot be reached. The FRLG hosts inject no beacons; the board's
+access point beacons itself.
 
-|工具|它是做什么的 |
+`POKELDN_ESP32_TRACE=FILE` appends every serial message, one line each: Unix time, `>` (host) or `<`
+(board), type and payload in hex.
+
+| tool | what it does |
 |---|---|
-| `tools/ldn/esp32_first_contact.py` |首先在新板上运行：`--flash` 使用 esptool 编写构建，然后是 HELLO，STATUS，一个空闲扫描，计算每个通道和源的 LDN 操作帧，并使用 `--keys` LDN 库的扫描，解密每个网络 |
-| `tools/ldn/esp32_sniff.py` |第二块板作为嗅探器（SNIFF）|
-| `tests/test_esp32.py` | LDN 库的主机和工作站位于两个模拟板 (`pokeldn.ldn.esp32_sim`) 上，通过两个用户空间堆栈从扫描到分段 UDP |
+| `tools/ldn/esp32_first_contact.py` | first run against a new board: `--flash` writes the build with esptool, then HELLO, STATUS, an idle scan counting LDN action frames per channel and source, and with `--keys` the LDN library's scan, decrypting each network |
+| `tools/ldn/esp32_sniff.py` | a second board as a sniffer (SNIFF) |
+| `tests/test_esp32.py` | the LDN library's host and station on two simulated boards (`pokeldn.ldn.esp32_sim`), from scan to fragmented UDP through two userspace stacks |
 
-CH9102 或 CH343 USB 桥枚举为 CDC ACM：Linux 上为 `/dev/ttyACM0`，macOS 上为 `/dev/cu.usbmodem*`。
+A CH9102 or CH343 USB bridge enumerates as CDC ACM: `/dev/ttyACM0` on Linux, `/dev/cu.usbmodem*` on
+macOS.
+
 ### 不解码 OFDM 的板
 
 游戏机的广告是 HT MCS 3 ([Discovery](ldn.md#discovery))，因此无法解调 OFDM 的板会听到其 DSSS 信标，但不会听到任何广告：`esp32_first_contact.py` 在每个通道上计数 0 个 LDN 操作帧。两项检查可将其与固件或主机故障区分开来：

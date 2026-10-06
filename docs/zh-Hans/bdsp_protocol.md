@@ -3,6 +3,7 @@ title: The game protocol
 parent: Brilliant Diamond and Shining Pearl
 nav_order: 2
 ---
+
 # BDSP自己的协议，并控制一个字符
 
 在 Pia 有效负载内部，BDSP 运行类型化协议。 `Dpr.NetworkUtils.NetDataParser` 中
@@ -365,21 +366,29 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 `DPData`) 元帅位于包 4，`TvRecode*` 结构位于包 8；在这些字段大小下没有填充结果。
 ### 战斗天梯
 
-一场战斗（“Combattre”，招募时状态字节3）运行一个梯子；招募游戏机在每个梯级等待加入方（这里是客户端）：
+> 本节已随上游更新，以下内容暂保留英文。
 
-|方加入发送 |游戏机确实如此|
+A battle ("Combattre", state byte 3 while recruiting) runs a ladder; the recruiting console waits on
+the joiner (here the client) at every rung:
+
+| the joiner sends | the console does |
 |---|---|
-| `NetDataTalkData{GREETING}` |显示“非战斗？好的！Donne-moi juste une 分钟！”并等待|
-| `NetDataSelectData{0}` (0x08) |显示“POKELDN est en train de choisir quoi faire...”并等待 |
-| `NetDataBattleTypeData{0}`（0x09，`BattleModeID.Single`）|询问玩家“voulez-vous faire un Battle selon ces règles？”；如果是，则发送 `NetDataTransitionData{17, 0}`，状态字节 17，并在“connexion en cours”处打开独奏大厅 |
-| `NetDataBattleMatchingJoin` (0x30) `{uint id, byte stationIndex, index, language, colorId, avatarId, sexId, cassetVersion}` |用自己的加入（`id`其训练家ID，站0，索引0）应答并中继加入方；方加入的角色出现在大厅的第二个槽位 |
-| `NetDataBattleMatchingReady`（0x32，空）| `BattleMatchingManager$$ReceiveReadyData`：当每个成员都准备好时，`NetDataBattleMatchingState{0, 6}`（0x33），`MatchingState.SelectBattleTeam`（单人战斗跳过4和5），其玩家获得团队选择按钮|
-|什么都没有|关于玩家的团队选择，六个`NetDataBattleMatchingSelectPokemon`（0x38，481字节），然后“en attente d'autres personnes”|
+| `NetDataTalkData{GREETING}` | shows "Un combat ? OK ! Donne-moi juste une minute !" and waits |
+| `NetDataSelectData{0}` (0x08) | shows "POKELDN est en train de choisir quoi faire..." and waits |
+| `NetDataBattleTypeData{0}` (0x09, `BattleModeID.Single`) | asks its player "voulez-vous faire un combat selon ces règles ?"; on yes sends `NetDataTransitionData{17, 0}`, state byte 17, and opens the solo lobby at "connexion en cours" |
+| `NetDataBattleMatchingJoin` (0x30) `{uint id, byte stationIndex, index, language, colorId, avatarId, sexId, cassetVersion}` | answers with its own join (`id` its trainer id, station 0, index 0) and relays the joiner's back; the joiner's character appears in the lobby's second slot |
+| `NetDataBattleMatchingReady` (0x32, empty) | `BattleMatchingManager$$ReceiveReadyData`: when every member is ready, `NetDataBattleMatchingState{0, 6}` (0x33), `MatchingState.SelectBattleTeam` (4 and 5 skipped for a solo battle), and its player gets the team-selection button |
+| nothing | on the player's team choice, six `NetDataBattleMatchingSelectPokemon` (0x38, 481 bytes), then "en attente d'autres personnes" |
 
-每个0x38持有一个加密的 PB8，其校验和验证（所选团队，按顺序），二十`SealParam`相同堆残基的槽位`affixSealCount` 0, `attachPokemonId`和`attachPersonalRnd` 0, `index`0 到 5 和`num`6. 游戏机接受了0x30谁`id`曾是0x0badc0de;没有检查该字段。`BattleMatchingManager.MatchingState`：无 0、初始化 1、加载 2、招募成员 3、选择团队成员 4、选择规则 5、选择战斗团队 6、选择神奇宝贝 7、GoBattle 8、结果 9、恢复 10、结束 11、离开其他成员 12。
+Each 0x38 holds an encrypted PB8 whose checksum verifies (the picked team, in order), twenty
+`SealParam` slots of identical heap residue with `affixSealCount` 0, `attachPokemonId` and
+`attachPersonalRnd` 0, `index` 0 to 5 and `num` 6. A console accepted a 0x30 whose `id` was
+0x0badc0de; no check on the field is located. `BattleMatchingManager.MatchingState`: None 0,
+Initialize 1, Load 2, RecruitmentMember 3, SelectTeamMember 4, SelectRule 5, SelectBattleTeam 6,
+SelectPokemon 7, GoBattle 8, Result 9, Resume 10, Closing 11, LeavedOtherMembers 12.
 
-`NetDataSelectData` (0x08) 是 `{byte index}`。它的一个接收器[`UnionRoomManager$$SetNetData`，
-0x01e52a30] 读取发送者的站，但从不读取索引：
+`NetDataSelectData` (0x08) is `{byte index}`. Its one receiver [`UnionRoomManager$$SetNetData`,
+0x01e52a30] reads the sender's station and never the index:
 
     m = stateController.battleRecruitmentModel                  UnionStateController +0x38
     m.ChangeBattleRecruitmentState(BATTLE_RULE_SELECT_WAIT 4)   0x01d2aab0
@@ -387,17 +396,37 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
     m.CloseWindow()
     if m.unionMsgBattleWindow != null:
         SetTargetDataMessage(window, station, 1, 1); OpenMsgWindow(window, 3, 2)   0x01f86fa0
- 无论对话是否开放，0x08 都会驱动战斗招募模型。两个发送方都写入 0（`UnionBattleContextMenu$$SendRuleSelectState` [0x01f87c60]，尾部调用，并且
-`<ShowBattleJoinYesNoWindow>b__0` [0x01f8800c]）。
 
-接收器从不测试模型是否为空：它加载 +0x38 [0x01e52a78]，情况 4 将其写入 `NetStateModel$$SetState` [0x023e2604]。 +0x38 的唯一商店是
-`CreateSelectStateModel` [0x01e4bb08]，当玩家招募战斗时，为状态3或17构建一个`BattleRecruitmentStateModel`（`stateModelType` 0；A按通过1并构建一个
-`BattleJoinStateModel`）。 `UnionStateController` 每个 `UnionRoomManager` （`UnionRoomManager$$SetUp`、`.ctor` 0x01e4d01c）构建一次，并且链接战斗保留两者（`EvDataManager$$UpdateStart` -> `UnionRoomManager$$ReturnBattle` [0x01b02a78]，无构造函数）。一个
-0x08 到达玩家在该访问中未招募战斗的游戏机时写入 null。
+A 0x08 drives the battle recruitment model whatever conversation is open. Both senders write 0
+(`UnionBattleContextMenu$$SendRuleSelectState` [0x01f87c60], a tail call, and
+`<ShowBattleJoinYesNoWindow>b__0` [0x01f8800c]).
 
-天梯的0x08行是在招募了战斗的游戏机上测量的。客户端已经使用的序列id下的0x08被可靠窗口丢弃（[Pia页面](pia.md#what-the-receiver-discards-in-silence)）；发送到未招募的会说话的游戏机的 22 个消息以客户自己的 0x64 答案之一的 ID 发出，因此没有一个到达空路径。
+The receiver never tests the model for null: it loads +0x38 [0x01e52a78] and case 4 writes
+through it in `NetStateModel$$SetState` [0x023e2604]. The only store to +0x38 is
+`CreateSelectStateModel` [0x01e4bb08], building a `BattleRecruitmentStateModel` for state 3 or 17
+when the player recruits a battle (`stateModelType` 0; the A press passes 1 and builds a
+`BattleJoinStateModel`). `UnionStateController` is built once per `UnionRoomManager`
+(`UnionRoomManager$$SetUp`, `.ctor` 0x01e4d01c), and a link battle keeps both
+(`EvDataManager$$UpdateStart` -> `UnionRoomManager$$ReturnBattle` [0x01b02a78], no constructor).
+Each entry builds a new `UnionRoomManager`: `EvDataManager$$EvCmdUnionProc` [0x01b35f70] adds it to a
+`new GameObject("UnionRoomManager")` [0x01b36090] before the warp into the room, with no
+`DontDestroyOnLoad`. `UnionRoomManager$$Init` [0x01e49e40] passes the zones {484, 491, 492, 493}
+(`UNION`, `UNION01` to `UNION03`) to `NetUseManager.SetEnableZone` [0x026cfca0], which subscribes to
+`FieldManager`'s zone-change event; `NetUseManager.OnZoneChange` [0x026cfef0] calls
+`Object.Destroy(gameObject)` [0x026d00f0] on the first zone outside the list. Leaving (`LeaveUnion`
+[0x01e4e300], its coroutine setting the transition zone at [0x01e560e0]) is such a change, so
+`UnionRoomManager$$OnDestroy` [0x01e4c540] runs and calls `Clear`. The recruitment model therefore
+starts null on every visit. A 0x08 reaching a console whose player has not recruited a battle in that
+visit writes through null.
 
-切勿发送 0x08，除非游戏机自己的 0x04 用 `isRecruiment` 1 表示状态 3。
+The ladder's 0x08 row was measured on a console that had recruited the battle. A 0x08 under a
+sequence id the client already used is discarded by the reliable window ([the Pia
+page](pia.md#what-the-receiver-discards-in-silence)); the 22 sent to a talking console that had not
+recruited went out under an id one of the client's own 0x64 answers already held, so none reached
+the null path.
+
+Never send 0x08 unless the console's own 0x04 says state 3 with `isRecruiment` 1.
+
 ### 地下大洞窟
 
 地铁在场景 ID 12608 下发布相同的 `local_communication_id` 广告；同一会话线路关联，没有加入记录（`--room-walk 0`）。电台到达时 `UgNetworkManager` 发送：

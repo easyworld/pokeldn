@@ -3,6 +3,7 @@ title: Mystery Gift
 parent: FireRed and LeafGreen
 nav_order: 2
 ---
+
 # 神秘礼物
 
 神秘礼物菜单不需要宝可梦中心。 Wonder Cards屏幕上的游戏机接受神奇调整、传送脚本、神奇新闻、来访的战斗塔训练家和直接进入队伍的宝可梦。神秘事件VM和原生ARM代码位于[游戏机上的代码](frlg_rom.md)。
@@ -181,33 +182,59 @@ else:                      save the stamp, run activation, STAMP_RECEIVED
 `Aura Mew`、`MYSTRY Mew`、`DOEL Deoxys`、`SPACE C Deoxys`、`ROCKS Metang`、`10 ANIV Pikachu`及其他所有`10 ANIV`品种、欧洲`10ANNIV`、 `10JAHRE`、`10ANNI` 和 `10ANIV` 发布。如果事件以多种语言发布，则发送匹配 `--language` 的事件。
 ### GB-Link 团队卡
 
-GB-Link 团队的定制 Wonder 卡（GB-Link-Switch-LDN `cards/`，GPL-3.0）是一个神奇动作加上一个携带 THUMB 代码的送货员 RAM 脚本，通过 `callnative` 调用。他们的 ARM 源码位于
-`vendor/gblink-cards/`; `scripts/gen_team_cards.py` 将五个墨盒组装成
-`pokeldn/frlg/data/team_cards.json`和`pokeldn/frlg/gift/team_cards.py`将每张卡注册在其id下，没有`custom-`（`--gift nature-mint`）。利用未修改的源和 RAM 地址，生成器逐字节地再现了自己的 `BPRE 1.10` 有效负载，总共 44 个。
+> 本节已随上游更新，以下内容暂保留英文。
 
-`starter-egg`、`rare-berries` 和 `national-dex` 是他们的三张不需要本地代码的卡片，由作曲家重建：浆果是项目 173、174 和 175，以及国家图鉴卡组
-`FLAG_SYS_NATIONAL_DEX` (0x840)。他们的事件宝可梦来自PKHeX（参见事件宝可梦），除了四个PKHeX的表格被遗漏；他们的追随者、大师球、加速和遭遇钩子都包含在这个项目自己的内容中。
+The GB-Link Team's custom Wonder Cards (GB-Link-Switch-LDN `cards/`, GPL-3.0) are a Wonder Card plus a
+delivery-man RAM script that carries THUMB code, called through `callnative`. Their ARM sources are in
+`vendor/gblink-cards/`; `scripts/gen_team_cards.py` assembles them for five cartridges into
+`pokeldn/frlg/data/team_cards.json`, and `pokeldn/frlg/gift/team_cards.py` registers each card under its
+id without `custom-` (`--gift nature-mint`). With their unmodified sources and their RAM addresses the
+generator reproduces their own `BPRE 1.10` payloads byte for byte, all 44 of them.
 
-|组 |卡片 |
+`starter-egg`, `rare-berries` and `national-dex` are their three cards that need no native code,
+rebuilt with the composer: berries are items 173, 174 and 175, and the National Pokedex card sets
+`FLAG_SYS_NATIONAL_DEX` (0x840). Their event Pokemon come from PKHeX
+(see Event Pokemon) except the four PKHeX's table leaves out; their follower, Master Ball, speed-up and
+encounter hooks are covered by this project's own.
+
+| group | cards |
 |---|---|
-|换个宝可梦| `nature-mint`、`ability-capsule`、`poke-ball-changer`、`pokemon-gender`、`nickname`、`stat-judge`、`hidden-power`、`hidden-power-type`、 `ev-training`、`friendship`、`pp-max`、`max-conditions`、`pokerus`、`unown-letters`、`trade-evolution`、`espeon-umbreon`、 `move-tutor` |
-|每帧挂钩 | `speed-2`、`speed-3`、`speed-4`、`speed-0-75`、`speed-0-5`、`fast-text`、`travel-anywhere`、`pc-anywhere`、 `hm-moves`、`reusable-tms`、`physical-special-split`、`exp-share`、`shiny-hunting`、`roamer` |
-|其他| `no-encounters`、`legendary-respawn`、`instant-eggs`、`gift-box`、`pocket-casino`、`gift-ribbons`、`trainer-ids`、`gender-swap`、 `rival-name` |
-|活动宝可梦| `box-eggs`、`colosseum-pikachu`、`ageto-celebi`、`mattle-ho-oh` |
+| change a Pokemon | `nature-mint`, `ability-capsule`, `poke-ball-changer`, `pokemon-gender`, `nickname`, `stat-judge`, `hidden-power`, `hidden-power-type`, `ev-training`, `friendship`, `pp-max`, `max-conditions`, `pokerus`, `unown-letters`, `trade-evolution`, `espeon-umbreon`, `move-tutor` |
+| per-frame hooks | `speed-2`, `speed-3`, `speed-4`, `speed-0-75`, `speed-0-5`, `fast-text`, `travel-anywhere`, `pc-anywhere`, `hm-moves`, `reusable-tms`, `physical-special-split`, `exp-share`, `shiny-hunting`, `roamer` |
+| other | `no-encounters`, `legendary-respawn`, `instant-eggs`, `gift-box`, `pocket-casino`, `gift-ribbons`, `trainer-ids`, `gender-swap`, `rival-name` |
+| event Pokemon | `box-eggs`, `colosseum-pikachu`, `ageto-celebi`, `mattle-ho-oh` |
 
-与他们的构建有何不同：
+What differs from their build:
 
-- 法国和西班牙墨盒。源采用的 167 个地址可在英文符号表中的 `BPRF`/`BPGF` 和 `BPRS` 上找到：函数由其主体的唯一字节窗口表示，RAM 和指针承载数据由映射函数的文字池表示，字段脚本标签由其脚本的开头和屏蔽的指针表示。   `vendor/gblink-cards/symbols.json` 持有全部五个； `tests/test_team_cards.py` 在每个磁带上对照 `builds.py` 检查其中的 25 个。西班牙火红使用自己经过验证的ROM表（[西班牙火红盒](frlg_rom_map.md#the-spanish-firered-cartridge)）。每个脚本都会检查标题的游戏字母、语言字母和修订版，因此发送到另一个卡带的发票仅表明该礼物不起作用。
-- 重新定位的脚本（996字节）和菜单列表（80字节）转到`0x0203F768`和`0x0203FB50`，newlib的malloc状态，而不是`0x0203FC00`，该项目的常驻挂钩运行于此；参见[税务可以居住的地方](frlg_rom.md#where-a-payload-can-live)。
-- 挂钩卡的安装程序在其副本之前将 `gIntrTable[4]` 指向 `VBlankIntr`，链接到它而不是他们找到的处理程序，并将其存储在 `0x0203FBFC`，该项目的常驻安装所在位置。挂钩卡取代了跑步游戏加速，反之亦然；两者都不会链接到过时的副本。它们的状态位于 `0x0203FF60`，它们的副本在其下方结束。
-- 1019 以上的 id 没有 `sReceivedGiftFlags` 位；注册表会发送 1000 + 卡的 ID 号 mod 20。
-- 安装程序更改后，两个文本缩短了 4 个和 6 个字符（`hm-moves`、`physical-special-split`）以适应 995 字节。
+- All twelve revision `0x0A` cartridges. The 167 addresses the sources take are measured on
+  each English, French, German, Italian, Spanish and Japanese FireRed/LeafGreen ROM: a function
+  by unique instruction windows, RAM and pointer-bearing data by literal pools, and a field-script
+  label by its command sequence with pointers masked. `vendor/gblink-cards/symbols.json` holds
+  all twelve tables; `tests/test_team_cards.py` checks 25 entries against `builds.py` on every
+  cartridge. Each script checks the header's game letter, language letter and revision.
+  See [The cartridge maps](frlg_rom_map.md#the-international-revision-0x0a-cartridges).
+- The relocated script (996 bytes) and the menu list (80 bytes) go to `0x0203F768` and `0x0203FB50`,
+  newlib's malloc state, instead of `0x0203FC00`, where this project's resident hooks run; see
+  [Where a payload can live](frlg_rom.md#where-a-payload-can-live).
+- The hook cards' installers point `gIntrTable[4]` at `VBlankIntr` before their copy, chain to it
+  rather than to the handler they find, and store it at `0x0203FBFC`, where this project's resident
+  installs look. A hook card replaces a running game boost and the reverse; neither chains to a stale
+  copy. Their state is at `0x0203FF60`, their copy ends below it.
+- Their ids above 1019 have no `sReceivedGiftFlags` bit; the registry sends 1000 + the card's id
+  number mod 20 for those.
+- Two texts are four and six characters shorter (`hm-moves`, `physical-special-split`) to fit 995
+  bytes after the installer change.
 
-每张卡都在mGBA下绑定了妈妈的法文、英文火红／叶绿、西班牙文火红； `nature-mint`、`pc-anywhere` 和
-`rival-name` 也在零售法国火红上运行。发送到其他游戏的卡带上的一个对话框回答“此礼物不适用于此版本的游戏。”随着常驻钩子的运行，
-`nature-mint` 保持 `0x0203FC00..0x02040000` 不变，`pc-anywhere` 接管 `gIntrTable[4]`，而 `0x0800071D` 保留在 `0x0203FBFC`。
+Every card has been exercised bound to Mom under mGBA on all twelve cartridges;
+these checks cover entry, messages and menus, rather than every choice within each card. `nature-mint`, `pc-anywhere` and
+`rival-name` have also run on a retail French FireRed. A payload sent to the other game's cartridge
+answers "This gift doesn't work with this version of the game." ("Wrong game." on Japanese). With a resident hook running,
+`nature-mint` leaves `0x0203FC00..0x02040000` untouched and `pc-anywhere` takes over `gIntrTable[4]`
+with `0x0800071D` kept at `0x0203FBFC`.
 
-`colosseum-pikachu`和`ageto-celebi`带有他们的日本教练名字，欧洲墨盒将其绘制为点； PKHeX 报告宝可梦的所有四个事件均合法。
+`colosseum-pikachu` and `ageto-celebi` carry their Japanese trainer names, which a European cartridge
+draws as dots; PKHeX reports all four event Pokemon legal.
+
 ### 战斗计数卡
 
 `MysteryEventScript_BattleCard` [data/mystery_event_msg.s:162] 通过读取 `GET_CARD_BATTLES_WON`
@@ -297,6 +324,100 @@ GB-Link 团队的定制 Wonder 卡（GB-Link-Switch-LDN `cards/`，GPL-3.0）是
 
 每个会话的 `MysteryGiftLinkGameData` 都包含轻松聊天配置文件和卡片统计信息 (`CARD_STAT_BATTLES_WON` / `_LOST` / `_NUM_TRADES` / `_NUM_STAMPS`) [mystery_gift.c:361]。
 `--game-data-log PATH` (`pokeldn/frlg/gift/game_data_log.py`) 将每个会话附加到 JSONL 分类帐并打印自该游戏机上一个会话以来移动的内容； `tools/frlg/game_data_read.py PATH` 读取它。计数器仅作为同一卡标志 ID 上的差异的证据。账本列出了 French Easy Chat 表所缺少的每个单词的名称。
+## Save backup and restore
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+A Wonder Cards, Friend session copies the console's whole 128 KiB save chip to the host, or writes a
+`.sav` onto it and makes the game load and save it. No card is sent and none is replaced. The two
+payloads, `asm/save-backup.s` and `asm/save-restore.s`, are ported from the GB-Link Team's
+`cards/savebackup.s` and `cards/saverestore.s` (`GB-Link/GB-Link-Switch-LDN`, GPL-3.0); the hosts are
+`pokeldn.frlg.gift.save_transfer` and `bin/frlg_mg_host.py --save-backup FILE` / `--save-restore FILE`.
+The app runs both from the Mystery Gift tool's Your save tab ([Your saves](gui.md#your-saves)).
+
+Both run on all twelve cartridges. Two build addresses are patched into the payloads; the rest of
+the save layout is shared ([Save backup and restore](frlg_rom_map.md#save-backup-and-restore)).
+
+### The token coding
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+Both directions carry chip bytes as tokens: a byte `n < 0x80` is followed by `n + 1` literal bytes;
+a byte `n >= 0x80` by one byte repeated `n - 0x80 + 3` times. A run of three or more is taken whole,
+at most 130; a literal stretch is at most 128. A save is mostly `0x00` and `0xFF` runs.
+
+### Backup
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+The client script repeats `CLI_LOAD_TOSS_RESPONSE, CLI_RUN_BUFFER_SCRIPT, CLI_SEND_LOADED` up to 32
+times per script, then asks for the next script; the host sends as many passes as the rest should
+take at the pace so far, plus one. Each pass sends up to 1 KiB of tokens for at most 8 KiB of the chip,
+never across the 64 KiB bank boundary. The chip offset lives in `client->param` as
+`0x5A << 24 | offset` [mystery_gift_client.c:276]; a `param` without `0x5A` is the session's first pass,
+which starts at the header word `first`.
+
+| payload word | offset | value |
+|---|---|---|
+| `first` | `0x004` | the chip offset the first pass starts at |
+| `send_queue` | `0x008` | `&gRfu.sendQueue.count` |
+
+A pass stages its stretch into `gDecompressionBuffer + 0x800`, `0x800` bytes a frame (returning 0),
+then compresses it into `gDecompressionBuffer + 0x400` and points `link.sendBuffer` (`param + 0x3C`)
+and `link.sendSize` (`param + 0x34`) at the message. A pass returns 0 while `gRfu.sendQueue.count` is
+not zero: a lost fragment is queued again on top of each frame's send, and the 40-command queue
+drains only while nothing new is sent.
+
+The session ends on `CLI_MSG_BUFFER_FAILURE` after a 64-byte message, so the console shows it and
+does not save [mystery_gift_menu.c:1379]. A backup cut short is kept on the host by game code and
+trainer id; the next backup of that console sets `first` to where it stopped.
+
+### Restore
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+1. The first message is the whole 620-byte image. `install` copies it to `gDecompressionBuffer + 0x400`,
+   past the 1 KiB each message overwrites, and answers with the 12-byte footers (id, checksum,
+   signature, counter at `+0xFF4`) of the 28 slot sectors.
+2. The host finds the chip's newest whole slot from the footers, as `GetSaveValidStatus` would, and
+   plans the writes: the file's loaded copy into the other slot with counter `newest + 1`, then
+   sectors 28 to 31 (Hall of Fame, Trainer Tower) as the file has them.
+3. The slot being replaced still loads while its 14 ids pass, whatever their counters, so a
+   half-written slot could be taken. The plan erases that slot's id-0 sector first and writes the new
+   id 0 last: until the copy is whole the slot lacks an id and the chip's own copy loads.
+4. Each later message starts with `b RESIDENT + 4` (`0xEA0000FF`), then an op. `OP_DATA` (1) carries
+   the sector, a write flag, a u16 offset, a u16 token length and tokens that fill a 4 KiB staging
+   buffer; the last message of a sector writes it with `swi 0x48` and reads it back through the
+   window. A sector that differs, or tokens that overflow the buffer, set a bit in the fail mask; the
+   host waits for that report before the next sector.
+5. `OP_FINISH` (2) calls `LoadGameSave(SAVE_NORMAL)` when no sector failed [save.c:803] and reports the
+   fail mask and the load result. With `SAVE_STATUS_OK` the session ends on
+   `CLI_MSG_BUFFER_SUCCESS`, and the console saves the loaded game into the slot its old copy held;
+   anything else ends on `CLI_MSG_BUFFER_FAILURE` and the console keeps the save it had.
+
+| payload word | offset | value |
+|---|---|---|
+| `b install` | `0x000` | the first message's entry |
+| `b entry` | `0x004` | every later message's entry, at `gDecompressionBuffer + 0x404` |
+| `load_game_save` | `0x008` | `LoadGameSave \| 1` |
+
+The host refuses a save whose loaded copy is not whole, and a save of the other layout: Japanese
+SaveBlock1 is 40 bytes shorter, which a zero-filled sector does not show in its checksum, so the
+layout is read from the language byte (`+0x12`) of the player's own Pokemon, those whose OT ID is the
+trainer's. A refusal writes nothing.
+
+### What is measured
+
+> 本节已随上游更新，以下内容暂保留英文。
+
+Offline, against the scripted console (`tests/test_save_transfer.py`): the backup returns the chip
+byte for byte on French FireRed, English LeafGreen and Japanese FireRed; a backup cut after 40 KB
+resumes and completes; a restore leaves the file's loaded copy as the chip's newest, the extra
+sectors equal to the file's and the console's old copy whole; a restore cut after eight sectors
+leaves the console's own copy loading.
+
+On retail French FireRed over the ESP32 board, a backup took 64 passes and 219 s from the first pass to the last block; both slots of the file are whole and its trainer is the console's. The console showed the message and kept its save. A restore has not run on retail hardware.
+
 ## 创作礼物
 
 `pokeldn.frlg.gift.gift_composer` 从不可变的 `WonderGift` 定义构建卡片和送货员脚本：

@@ -17,7 +17,7 @@ from pokeldn.app.paths import SESSION
 from gui.views.pokemon import NAME_LISTS, LinkCodePicker, NamePicker, OfferQueue, PokemonPicker
 from gui.views.gifts import GiftBuilder
 from gui.views.sprites import MINI, Sprite
-from gui.views.widgets import CodeBlock, Log, PathField, open_folder
+from gui.views.widgets import CodeBlock, DigitCode, Log, PathField, open_folder
 
 TOOL_ICONS = {'交换': "arrows-horizontal", '神秘礼物': "gift"}
 EMPTY = "-"   # a dropdown option cannot carry an empty key
@@ -192,7 +192,16 @@ class GamesView:
                 sprite = self.species_sprite(fields)
                 rows = [ft.Row([
                     t.labeled_control(f.label, self.input(f, grouped=True), expand=True)
-                    for f in fields[i:i + per_row]], spacing=10) for i in range(0, len(fields), per_row)]
+                    for f in fields[i:i + per_row]], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)
+                    for i in range(0, len(fields), per_row)]
+                if item == "Console" and self.tool.key == "frlg-gift":
+                    rows.append(ft.Column([
+                        t.text("Game language", 12, t.MUTED),
+                        t.text("Detected automatically", 13, t.TEXT),
+                        t.text("English · French · German · Italian · Spanish · Japanese", 12, t.MUTED),
+                        t.text("After you choose pokeldn in the Friend list, your game reports its language.",
+                               12, t.MUTED),
+                    ], spacing=4))
                 out.append(t.card(item, ft.Column(rows, spacing=10),
                                   " ".join(f.help for f in fields if f.help), trailing=sprite))
         if not self.tool.fields:
@@ -245,6 +254,8 @@ class GamesView:
                                  version=str(self.values.get("--version", ""))).control
         if field.kind == "linkcode":
             return LinkCodePicker(self.app, value, lambda v: self.set_value(field, v)).control
+        if field.kind == "code":
+            return DigitCode(value, lambda v: self.set_value(field, v)).control
         if field.kind == "file":
             return PathField(self.app.picker, lambda: os.path.expanduser("~"), value or "", "file", field.exts,
                              lambda v: self.set_value(field, v)).control
@@ -255,6 +266,7 @@ class GamesView:
             self.set_value(field, e.control.value)
 
         box = t.field(value=str(value), mono=field.kind == "number", error_max_lines=2,
+                      digits=field.kind == "number",
                       width=180 if field.kind == "number" and not grouped else None,
                       error=command.limit_error(field, value) or None, on_change=changed,
                       expand=field.kind != "number" or grouped)
@@ -385,6 +397,7 @@ class SessionPanel:
                                    alignment=ft.Alignment.CENTER, tooltip='空闲')
         self.board_line = ft.Container()   # the checklist before Start, or one line once all is set
         self.offering = ft.Container(visible=False)
+        self.transfer = ft.Container(visible=False)   # a save backup or restore's progress
         self.offered = None                # what the offering card shows, to rebuild it only on a change
         self.traded = 0                    # the run's completed trades, from its `[done] trade N` lines
         self.running_tool: Tool | None = None
@@ -407,7 +420,8 @@ class SessionPanel:
         self.control = t.panel(ft.Column([
             t.panel_header('会话', self.status),
             # The checklist and the steps scroll; Start stays in view below them.
-            ft.Container(t.fade(ft.Column([self.board_line, self.offering, self.received, self.steps], spacing=24,
+            ft.Container(t.fade(ft.Column([self.board_line, self.offering, self.transfer, self.received, self.steps],
+                                          spacing=24,
                                           scroll=ft.ScrollMode.AUTO)),
                          padding=ft.Padding(18, 8, 18, 0), expand=3),
             ft.Container(ft.Column([
@@ -442,6 +456,7 @@ class SessionPanel:
             self.log.clear()
             self.set_status('就绪', t.MUTED)
             self.seen, self.received.content, self.received.visible = {}, None, False
+            self.transfer.content, self.transfer.visible = None, False
             self.traded = 0
         self.tool = tool
         self.steps.content = t.section('在游戏机上操作', t.step_list(list(tool.steps)))
@@ -542,6 +557,16 @@ class SessionPanel:
             self.offering.content = t.section('正在提供', ft.Row(tiles, spacing=6, run_spacing=6, wrap=True),
                                               trailing=t.text(progress, 12, t.GREEN if self.traded else t.MUTED))
 
+    def show_transfer(self, what: str, done: int, total: int) -> None:
+        unit = "KB" if what == "backup" else "parts"
+        title = "Backing up the save" if what == "backup" else "Putting the save on the console"
+        self.transfer.visible = True
+        self.transfer.content = t.section(title, ft.Column([
+            ft.ProgressBar(value=done / total if total else 0, color=t.BLUE, bgcolor=t.BORDER,
+                           bar_height=6, border_radius=3),
+            t.text(f"{done} of {total} {unit}. Keep the Switch near the board.", 12, t.MUTED)], spacing=6))
+        self.transfer.update()
+
     def scan_received(self, run: tuple) -> None:
         """Read each Pokemon file the run has saved so far; a file still growing is read again."""
         process, stamp, game = run
@@ -629,6 +654,7 @@ class SessionPanel:
         trace = f"captures/{tool.key}-{stamp}_esp32.trace" if s.board_trace else None
         self.log.add(f"[app] {tool.name} · {self.games.game.name} · radio {port}")
         self.seen, self.received.content, self.received.visible = {}, None, False
+        self.transfer.content, self.transfer.visible = None, False
         self.traded = 0
         self.stopping = False
         self.app.process_label = tool.name
@@ -641,6 +667,8 @@ class SessionPanel:
 
     def _line(self, line: str) -> None:
         self.log.add(line)
+        if progress := received.save_progress(line):
+            self.app.ui(lambda: self.show_transfer(*progress))
         n = received.trades_done(line)
         if n is not None and n > self.traded:
             def mark():
@@ -675,6 +703,9 @@ class SessionPanel:
             else:
                 self.set_status(f'失败（{code})', t.RED)
             self.log.add(f"[app] Exited with code {code}.")
+            if self.games.visible and self.games.tool is self.running_tool:
+                self.games.render_body()      # a backup has joined the save library
+                self.games.cards.update()
             if self.restart:
                 self.restart = False
                 self._start(None)

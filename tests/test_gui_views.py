@@ -371,6 +371,11 @@ def test_the_gift_builder_renders_every_mode_and_kind_and_exports_what_it_shows(
     view.set_value = lambda field, value, rebuild=False: view.values.__setitem__(field.key, value)
     module = gift_builder.module(gift_builder.GAMES[key])
     builder = view_module.GiftBuilder(view, field)
+
+    async def select_native_build(gift):
+        return next(iter(gift.variants))
+
+    builder.select_native_build = select_native_build
     for mode, *_ in gift_builder.modes(gift_builder.GAMES[key]):
         builder.value["mode"] = mode
         assert len(builder.cards()) == 2
@@ -458,9 +463,10 @@ def test_start_on_another_tool_stops_the_running_session_then_starts(tmp_path, m
     monkeypatch.setattr(SessionPanel, "_tick", lambda self: None)
     first, second = (next(t for t in TOOLS if t.key == key) for key in ("swsh-join", "pla-host"))
     panel = SessionPanel.__new__(SessionPanel)
-    panel.__dict__.update(app=FakeApp(), games=SimpleNamespace(values={}, extra={}, game=SimpleNamespace(
+    panel.__dict__.update(app=FakeApp(), games=SimpleNamespace(values={}, extra={}, visible=False, game=SimpleNamespace(
         name="game", key="swsh")), log=SimpleNamespace(add=lambda line: None, clear=lambda: None),
-        received=SimpleNamespace(), run=None, running_tool=None, restart=False, stopping=False, traded=0)
+        received=SimpleNamespace(), transfer=SimpleNamespace(), run=None, running_tool=None, restart=False,
+        stopping=False, traded=0)
     panel.set_status = panel.refresh = lambda *a, **k: None
     panel.tool = first
     panel._start(None)
@@ -498,6 +504,49 @@ def test_the_link_code_slots_fill_in_order_and_give_the_host_its_scene(monkeypat
     picker._choose(4)                       # a filled slot is replaced, nothing else moves
     assert values[field.key] == "eevee,squirtle,pikachu"
     assert views.parse_code("evoli,taupiqueur,") == [1, 9, None]
+
+
+CODES = [(tool, f) for tool in TOOLS for f in tool.fields if f.kind == "code"]
+
+
+@pytest.mark.parametrize("tool, field", CODES, ids=[f"{t.key}{f.flag}" for t, f in CODES])
+def test_a_console_code_is_typed_box_by_box_and_only_a_whole_one_reaches_the_launcher(tool, field):
+    """Each digit moves to the next box, a paste fills from where it lands, Backspace on an empty box
+    clears the one before; a partial code blocks Start, the whole one parses as the launcher's flag."""
+    from gui.views import widgets
+    from pokeldn.app import command
+    from pokeldn.app.introspect import parser_of
+    from pokeldn.app.settings import Settings
+    values = {f.key: {"file": "offer.bin"} for f in tool.fields if f.kind == "pokemon"}
+    code = widgets.DigitCode(command.value_of(field, values), lambda v: values.__setitem__(field.key, v))
+    assert code.value == field.default
+    for n in range(8):                      # clear whatever the default put there
+        code._typed(n, "")
+    assert bool(command.problems(tool, values)) == bool(field.default)
+    code._typed(0, "1")
+    code._typed(code.at, "x2")              # a letter never lands
+    assert code.at == 2 and values[field.key] == "12"
+    assert command.problems(tool, values) == [f"{field.label}: all eight digits" +
+                                              ("." if field.default else ", or none.")]
+    code._typed(2, "x")
+    assert values[field.key] == "12" and code.at == 2
+    code._typed(2, "34 5-678")              # a pasted code keeps its digits only
+    assert values[field.key] == "12345678" and code.at == 7
+    assert command.problems(tool, values) == []
+    args = command.build(tool, values, {}, Settings())
+    assert args[args.index(field.flag) + 1] == "12345678"
+    parser_of(tool.script).parse_args(args)
+    code._typed(3, "")                      # a hole keeps the digits after it in their boxes
+    assert values[field.key] == "123 5678" and command.problems(tool, values)
+    code._typed(3, "9")
+    code.at = 7
+    code._typed(7, "")
+    code.key("Backspace")                   # the Backspace that emptied box 8 is not a second one
+    assert values[field.key] == "1239567"
+    code.cleared = (None, 0.0)
+    code.key("Backspace")
+    assert values[field.key] == "123956" and code.at == 6
+    assert widgets.DigitCode(values[field.key], lambda v: None).digits[:6] == list("123956")
 
 
 def test_settings_keep_a_six_digit_switch_id_beside_the_five_digit_one(tmp_path, monkeypatch):
@@ -773,3 +822,74 @@ def test_static_gift_validation_messages_are_translated():
                 message = node.exc.args[0]
                 if isinstance(message, ast.Constant) and isinstance(message.value, str):
                     assert re.search(r'[\u4e00-\u9fff]', translate(message.value)), (name, message.value)
+
+
+def test_viewer_cleanup_removes_only_this_apps_older_viewers(tmp_path, monkeypatch):
+    import flet_desktop
+    from gui import flet_client
+    folders = {name: tmp_path / name for name in ("current", "marked", "legacy-mac", "other-app", "vanilla")}
+    for folder in folders.values():
+        folder.mkdir()
+    (folders["marked"] / flet_client.MARKER).touch()
+    (folders["legacy-mac"] / "pokeldn.app").mkdir()
+    (folders["other-app"] / "Other.app").mkdir()
+    (folders["vanilla"] / "Flet.app").mkdir()
+    monkeypatch.setattr(flet_desktop, "ensure_client_cached", lambda: folders["current"])
+    removed = flet_client.prune_cache()
+    assert sorted(p.name for p in removed) == ["legacy-mac", "marked"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["current", "other-app", "vanilla"]
+    assert (folders["current"] / flet_client.MARKER).is_file()
+
+
+def test_save_pokemon_uses_its_trainer_through_the_chinese_service(monkeypatch):
+    owner = {"ot": "ASH", "tid": 12345, "sid": 54321, "language": 2, "gender": 0}
+    calls, offered = [], []
+
+    def make(game, species, trainer, *args):
+        calls.append((game, species, trainer))
+        return {"file": "party.pk3", "species": "皮卡丘", "level": 5, "legal": True,
+                "encounter": "", "moves": []}
+
+    monkeypatch.setattr(pokemon.SERVICE, "make", make)
+    monkeypatch.setattr(pokemon.threading, "Thread",
+                        lambda target, **kwargs: SimpleNamespace(start=target))
+    view = SimpleNamespace(value={"species": 25}, game="frlg", version="firered", trainer=owner,
+                           options=SimpleNamespace(problem=lambda: None),
+                           build_button=SimpleNamespace(disabled=False),
+                           control=SimpleNamespace(update=lambda: None),
+                           app=SimpleNamespace(ui=lambda fn: None), on_change=offered.append,
+                           _message=lambda *args, **kwargs: None, _show_result=lambda: None)
+    pokemon.PokemonPicker._build(view, None)
+    assert calls == [("frlg", 25, owner)]
+    assert offered[0]["file"] == "party.pk3"
+    assert "皮卡丘" in offered[0]["summary"]
+
+
+def test_chinese_gift_view_exposes_save_backup_without_compiling_a_gift(tmp_path, monkeypatch):
+    import flet as ft
+    from gui.views import gifts as gift_view
+    from pokeldn.app import saves
+    from pokeldn.app.catalog import GAMES
+    from pokeldn.app.settings import Settings
+
+    monkeypatch.setattr(saves, "library", lambda: tmp_path)
+    tool = next(t for game in GAMES for t in game.tools if t.key == "frlg-gift")
+    field = next(f for f in tool.fields if f.kind == "builder")
+    view = SimpleNamespace(tool=tool, values={}, extra={},
+                           app=SimpleNamespace(settings=Settings(), picker=None, ui=lambda fn: None),
+                           set_value=lambda *args, **kwargs: None)
+    builder = gift_view.GiftBuilder(view, field)
+    builder.value["mode"] = "save"
+    cards = builder.cards()
+
+    def texts(control):
+        if isinstance(control, ft.Text):
+            yield control.value
+        for child in [*(getattr(control, "controls", None) or []), getattr(control, "content", None)]:
+            if isinstance(child, ft.Control):
+                yield from texts(child)
+
+    shown = [text for card in cards for text in texts(card)]
+    assert "我的存档" in shown
+    assert "从 Switch 备份" in shown
+    assert "完整存档将按训练家姓名保存在“我的存档”中。" in shown

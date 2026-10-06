@@ -3,6 +3,7 @@ title: Brilliant Diamond and Shining Pearl
 nav_order: 5
 has_children: true
 ---
+
 # 晶灿钻石和明亮珍珠
 
 晶灿钻石和明亮珍珠由 ILCA 使用 Unity 开发，IL2CPP 游戏代码直接使用 Pia。
@@ -31,10 +32,31 @@ has_children: true
 | [交易](bdsp_trade.md) |交换流程、PB8、保存和断开惩罚 |
 ## 未解决
 
-- 游戏机屏幕上的替换问候语名称（[问候语中的名称](bdsp_protocol.md#the-name-in-the-greeting)）。 `StartupSessionJob` 如何从启动设置开始在+0x480 处填充本站的记录尚未被追踪。
-- 0x08对于从未招募过战斗的游戏机是否在硬件上存在故障。代码通过空模型编写；没有 0x08 到达该路径，因为那些发送的消息是在可靠窗口已经看到的序列 ID 下发出的（[战斗阶梯](bdsp_protocol.md#the-battle-ladder)）。离开联合房间是否会破坏`UnionRoomManager`未读（`UnionRoomManager$$OnDestroy` `0x1e4c540`存在；其调用者未知）。
-- 非Grand Underground会话主机的实机是否采用pokeldn的0x61；测量的 Underground 会话将游戏机作为主机，而 pokeldn 则没有主机。   公共调度和 `UgNetworkManager` 处理程序没有发送者过滤器（[协议页面](bdsp_protocol.md#the-grand-underground)）。
-- 是什么让联合房间里的游戏机停止广告，屏幕上没有任何变化（[入座](bdsp_session.md#taking-a-seat)）。
-- `SS_box_182`的文本，消息`BoxWindow.SetSendPokemon`在交换中为标记的宝可梦选择，以及`RequestValidateTrade`检查在线交换的内容（[重复检测](bdsp_trade.md#duplicate-detection)）。
-- Unity 播放器从哪里获取 `Screen.width`。当 `/Data/rawsettings` +0x1c 为 0 时，2D 网格位置基于 `0x6062e8` 保留的 1280 x 720 默认值（[协议页](bdsp_protocol.md#the-grand-underground)）；不排除其他来源，例如 `globalgamemanagers` 中的玩家设置。
-- 任何场景是否将 `UnionRoomManager` 或 `UgNetworkManager` 作为组件放置。每个代码仅读取`AddComponent`；场景放置的实例将位于这些路径之外。
+> 本节已随上游更新，以下内容暂保留英文。
+
+- A substituted greeting name on a console's screen
+  ([The name in the greeting](bdsp_protocol.md#the-name-in-the-greeting)). How `StartupSessionJob`
+  fills the own station's record at +0x480 from the startup setting is untraced.
+- Whether a 0x08 to a console that has never recruited a battle faults it on hardware. The code
+  writes through a null model; no 0x08 has reached that path, because those sent went out under
+  sequence ids the reliable window had already seen ([The battle
+  ladder](bdsp_protocol.md#the-battle-ladder)).
+- Whether a retail console that is not the Grand Underground session host adopts a 0x61 from
+  pokeldn; the Underground sessions measured had the console as host, and pokeldn does not host one.
+  The common dispatch and the `UgNetworkManager` handler have no sender filter
+  ([the protocol page](bdsp_protocol.md#the-grand-underground)).
+- What makes a console in the Union Room stop advertising with no change on screen
+  ([Taking a seat](bdsp_session.md#taking-a-seat)).
+- The text of `SS_box_182`, the message `BoxWindow.SetSendPokemon` selects for a flagged Pokemon in
+  a trade, and what `RequestValidateTrade` checks for an online trade
+  ([Duplicate detection](bdsp_trade.md#duplicate-detection)).
+- Where the Unity player takes `Screen.width` from. The 2D grid positions rest on it being the
+  1280 x 720 default that `0x6062e8` keeps when `/Data/rawsettings` +0x1c is 0
+  ([the protocol page](bdsp_protocol.md#the-grand-underground)); another source, such as the
+  player settings in `globalgamemanagers`, has not been excluded.
+- Whether any scene places a `UnionRoomManager` or a `UgNetworkManager` as a component. In code each
+  is created only by one `AddComponent` on a new GameObject (`0x01b35f70`, `UgFieldManager$$StartSession`
+  `0x01cfed48`); no code takes either type as `typeof`, no generic `GetComponent` or `FindObjectOfType`
+  of either exists, and `GameObject.Find` has no Union Room caller. A placed instance would register
+  through its singleton `Awake` with no lookup, so the answer is in the scene bundles: a
+  `MonoBehaviour` whose `m_Script` is either class's `MonoScript`.

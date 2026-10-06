@@ -8,8 +8,8 @@ from dataclasses import dataclass
 class Field:
     flag: str | tuple[str, ...]   # "" is positional; a tuple passes the same value to each flag
     label: str
-    kind: str = "text"            # text number choice switch pokemon file builder multi linkcode, or a PKHeX
-                                  # name list: species move item ball
+    kind: str = "text"            # text number choice switch pokemon file builder multi linkcode code (eight
+                                  # digits), or a PKHeX name list: species move item ball
     help: str = ""
     default: str | bool = ""
     choices: tuple[tuple[str, str], ...] = ()
@@ -62,7 +62,7 @@ class Game:
 
 VERSIONS = (("firered", '火红'), ("leafgreen", '叶绿'))
 LANGUAGES = (("english", '英语'), ("french", '法语'), ("german", '德语'),
-             ("italian", '意大利语'), ("spanish", '西班牙语'))
+             ("italian", '意大利语'), ("spanish", '西班牙语'), ("japanese", '日语'))
 CHANNELS = (("1", "1"), ("6", "6"), ("11", "11"))
 FRESH_PID = Field("--fresh-pid", '每次运行使用新 PID', "switch", default=True, hidden=True,
                   help='为交换的宝可梦生成新的 PID 和加密常量，使已领取过的存档可以再次接收。活动宝可梦等必须保留 PID 的文件，请关闭此选项。')
@@ -110,7 +110,7 @@ FRLG = Game("frlg", '火红／叶绿', "FRLG", "frlg.md", (
          (queued(count="--trades"),
           Field("--version", '版本', "choice", default="firered", choices=VERSIONS, group='游戏机',
                 help='pokeldn 的训练家在连接中报告的游戏版本，也是生成宝可梦的目标版本。'),
-          Field("--language", '语言', "choice", default="english", choices=LANGUAGES, hidden=True,
+          Field("--language", '训练家语言', "choice", default="english", choices=LANGUAGES, hidden=True,
                 help='pokeldn 的训练家在连接中报告的语言。'),
           Field("--channel", '信道', "choice", default="11", choices=CHANNELS, help=CHANNEL_HELP, hidden=True)),
          fixed=("--live", "--phy", "auto", "--slot", "0", "--ot", "{ot}", "--id", "{tid}:{sid}",
@@ -127,17 +127,17 @@ FRLG = Game("frlg", '火红／叶绿', "FRLG", "frlg.md", (
                 "--out", "{received}/frlg-{stamp}.pk3"),
          doc="frlg_link.md"),
     Tool("frlg-gift", '神秘礼物', "bin/frlg_mg_host.py",
-         '通过神秘礼物发送宝可梦、道具和游戏增强功能，或读取训练家 ID 与队伍能力。',
+         '通过神秘礼物发送宝可梦、道具和游戏增强功能，备份或恢复存档，或读取训练家 ID 与队伍能力。',
          ('标题画面 → 神秘礼物 → 神奇卡片 → 朋友。接收新闻时选择第二项“神奇新闻”。',
           '启动主机，看到 POKELDN 后选择它。',
           '游戏机询问是否替换卡片时，选择“是”。',
-          '发送增强功能、读取存档或运行自定义游戏机代码时，请保持应用运行直到会话日志显示结果。',
+          '发送增强功能、备份或恢复存档、读取存档或运行自定义游戏机代码时，请保持应用运行直到会话日志显示结果。',
           '两次运行之间，请退出搜索画面。'),
-         (Field("--gift-file", '礼物', "builder"),
-          Field(("--version", "--expect-console"), '版本', "choice", default="firered",
+         (Field(("--version", "--expect-console"), '版本', "choice", default="firered",
                 choices=VERSIONS, group='游戏机',
                 help='游戏机使用的卡带版本；版本不符时会在发送前拒绝连接。'),
-          Field("--language", '语言', "choice", default="english", choices=LANGUAGES, hidden=True,
+          Field("--gift-file", '礼物', "builder"),
+          Field("--language", '训练家语言', "choice", default="english", choices=LANGUAGES, hidden=True,
                 help='pokeldn 的训练家在连接中报告的语言。'),
           Field("--channel", '信道', "choice", default="11", choices=CHANNELS, help=CHANNEL_HELP, hidden=True)),
          fixed=("--live", "--ot", "{ot}", "--id", "{tid}:{sid}", "--dump-file",
@@ -176,7 +176,7 @@ SWSH = Game("swsh", '剑／盾', "SwSh", "swsh.md", (
           '看到 POKELDN 后选择宝可梦并确认。',
           '队列中的宝可梦依次交换，每次一只；请再次从盒子中选择。'),
          (queued("--offer-file"), FRESH_PID,
-          Field("--code", '连接密码', help='八位数字。留空进行无密码交换。'),
+          Field("--code", '连接密码', "code", help='八位数字。留空进行无密码交换。'),
           Field("--channel", '信道', "choice", default="6", choices=CHANNELS, help=CHANNEL_HELP, hidden=True),
           host_seconds("900")),
          fixed=("--player-name", "{ot}", "--trainer-name", "{ot}",
@@ -216,7 +216,7 @@ BDSP = Game("bdsp", '晶灿钻石／明亮珍珠', "BDSP", "bdsp.md", (
           'Y → 通信 → 交换宝可梦，接受问候，再选择并确认。'),
          (queued("--offer"),
           FRESH_PID,
-          Field("--password", '房间密码', help='八位数字。留空加入无密码房间。'),
+          Field("--password", '房间密码', "code", help='八位数字。留空加入无密码房间。'),
           host_seconds("1500")),
          fixed=("--ldn-protocol", "1", "--complete-trade", "--save-theirs", "{received}/bdsp-{stamp}",
                 "--language", "{language}", "--name", "{ot}", "--trainer", "{ot}:{tid}:{sid}"),
@@ -253,7 +253,7 @@ PLA = Game("pla", '传说 阿尔宙斯', "PLA", "pla.md", (
          ('先启动主机。', *PLA_STEPS, '选择要提供的宝可梦并确认。',
           '保持主机运行直到交换完成。中断交换会导致一段时间内无法交换。'),
          (queued("--trade-box-record", required=False, help=PLA_OFFER_HELP),
-          Field("--code", '连接密码', default="00000000", help=CODE_HELP),
+          Field("--code", '连接密码', "code", default="00000000", help=CODE_HELP),
           FRESH_PID,
           host_seconds("900")),
          fixed=("--channel", "6", "--session-update", "--sustain", "--clock", "--data-exchange",
@@ -264,7 +264,7 @@ PLA = Game("pla", '传说 阿尔宙斯', "PLA", "pla.md", (
          '搜索游戏机的交换连接并自动连接。',
          (*PLA_STEPS, '启动加入端。', '交换对象出现后，选择宝可梦并确认。'),
          (queued("--offer", required=False, help=PLA_OFFER_HELP),
-          Field("--code", '连接密码', default="00000000", help=CODE_HELP),
+          Field("--code", '连接密码', "code", default="00000000", help=CODE_HELP),
           FRESH_PID),
          fixed=("--player-name", "{ot}", "--offer-out", "{received}/pla-{stamp}.pa8"),
          doc="pla.md"),
@@ -277,7 +277,7 @@ SV = Game("sv", '朱／紫', "SV", "sv.md", (
          '创建交换，由正在搜索的游戏机加入。',
          ('先启动主机。', SV_SEARCH, '在交换画面选择宝可梦并确认。'),
          (queued("--trade-offer"),
-          Field("--code", '连接密码', help='留空创建无密码搜索。',
+          Field("--code", '连接密码', "code", help='留空创建无密码搜索。',
                 unset=("--game-data",
                        "000000000000000000000000000000000000000000000000000000000000000000648cf400000000")),
           FRESH_PID),
@@ -298,7 +298,7 @@ SV = Game("sv", '朱／紫', "SV", "sv.md", (
          (SV_SEARCH, '启动加入端。', '在交换画面选择宝可梦并确认。',
           '若游戏机持续拒绝连接，请退出并重新进入搜索画面。'),
          (queued("--trade-offer"),
-          Field("--code", '连接密码', help='留空加入无密码搜索。'),
+          Field("--code", '连接密码', "code", help='留空加入无密码搜索。'),
           FRESH_PID),
          fixed=("--phy", "auto", "--seconds", "1500", "--hold", "900", "--channels", "1,6,11",
                 "--dwell", "0.4", "--connect-timeout", "6", "--open-delay", "0.3", "--record-delay", "0.3",
@@ -315,7 +315,7 @@ ZA = Game("za", '传说 Z-A', "PLZA", "za.md", (
           '在交换盒子中选择宝可梦，提出交换并确认。队列中的宝可梦依次交换，每次一只。',
           '最后一次交换后按 B 退出。'),
          (queued("--trade-offer"),
-          Field("--code", '连接密码', default="00000000", help=CODE_HELP),
+          Field("--code", '连接密码', "code", default="00000000", help=CODE_HELP),
           FRESH_PID,
           host_seconds("900")),
          fixed=("--trainer-name", "{ot}", "--offer-out", "{received}/za-{stamp}.pa9"), doc="za.md"),
@@ -325,7 +325,7 @@ ZA = Game("za", '传说 Z-A', "PLZA", "za.md", (
           '启动加入端。建立连接时被拒绝属于正常现象，请保持运行。',
           '看到 POKELDN 后在交换盒子中选择并确认。队列中的宝可梦依次交换，每次一只。'),
          (queued("--trade-offer"),
-          Field("--code", '连接密码', default="00000000", help=CODE_HELP),
+          Field("--code", '连接密码', "code", default="00000000", help=CODE_HELP),
           FRESH_PID),
          fixed=("--channels", "1,6,11", "--dwell", "0.35", "--seconds", "1200", "--hold", "900",
                 "--quiet-seat", "25", "--connect-timeout", "6", "--mac", "02:11:32:54:76:98", "--game",

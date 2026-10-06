@@ -24,6 +24,9 @@ installed on the Switch or Switch 2. Seven games are supported:
 ✓ works on a retail console · ✗ not done · ∅ the game has no such feature over local wireless
 FRLG FireRed/LeafGreen · LGPE Let's Go Pikachu/Eevee · SwSh Sword/Shield · BDSP Brilliant Diamond/Shining Pearl · PLA Legends Arceus · SV Scarlet/Violet · PLZA Legends Z-A
 
+FRLG supports both versions in English, French, German, Italian, Spanish and Japanese. The added
+editions have offline cartridge-ROM tests; their wireless delivery still needs retail checks.
+
 Every game trades through the ESP32 board. Protocol documentation:
 [decryptu.github.io/pokeldn](https://decryptu.github.io/pokeldn/).
 
@@ -47,7 +50,8 @@ Gift below with the tested settings. The only file it asks for is `prod.keys`.
 - macOS: the app is unsigned, so the first launch is blocked. Open it once and close the warning,
   then System Settings, Privacy & Security, scroll down to Security, Open Anyway next to pokeldn,
   and confirm with your password. Later launches open normally.
-- Windows: SmartScreen may stop the unsigned app; choose More info, then Run anyway.
+- Windows: extract the zip and run `pokeldn.exe` inside the `pokeldn` folder; keep the `_internal`
+  folder beside it. SmartScreen may stop the unsigned app; choose More info, then Run anyway.
 - Linux: it needs GTK 3 and libsecret, present on desktop distributions, and serial access
   (`sudo usermod -aG dialout $USER`; the group is `uucp` on Arch). On Ubuntu 22.04, brltty takes
   CH340 boards and their port never appears: `sudo apt remove brltty` ([Linux serial ports](docs/gui.md#linux-serial-ports)).
@@ -201,6 +205,18 @@ news only if it differs from what it holds; `--news-id N` forces a new one.
 
 ```bash
 ./.venv/bin/python -u bin/frlg_mg_host.py --news berry --news-id 7
+```
+
+**Save backup and restore.** The same Friend path copies the whole 128 KB save to a `.sav` file, or
+writes a `.sav` back: beside the console's own save, every sector read back, then the game loads it
+and saves; anything short of that leaves the console's save as it was. In the app, the Mystery Gift
+tool's Your save tab keeps the backups, names them, imports and exports `.sav` files and edits the
+trainer and party through PKHeX. A backup took about four minutes on a retail French FireRed; the
+restore is proven against the scripted console and has not yet run on a retail Switch. [Save backup and restore](docs/frlg_gift.md#save-backup-and-restore).
+
+```bash
+./.venv/bin/python -u bin/frlg_mg_host.py --live --save-backup backup.sav --save-resume-dir partial
+./.venv/bin/python -u bin/frlg_mg_host.py --live --save-restore backup.sav
 ```
 
 **Console save.** A Mystery Gift session runs native ARM code on the console. `save-dump` reads the

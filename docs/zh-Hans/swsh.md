@@ -3,6 +3,7 @@ title: Sword and Shield
 nav_order: 6
 has_children: true
 ---
+
 # 剑和盾
 
 宝可梦剑和盾通过通用的发布/订阅框架，直接在 Pia 上运行带有协议缓冲区消息的 C++ 游戏代码。
@@ -36,9 +37,22 @@ ID、偏移量和地址来自 Shield 的 `main` 或空气，除非某个部分�
 `SYSREQ.N native, bytes`。
 ## 未解决
 
-- [玩家配置文件](swsh_protocol.md#the-player-profile)：vtable `0x25614c0` 背后的功能（活动记录类型 11，`0x00dedf3c`；示例状态 3 或 4）。示例状态 3、4、6 仅由其设置者命名。从编号中读取`a_wr0301`为皇冠苔原野生区域；那里的一个灯塔就解决了这个问题。
-- [Battle Stadium](swsh_protocol.md#the-battle-stadium-block)：写入团队描述符的 `+0`、`+4`、`+6` 的内容（经过验证的团队的保存显示了这一点）。 `v1/validate`回复的0x100字节是否到达`match+0x98`经过`0x014f808c`的复制到`[x19+0xb0]+0x76`；其状态为 1，最多 6 个 u32。
-- 剑对盾：二进制读数是盾的，游戏机是剑； [会话常量](swsh_session.md#taking-a-seat) 在货币对中保持不变。卡版本掩码的剑测试位 0 是从 `0x007d4270` 的 `0x2D` 的版本 44 (`0x2C`) 的 Shield 代码以及 PKHeX `RestrictVersion` 推断出来的（1 个剑，2 个盾，3 个两者）。
-- [神秘礼物](swsh_gift.md#what-the-menu-refuses)：实机显示的 kind-1 礼物的内容，其物种在游戏中不存在，构造函数将其标记为损坏。
-- [连续交易](swsh_trade.md#trades-in-a-row-on-one-session)：什么设置`ui+0x5cc`，结束盒子屏幕的第7步等待（计时器或玩家）。
-- [提供的记录](swsh_trade.md#the-offered-record)：在 `0x011e3458` 处读取的加密常量不会被跟踪，并且未跟踪具有计算长度的 375 个 `memcmp` 调用；没有任何内容存在于 pml、交换或框代码中。
+> 本节已随上游更新，以下内容暂保留英文。
+
+- [Player profile](swsh_protocol.md#the-player-profile): the feature behind vtable `0x25614c0`
+  (activity record kind 11, `0x00dedf3c`; sample state 3 or 4). Sample states 3, 4, 6 are named only
+  by their setters. `a_wr0301` as the Crown Tundra wild area is read from the numbering; one beacon
+  taken there settles it.
+- [Battle Stadium](swsh_protocol.md#the-battle-stadium-block): what writes the team descriptor's
+  `+0`, `+4`, `+6` (a save with a validated team shows it). Whether the `v1/validate` reply's 0x100
+  bytes reach `match+0x98` past `0x014f808c`'s copy to `[x19+0xb0]+0x76`; its status 1 and up to six
+  u32.
+- Sword against Shield: binary readings are Shield's, the console is Sword; the
+  [session constants](swsh_session.md#taking-a-seat) hold across the pair. Sword testing bit 0 of a
+  card's version mask is inferred from Shield's code with version 44 (`0x2C`) for `0x007d4270`'s
+  `0x2D`, and from PKHeX `RestrictVersion` (1 Sword, 2 Shield, 3 both).
+- [Mystery Gift](swsh_gift.md#what-the-menu-refuses): what a retail console shows for a kind-1
+  gift whose species is absent from the game, which the constructor flags corrupt.
+- [The offered record](swsh_trade.md#the-offered-record): the encryption constant read at
+  `0x011e3458` is not followed past the read, and 375 `memcmp` calls with a computed length are
+  untraced; none lies in the pml, trade or box code.

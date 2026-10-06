@@ -3,6 +3,7 @@ title: Let's Go Pikachu and Eevee
 nav_order: 7
 has_children: true
 ---
+
 # 我们走吧！ 皮卡丘和伊布
 
 在宝可梦 Let's Go 皮卡丘 和 Let's Go 伊布 (2018) 中，Pia 静态链接到 `main` (269
@@ -28,9 +29,22 @@ RTTI 中的 `nn::pia` 类）和游戏的 C++ 代码位于其上，通过 `gflnet
 `tests/test_lgpe_host_commit.py` 将主机的提交阶段固定在脚本游戏机上：错误的提交使游戏机处于确认屏幕上，并设置了保存的交换锁定（在计算的游戏时间的十分钟内没有交易），然后是致命错误屏幕。
 ## 未解决
 
-- 如何计算播放时间与挂钟时间相关，因此锁定在时钟上持续多长时间：门控调用 `0x13c944` 的速率以及帧周期是否保持在 33.3 ms 未读取。在中止提交后的播放时间 P + 9 和 P + 11 分钟尝试 Link 交换，对照秒表，测量两者。
-- 是什么让游戏机的克隆协议在克隆类型 4 上的主机的 `0xa1` 上保持沉默，而在主机用 A 2 回答其撤回的投票后，其无线收发设备确认每一帧。`0x51c110` 在 `0x522a60` 中默默地丢弃这样的消息，而发送者位位于 `+0xc0` 掩码中，以及早些时候在目的地检查、每个发送者计数过滤器或长度检查；消息自己的字节（目标 `0x0002`，在最高早期主机计数 63 之后计数 69）通过前两个字节进行按顺序传递。是什么让这一切保持沉默不得而知。捕获显示没有严重性 4 错误（`0x4d8a80`，结果 2 和致命错误屏幕）。重复直到应答的 `0xa1` 将待定掩码（稍后应答的副本）与从未到达克隆协议（无人应答）的消息分开；嗅探板记录独立于主机到达的内容。
-- 同步保存期间离开的伙伴是否达到代码 0xe 中止。当`+0x1e6`为1或更少时，泵失败，但重新计数仅在`[s+0xd8]`，`[s+0xd4]`和`0x52abf0`的保护下运行，其交换中的值未读取，以及本地站自己的记录（`0x5a9430`的其他呼叫者， `0x581f20` 和 `0x583b90`) 未追踪。
-- 交换调度程序的子节点是哪个进程，以及 `seq+0xb8` 处的同步保存提交通道在中止提交后是否被释放。
-- 无论是频道柜台还是16个入口的频道桌都围有一个长座位。 `0x116e80` 从 `mgr+0x270` 分发 id 并返回 0，注册了 16 个通道； `0x117920` 压缩死的。   测量了托管席位上的三笔交易；超出这个限度是无法衡量的。
-- 调度员的模式1和2是否为连动战斗。阅读建立在他们构建的场景之上；   使用模式词 `+0x8c` 捕获链接战斗会话即可解决此问题。
+> 本节已随上游更新，以下内容暂保留英文。
+
+- How counted play time relates to wall time, so how long the lock lasts on a clock: the rate of
+  the gated call `0x13c944` and whether the frame period stays at 33.3 ms are unread. Trying Link
+  Trade at play time P + 9 and P + 11 minutes after an aborted commit, against a stopwatch, measures
+  both.
+- What leaves a console's clone protocol silent on the host's `0xa1` on clone type 4, while its radio
+  acknowledges every frame, after a host answers its withdrawn vote with A 2. `0x51c110`
+  drops such a message silently in `0x522a60` while the sender's bit is in the `+0xc0` mask, and
+  earlier at the destination check, the per-sender count filter or a length check; the message's own
+  bytes (destination `0x0002`, count 69 after a highest earlier host count of 63) pass the first two
+  for in-order delivery. What held the silence is unknown; the capture shows no
+  severity-4 error (`0x4d8a80`, result 2 and the fatal error screen). An `0xa1` repeated until
+  answered separates a pending mask (a later copy answered) from a message that never reaches the
+  clone protocol (none answered); a sniffing board records what arrived independently of the host.
+- Which process the trade dispatcher's child is, and whether the sync save's commit channel at
+  `seq+0xb8` is released after an aborted commit.
+- Whether the dispatcher's modes 1 and 2 are link battles. The reading rests on the scene they build;
+  a capture of a link battle's session, with the mode word `+0x8c`, settles it.

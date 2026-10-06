@@ -6,64 +6,108 @@ title: Mystery Gift files
 `.pokegift` 文件存储火红／叶绿或剑／盾或 FRLG ARM 游戏机的完整神秘礼物分布及其目标游戏和本地记录。
 ## 桌面应用程序
 
-游戏中，神秘礼物是每场游戏一个工具，有三种选择礼物的方式，剑／盾有四种。一名建造者负责两种游戏；每个游戏的模块提供其预设及其形式（`pokeldn/frlg/gift/builder.py`、`pokeldn/swsh/gift_builder.py`，绑定在`pokeldn/app/gift_builder.py`中）。
+> 本节已随上游更新，以下内容暂保留英文。
 
-|模式 |它发送什么 |
+Games, Mystery Gift is one tool per game with three ways to choose the gift, four on Sword/Shield.
+One builder serves both games; each game's module supplies its presets and its form
+(`pokeldn/frlg/gift/builder.py`, `pokeldn/swsh/gift_builder.py`, bound in `pokeldn/app/gift_builder.py`).
+
+| mode | what it sends |
 |---|---|
-|使用预设 |内置礼物； FRLG Wonder Cards、神奇新闻和游戏机代码作为标志进入启动器 |
-|官方活动 |一张真正的剑／盾活动卡（[官方活动卡](swsh_gift.md#official-event-cards)），像礼物一样编译|
-|打造您自己的 |该表单在 Start 处编译为 `session/gifts/<tool>.pokegift` 并作为 `--gift-file` | 传递
-|打开文件 |剑／盾上的共享`.pokegift`，或`.wc8` |
+| Use a preset | a built-in gift; FRLG Wonder Cards, Wonder News and console code go to the launcher as flags |
+| Official events | a real Sword/Shield event card ([Official event cards](swsh_gift.md#official-event-cards)), compiled like a built gift |
+| Build your own | the form, compiled to `session/gifts/<tool>.pokegift` at Start and passed as `--gift-file` |
+| Open a file | a shared `.pokegift`, or a `.wc8` on Sword/Shield |
 
-FRLG 游戏增强是常驻挂钩 ([`install-resident`](frlg_rom.md#install-resident))。可以同时勾选多个；它们作为一条链运行（[一次有多个钩子](frlg_rom.md#several-hooks-at-once)）。每个都带有成为启动器的 `--resident-param` 标志的设置，并且面板显示了游戏机具有的 1024 个勾选设置所占用的字节。
+The FRLG Game boosts are the resident hooks ([`install-resident`](frlg_rom.md#install-resident)).
+Several can be ticked at once; they run as one chain ([Several hooks at once](frlg_rom.md#several-hooks-at-once)).
+Each carries settings that become the launcher's `--resident-param` flags, and the panel shows the
+bytes the ticked set takes of the 1024 the console has.
 
-|提升|设置|参数|
+| boost | settings | parameters |
 |---|---|---|
-|加快游戏速度（`turbo-lite`）|速度x1至x4；主世界、战斗或两者兼而有之；始终开启或按住 R、B 或 Select 时；更快的文本| `field` 和 `battle` = 速度 - 1，`budget=228` 来自 x3，`hold`，`extra=4` |
-|穿墙| R、B 或选择 | `hold` |
-| 异色倒计时|减速按钮；慢 2 倍、4 倍或 8 倍 | `slow`、`slow_frames` 1、3 或 7 |
-|没有狂野的遭遇，Lead的IV出现在屏幕上，宝可梦的追随者|无 | |
+| Speed up the game (`turbo-lite`) | speed x1 to x4; overworld, battles or both; always on or while R, B or Select is held; faster text | `field` and `battle` = speed - 1, `budget=228` from x3, `hold`, `extra=4` |
+| Walk through walls | R, B or Select | `hold` |
+| Shiny countdown | the slow-down button; x2, x4 or x8 slower | `slow`, `slow_frames` 1, 3 or 7 |
+| No wild encounters, Lead's IVs on screen, Pokemon follower | none | |
 
-不提供 L：只有 R 的帮助系统切换开关有一个钩子保持关闭的标志。保存增强以供以后发送 `save-write --resident` 代替 `install-resident`：该集进入 `filler_B20` 并安装在同一会话中。一组过去的 `install-resident` 会话（876 字节），以及跟随者，总是经过保存。妈妈恢复你的提升绑定妈妈的加载器，并在任何引导安装保存保存的任何设置后与妈妈交谈。再次发送提升将取代设置运行。该应用程序在保存选项旁边和发送之前显示恢复步骤，包括必须保存的集。预设名称和描述会换行，因此它们的说明仍然可见。
-`tests/test_gift_builder.py` 通过所有四个弹药筒的发射器发送每种增强组合及其每种设置。
+L is not offered: only R's Help System toggle has a flag the hooks hold off. Save boosts for later
+sends `save-write --resident` in place of `install-resident`: the set goes into `filler_B20` and is
+installed in the same session. A set past one `install-resident` session (876 bytes), and the
+follower, always go through the save. Mom restores your boosts binds Mom's loader, and talking to Mom
+after any boot installs whatever set the save holds. Sending boosts again replaces the set running.
+The app shows the restore steps beside the save option and in Before you send, including for sets
+that must be saved. Preset names and descriptions wrap so their instructions remain visible.
+`tests/test_gift_builder.py` sends every combination of boosts, and every setting of each, through the
+launcher for all twelve cartridges.
 
-读取保存的训练家 ID (TID) 和秘密 ID (SID)、训练家详细信息和比赛时间，以及最后保存的队伍性质、IV 和 EV。结果出现在会话日志中；两个转储预设还将读取的数据写入 Received 中。该小组将通常隐藏的 SID、IV 解释为从 0 到 31 的六个单独值，将 EV 解释为训练点。这些读取保留了保存和神奇关联（[读取保存](frlg_rom.md#reading-the-save)）。
+Read the save offers Trainer ID (TID) and Secret ID (SID), trainer details and play time, and the
+last saved party's natures, IVs and EVs. Results appear in the Session log; the two dump presets
+also write the read data into Received. The group explains the normally hidden SID, IVs as six
+individual values from 0 to 31, and EVs as training points. These reads preserve the save and
+Wonder Card ([Reading the save](frlg_rom.md#reading-the-save)).
 
-本机 `.wc3` 和 `.wc8` 扩展在 JSON 检测之前选择游戏的二进制读取器。 WC8的二元密封可以以`{`开头；它仍然是本地记录。 `.pokegift` 文件使用 JSON 读取器，带有 JSON 左大括号的未知扩展名仍然可以保存共享礼物。
+Native `.wc3` and `.wc8` extensions select the game's binary reader before JSON detection.
+A WC8's binary seal can start with `{`; it remains a native record. `.pokegift` files use the
+JSON reader, and an unknown extension with a JSON opening brace can still hold a shared gift.
 
-自定义将预设复制到表单中。 FRLG卡预设仅在形式表达每一步时提供它：宝可梦、物品、蛋、狂野战斗和消息步骤的无条件阶段，没有事件脚本，也没有来访的训练家。每个剑／盾预设都是一个形态状态。
+Customize copies a preset into the form. A FRLG card preset offers it only when the form expresses
+every step: unconditional stages of Pokemon, item, egg, wild battle and message steps, no event
+script and no visiting trainer. Every Sword/Shield preset is a form state.
 
-FRLG 形式构建了神奇关联、神奇新闻或游戏机代码。
+The FRLG form builds a Wonder Card, Wonder News or console code.
 
-|部分|内容 |
+| part | contents |
 |---|---|
-|卡 |标题，副标题，四行文本，图标种类，卡片ID 1000至1019，再次收到，可共享|
-|谁把它交给了|宝可梦中心的送货员、玩家家的妈妈、南托盘镇的男人 |
-|步骤| 宝可梦（种类、等级、持有物品、四招）、物品及数量、彩蛋、野战、留言 |
-|新闻 |标题，最多十行，新闻 ID |
-| 游戏机代码 | ARM 源或预构建的 `.bin`，其构建的盒式磁带，预期答案，发回的字节 |
+| card | title, subtitle, four text lines, icon species, card id 1000 to 1019, received again, shareable |
+| who hands it over | the delivery man in any Pokemon Center, Mom in the player's house, or the man in south Pallet Town |
+| steps | Pokemon (species, level, held item, four moves), item and quantity, egg, wild battle, message |
+| news | title, up to ten lines, news id |
+| console code | ARM source or a prebuilt `.bin`, the cartridge it is built for, expected answer, bytes sent back |
 
-每个步骤都是其自己的交付阶段，因此完整的队伍或袋子会停在该步骤处，并且玩家仅重试剩下的部分。送货员以外的人扶着台阶通过
-`initramscript` 绑定；该卡在绑定时不会显示。绑定脚本不带有收据标志：该人每次都会给出步骤，直到另一个礼物替换绑定。种类使用盒式磁带的内部编号 (`pokeldn/frlg/save/species_names.py`)。卡片和新闻均适用于所有四种墨盒； 游戏机代码可针对所有四个或选定的一个进行编译。
+Each step is its own delivery stage, so a full party or bag stops at that step and the player
+retries only what is left. A person other than the delivery man holds the steps through an
+`initramscript` binding; the card is not shown while it is bound. A bound script carries no
+receipt flag: that person gives the steps every time until another gift replaces the binding. Species use the cartridge's
+internal numbering (`pokeldn/frlg/save/species_names.py`). Card and news compile for all four
+cartridges; console code compiles for all four or for the one chosen.
 
-当控制台代码位于 PATH、Homebrew 文件夹或 Arm 的 Windows 安装文件夹下时，控制台代码使用 `arm-none-eabi-as` 进行汇编；如果没有它，该表单将采用预构建的 `.bin` 并显示在此系统上安装汇编器的命令：
+Console code is assembled with `arm-none-eabi-as` when it is on the PATH, in Homebrew's folders or
+under Arm's Windows install folder; without it, the form takes a prebuilt `.bin` and shows the
+command that installs the assembler on this system:
 
-|系统|命令 |
+| system | command |
 |---|---|
 | macOS | `brew install arm-none-eabi-binutils` |
-|软呢帽| `sudo dnf install arm-none-eabi-binutils-cs` |
-| Debian、Ubuntu 及其衍生产品 | `sudo apt install binutils-arm-none-eabi` |
-|窗户 | `winget install Arm.ArmGnuToolchain` |
+| Fedora | `sudo dnf install arm-none-eabi-binutils-cs` |
+| Debian, Ubuntu and derivatives | `sudo apt install binutils-arm-none-eabi` |
+| Windows | `winget install Arm.ArmGnuToolchain` |
 
-另一个 Linux 发行版获得了 Arm 的下载页面。 Fedora 44 和 Ubuntu 24.04 软件包将默认模板组装为 `01 00 a0 e3 1e ff 2f e1`。离线检查在模拟游戏机（`pokeldn/frlg/rom/custom_code.py`）上运行一次代码并显示答案和字节。在开始之前和保存文件之前运行相同的检查：出错或从不返回 1 的代码将被拒绝。
+Another Linux distribution gets Arm's download page. The Fedora 44 and Ubuntu 24.04 packages
+assemble the default template to `01 00 a0 e3 1e ff 2f e1`. Check offline runs the code once on the simulated console
+(`pokeldn/frlg/rom/custom_code.py`) and shows the answer and the bytes. The same check runs before
+Start and before a file is saved: code that faults, or never returns 1, is refused.
 
-剑/盾形态可以构建一个宝可梦（可以选择超极巨化）、一个蛋、最多六件包物品、官方服装、战斗点数或金钱，以及卡ID。宝可梦、蛋、物品、服装和战斗积分类型写入列出并兑换的零售剑的记录字节（[剑和盾 神秘礼物](swsh_gift.md#a-card-delivered-to-a-retail-console))；皮卡丘预设是启动器自己的默认记录的逐字节。服装来自成对的官方服装卡（[服装](swsh_gift.md#clothing)），每个玩家性别最多六件。 PKHeX 拒绝在没有 Gigantamax 形式的物种上使用 Gigantamax 标志。
+The Sword/Shield form builds a Pokemon (optionally able to Gigantamax), an egg, up to six bag items,
+official outfits, Battle Points or money, with a card id. The Pokemon, egg, item, clothing and Battle
+Points kinds write the bytes of a record a retail Sword listed and redeemed
+([Sword and Shield Mystery Gift](swsh_gift.md#a-card-delivered-to-a-retail-console)); the
+Pikachu preset is byte for byte the launcher's own default record. Clothing comes from the pairs of
+the official outfit cards ([Clothing](swsh_gift.md#clothing)), at most six pieces for each player
+gender. PKHeX refuses a Gigantamax flag on a species without a Gigantamax form.
 
-在发送之前列出游戏机获得的内容、运行时间以及礼品提供的墨盒。保存礼物文件将所选礼物写入为 `.pokegift`，无板且无开关键。 FRLG 预设会通过启动器自己的构建器，因此该文件包含他们构建的每个墨盒变体。游戏机的游戏代码在礼物握手期间选择变体；在发送礼物数据之前，文件中不存在的磁带会被拒绝。预设的卡 ID 位于“高级”选项卡上（`--flag-id`，1000 到 1019）。
+Before you send lists what the console gets, when it runs, and the cartridges the gift serves. Save
+gift file writes the selected gift as `.pokegift` with no board and no Switch keys. FRLG presets go
+through the launcher's own builder, so the file holds every cartridge variant they build. The
+console's game code chooses the variant during the gift handshake; a cartridge absent from the file
+is refused before gift data is sent. A preset's card id is on the Advanced tab (`--flag-id`, 1000 to
+1019).
 
-该应用程序不会在导入时修改礼品文件。文件保留在所选路径中。
+The app does not modify gift files on import. Files remain at the chosen paths.
 
-从零售游戏机上打开的文件交付：法国火红上的时拉比卡和游戏机代码文件，剑上的皮卡丘卡。以保存的训练家 ID 回答的形式构建的控制台代码。
+Delivered from an opened file on retail consoles: a Celebi card and a console code file on a French
+FireRed, a Pikachu card on a Sword. Console code built in the form answered with the save's trainer id.
+
 ## 命令行
 
 两个礼品发射器均接受 `--gift-file FILE`。 剑／盾保留`--record`作为别名。
@@ -112,14 +156,17 @@ _start:
 `--gift-file custom.pokegift`。 `--dump-file PATH` 选择主机写入返回转储的位置。在发送代码之前强制执行墨盒变体。包装验证结构和尺寸；作者必须在实时运行之前使用 `buffer_script.emulate_repeating` 离线执行新的有效负载。文件哈希并不能证明本机代码返回或保持保存完好无损。
 ### 原生格式
 
-转换器导入剑／盾WC8记录、FRLG `.wc3`文件以及所使用的配对FRLG文件
-`pokemon-gen3-mysterygift-tool`。 `.wc3` 或 `.wc8` 也可直接在应用程序的“打开文件”和 `--gift-file` 中打开。
+> 本节已随上游更新，以下内容暂保留英文。
 
-其可达代码不包含绝对地址的 FRLG 脚本为所有四个磁带提供服务 (`BPRF`、
-`BPGF`、`BPRE`、`BPGE`)：其跳转和文本是相对于其自身的 `vgoto`/`vmessage` 操作数
-`setvaddress` [scrcmd.c:171]，物品来自 `callstd`。带有 `goto`、`call` 的脚本，
-`message`、`callnative`或其他绝对指针属于一个墨盒，需要`--build`；一个
-`.wc3`之类的直接打开是拒绝的。
+The converter imports Sword/Shield WC8 records, FRLG `.wc3` files and paired FRLG files used by
+`pokemon-gen3-mysterygift-tool`. A `.wc3` or `.wc8` also opens directly, in the app's Open a file and
+in `--gift-file`.
+
+An FRLG script whose reachable code holds no absolute address can serve each cartridge with the
+same card layout: its jumps and text are `vgoto`/`vmessage` operands relative to its own
+`setvaddress` [scrcmd.c:171], and items come through `callstd`. A script with a `goto`, `call`,
+`message`, `callnative` or other absolute pointer belongs to one cartridge and needs `--build`; a
+`.wc3` of that kind is refused when opened directly.
 
 ```bash
 ./.venv/bin/python -m pokeldn.gifts import --game swsh --record event.wc8 -o event.pokegift
@@ -127,27 +174,44 @@ _start:
 ./.venv/bin/python -m pokeldn.gifts import --game frlg --card WonderCard.bin \
   --script Script.bin --name "Event gift" -o event.pokegift
 ./.venv/bin/python -m pokeldn.gifts export celebi.pokegift --build BPRF --out-dir native-gift
-./.venv/bin/python -m pokeldn.gifts export celebi.pokegift --wc3 --out-dir native-gift
-./.venv/bin/python bin/frlg_mg_host.py --gift celebi --export-gift celebi.wc3
+./.venv/bin/python -m pokeldn.gifts export celebi.pokegift --wc3 --build BPRJ --out-dir native-gift
+./.venv/bin/python bin/frlg_mg_host.py --gift celebi --console-build BPRJ --export-gift celebi.wc3
 ```
- 保存到以 `.wc3` 或 `.wc8` 结尾的路径会写入该本机文件而不是 `.pokegift`：
-`--export-gift`，在保存礼品文件和`pokeldn.gifts.save`中。 `.wc3` 容纳一个卡带的卡和脚本；如果没有 `--build`，礼物的每个变体都必须携带相同的字节，就像相关脚本一样。 `.wc3` 元数据块除其图标外均写入零，该图标重复卡片的图标。游戏接受的每个国际图库文件在导入和导出后都会返回相同的卡片、脚本和图标字节。
 
-`.wc3` 为 1420 字节 (`0x58C`)：
+Saving to a path ending in `.wc3` or `.wc8` writes that native file instead of a `.pokegift`: in
+`--export-gift`, in Save gift file and in `pokeldn.gifts.save`. A `.wc3` holds one cartridge's card
+and script; without `--build` every variant of the gift must carry the same bytes. The GUI asks
+which cartridge to export when variants differ. `.pokegift` retains every language variant. The `.wc3` metadata block is written as zero except its icon, which repeats the card's.
+Every international gallery file the game accepts comes back with the same card, script and icon
+bytes after an import and an export.
 
-|偏移|尺寸|内容 |
+An international `.wc3` is 1420 bytes (`0x58C`):
+
+| offset | size | content |
 | --- | --- | --- |
-| `0x000` | 336 | 336卡的CRC16，2个填充字节，332字节 `struct WonderCard` |
-| `0x150` | 80|保存端卡元数据；没有读过|
-| `0x1A0` | 1004 | 1004 CRC16，2 个填充字节，`struct RamScriptData`（魔法 51，地图组，地图编号，对象 id，995 字节脚本），1 个填充字节 |
+| `0x000` | 336 | CRC16 of the card, 2 pad bytes, the 332-byte `struct WonderCard` |
+| `0x150` | 80 | save-side card metadata; not read |
+| `0x1A0` | 1004 | CRC16, 2 pad bytes, `struct RamScriptData` (magic 51, map group, map number, object id, 995-byte script), 1 pad byte |
 
-宝可梦项目EventsGallery的全部54个国际文件中，文件中的脚本CRC占1000字节，包括填充字节；游戏本身涵盖999 [script.c:488]。导入接受其中之一。
-导入时的 `--icon N` 或在应用程序中打开文件下的卡图标，将卡的 `iconSpecies`（卡的偏移量 2）设置为从 0 到 411 的内部物种 ID； 0 不绘制图标
-[mystery_gift_show_card.c:466]。
+The script CRC in the files covers 1000 bytes, pad byte included, in all 54 international files of
+Project Pokemon's EventsGallery; the game's own covers 999 [script.c:488]. Import accepts either.
+`--icon N` on import, or Card icon under Open a file in the app, sets the card's `iconSpecies`
+(offset 2 of the card) to an internal species id from 0 to 411; 0 draws no icon
+[mystery_gift_show_card.c:466].
 
-日语 `.wc3` 文件为 1252 字节 (`0x4E4`)，被拒绝：Switch 卡带为法语和英语。每个国际画廊的脚本都是相对的，并服务于所有四个墨盒。画廊的标记 id 为 4 到 8 的调试卡被拒绝：送货员只为标记 id 1000 到 1019 [mystery_gift.c:241] 提供礼物。极光和神秘门票在首次名人堂之后无法保存（[极光和神秘门票](frlg_gift.md#the-aurora-and-mystic-tickets)）。
+Japanese `.wc3` files are 1252 bytes (`0x4E4`): the card structure is 164 bytes, its CRC wrapper
+is 168 bytes, metadata starts at `0x0A8`, and the 1004-byte RAM-script structure starts at `0x0F8`.
+Direct import offers Japanese files to `BPRJ` and `BPGJ`; international files offer the ten Latin
+cartridges. An explicit `--build` must match the card layout. The gallery's
+debug cards with flag ids 4 to 8 are refused: the delivery man hands a gift only for flag ids 1000 to
+1019 [mystery_gift.c:241]. The Aurora and Mystic Tickets are no-ops on a save past its first Hall of
+Fame ([The Aurora and Mystic Tickets](frlg_gift.md#the-aurora-and-mystic-tickets)).
 
-FRLG 对包含一个 336 字节的卡和一个 1004 字节的 RAM 脚本结构。导入会验证 CRC 和脚本未绑定的神秘礼物标头。原生配对不能携带邮票、客座训练家、神秘事件脚本、问卷门或神奇新闻。导出到该对拒绝与这些额外内容一起分发。 `.pokegift` 将它们保存在一起。
+The FRLG pair contains a 336-byte international or 168-byte Japanese card and a 1004-byte RAM-script structure. Import verifies both
+CRCs and the script's unbound Mystery Gift header. The native pair cannot carry stamps, visiting
+trainers, Mystery Event scripts, questionnaire gates or Wonder News. Export to that pair refuses
+a distribution with those extras. `.pokegift` preserves them together.
+
 ## 版本 2
 
 该文件是 UTF-8 JSON，具有五个必填字段：

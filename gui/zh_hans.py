@@ -1962,3 +1962,6 @@ LABELS.update({
     "The Eevee outfit, in the wardrobe.": "在衣柜中添加伊布队服。",
     "The card holds a male and a female version; the player gets their own": "卡片包含男性和女性角色对应的版本，玩家收到适合自身角色的版本。",
 })
+
+
+LABELS.update({'This is not a FireRed or LeafGreen save PKHeX can read.': '此存档不是 PKHeX 可读取的火红或叶绿存档。', 'A party Pokemon is not a Gen 3 Pokemon.': '队伍中有宝可梦不属于第三世代。', "A party Pokemon's checksum is invalid.": '队伍中有宝可梦的校验和无效。', 'A party holds one to six Pokemon.': '队伍必须包含一至六只宝可梦。', 'A save backup or restore sends no gift.': '备份或恢复存档时不会发送礼物。'})

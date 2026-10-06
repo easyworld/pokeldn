@@ -3,6 +3,7 @@ title: Legends Z-A
 nav_order: 10
 has_children: false
 ---
+
 # 传说 Z-A
 
 宝可梦传奇：Z-A（游戏 ID `0100f43008c44000`）是一款原生 Switch 游戏，Pia 静态链接到 `main`。其数据包头是版本 16，即 `pokeldn.ldn.crypto` 为 GBA 应用程序编写的数据包头。
@@ -124,55 +125,88 @@ SSID 和通道针对每个会话。游戏字节是 ASCII 格式的链接代码�
 `0xc4b31c`，`0xc4b420` 处的标准 CRC-32）；对于身份，该值是 `bc5d` 之后的 0x5d 字节。仅当每个电台都匹配时（`0xb8c724`、`0xb8c660`），接收器才会重新计算它并继续前进。记录的 `Player` 标识给出了 `1403b9018269fb308f`，即记录的消息。使用过时的 1403 发送的重命名身份会在其搜索屏幕上留下一个实机：它发送其 1400 和 1403，但不会发送 0100。`pokeldn.za.reference.sync_message` 为发送的身份构建 1403。
 ### 交换命令
 
-交换会话设置 `0xca2928` 在会话的命令通道（session+0xc8）上订阅了五种命令类型（由 ctti 字符串命名）。 ID 为 `0x100 | index`，该类型在通道列表中的位置为 +0x60（`0x96129c`，`strcmp` 步行）。每个轮椅都是一个 `b9` 结构，以 u16 轮开头。
+> 本节已随上游更新，以下内容暂保留英文。
 
-|编号 |命令 |处理程序 | 处理程序读取时的谴责 |处理程序做什么 |
+The trade session setup `0xca2928` subscribes five command types (named by ctti strings) on the
+session's command channel (session+0xc8). The id is `0x100 | index`, the type's position in the
+channel's list at +0x60 (`0x96129c`, a `strcmp` walk). Each payload is a `b9` struct opening with a
+u16 round.
+
+| id | command | handler | payload as the handler reads it | what the handler does |
 |---|---|---|---|---|
-| `0100` |命令就绪 | `0x2dc4c7c` |圆形，1200 字节 |将 1200 字节复制到 session+0x604，设置 session+0xf0 |
-| `0101` |命令选择口袋妖怪 | `0xb2a44c` |圆形，344 字节记录，一个字节 |加载记录（提供的宝可梦）；字节的位 0 清零使其成为选择 |
-| `0102` |命令确认交易 | `0xc8dda0` |圆形| session+0x152 高于回合时忽略；否则合作伙伴状态 +0x134 = 4 |
-| `0103` |命令取消交易 | `0x2dc51ac` |圆，u32原因| +0xab4 = 原因是 1 和 2 交换，否则 0； +0x152 = 圆形； +0x150 += 1;那么 `0x2dc41f8` |
-| `0104` |命令最终协议 | `0x2dc52b4` |圆形|当+0x152高于回合或自身状态+0x130不是4或5时被忽略；否则伙伴状态 5 |
+| `0100` | CommandReady | `0x2dc4c7c` | round, 1200 bytes | copies the 1200 bytes to session+0x604, sets session+0xf0 |
+| `0101` | CommandSelectPokemon | `0xb2a44c` | round, 344-byte record, one byte | loads the record (The offered Pokemon); bit 0 of the byte clear makes it a pick |
+| `0102` | CommandConfirmTrade | `0xc8dda0` | round | ignored when session+0x152 is above the round; else partner state +0x134 = 4 |
+| `0103` | CommandCancelTrade | `0x2dc51ac` | round, u32 reason | +0xab4 = reason with 1 and 2 swapped, else 0; +0x152 = round; +0x150 += 1; then `0x2dc41f8` |
+| `0104` | CommandFinalAgreement | `0x2dc52b4` | round | ignored when +0x152 is above the round or own state +0x130 is not 4 or 5; else partner state 5 |
 
-取消发送方 `0x964a60` 当自身状态 +0x130 为 2 或 5 时不发送任何内容；否则，它发送轮+0x150 + 1，设置+0x130 = 2，前进+0x150和+0x152，并将伙伴的状态从3..5下降到2（当原因为0时为3）。处理程序仅拒绝严格低于 +0x152 的一轮，因此在取消并接受更高一轮后，陈旧的ConfirmTrade 或FinalAgreement 将被忽略。 SelectPokemon 不读取回合。
+The cancel sender `0x964a60` sends nothing while own state +0x130 is 2 or 5; otherwise it sends
+round +0x150 + 1, sets +0x130 = 2, advances +0x150 and +0x152, and drops the partner's state from
+3..5 to 2 (3 when the reason is 0). The handlers reject only a round strictly below +0x152, so a
+stale ConfirmTrade or FinalAgreement is ignored after a cancel and a higher round is accepted.
+SelectPokemon reads no round.
 
-会话对象（0xab8字节；`0xca2658`，由`0xca2704`构建，vtable `0x3e3a6e8`）在+0x40（u16 0x201，低字节通道）保存配置，可调用+0x48 和 +0x88，以及归零的 +0x150..+0xab7，因此两轮都从 0 开始，会话的第一个 `0102` 和 `0104` 是`b90100`。
-`0x964568`（自己的状态6；实时交换路径`0x95f8f4`中的呼叫者`0x9601dc`）清除自己的提议+0x120和合作伙伴PokemonParam +0x128，将两个状态设置为2，清除+0x118、+0x11a、+0xd0 和零 +0x150/+0x152：座位上的下一次交换从第 0 轮开始，并且仍接受第 1 轮的答案。 `pokeldn.za.host` 每次交换都会重置其回合。
+The session object (0xab8 bytes; `0xca2658`, built by `0xca2704`, vtable `0x3e3a6e8`) holds a
+configuration at +0x40 (u16 0x201, low byte the channel), callables at +0x48 and +0x88, and a zeroed
++0x150..+0xab7, so both rounds start at 0 and a session's first `0102` and `0104` are `b90100`.
+`0x964568` (own state 6; caller `0x9601dc` in the live trade path `0x95f8f4`) clears the own offer
++0x120 and partner PokemonParam +0x128, sets both states to 2, clears +0x118, +0x11a, +0xd0 and zeroes
++0x150/+0x152: the next trade on the seat starts at round 0, and an answer still at round 1 is
+accepted. `pokeldn.za.host` resets its round with each trade.
 
-|自己的状态|写者 |当 |
+| own state | written by | when |
 |---|---|---|
-| 5 |会话更新 `0x95f600` (`0x95f680`) |自身状态 3 或 4，字节 +0x148 设置，计时器 +0x138 至少 1.5 秒，伙伴状态 4 或 5，`0x963710` true |
-| 6 |委托调用 `0xdfda8c`，填写为 `0x964e78` |交换工作者的 state-6 代表 |
-| 7 | `0x2dc4b94`，由 `0x964f0c` 安装 |工人的state-7代表|
+| 5 | session update `0x95f600` (`0x95f680`) | own state 3 or 4, byte +0x148 set, timer +0x138 at least 1.5 s, partner state 4 or 5, `0x963710` true |
+| 6 | delegate invoke `0xdfda8c`, filled at `0x964e78` | the exchange worker's state-6 delegate |
+| 7 | `0x2dc4b94`, installed by `0x964f0c` | the worker's state-7 delegate; unreachable in 2.0.2 |
 
-当 +0xd0 处的工作线程缺席或其 +9 为 0 或 0x10 时，`0x9610a4`（调用者 `0x95fdbc`）以自己的状态 5 或更多运行：它在会话 +0x48 处调用可调用对象(+0x118、+0x120、+0x128)，将交换工作者(`0x966af0`、0xb0字节)构建为+0xd0，并为其提供状态6和状态7委托（`0x9649e0`、`0x964a20`），由`0x9655a4`存储在worker+0x20和+0x60处。交换对象是由
-`0xc8ad1c`（`adr` at `0xca2578`；构造函数 `0xc8ae70`，vtable `0x3d8a0d0`：+0x68 `0xdd07cc`，+0x78
-`0x2a67168`, +0x80 `0xcbc68c`);使其在会话+0x48 处可调用的存储未被跟踪。
+`0x9610a4` (caller `0x95fdbc`) runs at own state 5 or more when the worker at +0xd0 is absent or its
++9 is 0 or 0x10: it calls the callable at session+0x48 with (+0x118, +0x120, +0x128), builds the
+exchange worker (`0x966af0`, 0xb0 bytes) into +0xd0 and gives it the state-6 and state-7 delegates
+(`0x9649e0`, `0x964a20`), stored by `0x9655a4` at worker+0x20 and +0x60. The trade object is built by
+`0xc8ad1c` (`adr` at `0xca2578`; constructor `0xc8ae70`, vtable `0x3d8a0d0`: +0x68 `0xdd07cc`, +0x78
+`0x2a67168`, +0x80 `0xcbc68c`); the store making it the callable at session+0x48 is untraced.
 
-工人的开始`0x965660`将主机测试`0x9157d0`存储在+0x14，清除+0x15，存储
-`0x34f2b0(rng, 0x12c) + 2` (2..302) 位于 +0x18，将 +0xc 和 +0x10 归零，将 +9 设置为 1。其更新
-`0x960c20`（一位呼叫者，`0x95f750`）通过表`0x33a360d`接通+9。
-`0x962ac0(peer, step)` 将`0x100 | step`存储在peer+0x48处并发送；等待在+0x70处比较伙伴的步骤，当设置+0x71时有效。
+The worker's start `0x965660` stores the host test `0x9157d0` at +0x14, clears +0x15, stores
+`0x34f2b0(rng, 0x12c) + 2` (2..302) at +0x18, zeroes +0xc and +0x10, sets +9 to 1. Its update
+`0x960c20` (one caller, `0x95f750`) switches on +9 through the table `0x33a360d`.
+`0x962ac0(peer, step)` stores `0x100 | step` at peer+0x48 and sends it; a wait compares the
+partner's step at +0x70, valid when +0x71 is set.
 
-| +9 |处理程序 |它是做什么的 |下一个 |
+| +9 | handler | what it does | next |
 |---|---|---|---|
-| 1 | `0x960d20` | 交换对象 vfunc +0x68;结果 1: +0x15 = (+0x14 != 0), 结果 0: +0x15 = 1 (`0x960e50`, `0x960e90`), 否则 +0x15 = 0;发送步骤 3 | 2 |
-| 2 | `0x960cc0` |等待伙伴的3 | 3 |
-| 3 | `0x960d64` | 交换对象 vfunc +0x78; false：状态 4，发送步骤 6 | 5 |
-| 5 | `0x960ce0` |等待伙伴的6 | 6 |
-| 6 | `0x960da0` | `0x9628e8`：交换对象 +0x40 = 1，然后 vfunc +0x80（`0xcbc68c`，交换写入接收记录中的处理程序更新）| 7 |
-| 7 | `0x960c84` |等待交换对象 +0x40 == 3; +0x15 设置：发送 0xb | 8，否则 9 |
-| 9 | `0x960c40` |每次更新向下计数 +0x18 一次，然后发送 0xb | 10 | 10
-| 8, 10 | `0x960ca0` |等待伙伴的0xb | 11 | 11
-| 11 | 11 `0x960db0` | 交换对象 +0x40 = 4 (`0x961098`) | 12 | 12
-| 12 | 12 `0x960dc0` |等待交换对象 +0x40 == 5 (`0x9626e4`)，发送 0xe | 13 |
-| 13 | `0x960d00` |等待伙伴的0xe | 14 | 14
-| 14 | 14 `0x960de8` | +0x10 == 0：状态6代表（`0x963810`）；否则是 state-7 代表 (`0x9a0b00`)；那么 `0x9637b8` | 0x10 |
+| 1 | `0x960d20` | trade object vfunc +0x68; result 1: +0x15 = (+0x14 != 0), result 0: +0x15 = 1 (`0x960e50`, `0x960e90`), else +0x15 = 0; send step 3 | 2 |
+| 2 | `0x960cc0` | wait for the partner's 3 | 3 |
+| 3 | `0x960d64` | trade object vfunc +0x78; false: state 4, send step 6 | 5 |
+| 5 | `0x960ce0` | wait for the partner's 6 | 6 |
+| 6 | `0x960da0` | `0x9628e8`: trade object +0x40 = 1, then vfunc +0x80 (`0xcbc68c`, the handler update in What the trade writes into a received record) | 7 |
+| 7 | `0x960c84` | wait for trade object +0x40 == 3; +0x15 set: send 0xb | 8, else 9 |
+| 9 | `0x960c40` | count +0x18 down once per update, then send 0xb | 10 |
+| 8, 10 | `0x960ca0` | wait for the partner's 0xb | 11 |
+| 11 | `0x960db0` | trade object +0x40 = 4 (`0x961098`) | 12 |
+| 12 | `0x960dc0` | wait for trade object +0x40 == 5 (`0x9626e4`), send 0xe | 13 |
+| 13 | `0x960d00` | wait for the partner's 0xe | 14 |
+| 14 | `0x960de8` | +0x10 == 0: the state-6 delegate (`0x963810`); else the state-7 delegate (`0x9a0b00`); then `0x9637b8` | 0x10 |
 
-自己的状态6是在worker+0x10处交换完成，没有错误，两个站都通过了
-`0200b901XX` 步骤 3、6、0x0b 和 0x0e。 +0x15 清除的电台在其 0x0b 之前等待随机 2..302 更新。 `0xdd07cc` 返回的内容以及存储的半字如何映射到 `b901XX` 字节均未跟踪。
+Own state 6 is the exchange completed, after both stations passed the `0200b901XX` steps 3, 6, 0x0b
+and 0x0e. Handler 14 picks the state-7 delegate when the worker's error word +0x10 is non-zero, and
+nothing in 2.0.2 writes a non-zero value there: its only stores zero it, in the constructor
+`0x966ba4` (`0x966bcc`) and the start `0x965660` (`0x9656a0`). The worker's abort phase +0xc is read
+by the session tick `0x95f6e4` (`0x95f738`): 1 asks the trade object to cancel (`0x9636f8` sets trade
+object +0x44 = 1) and parks the worker at step 0xf; 2 waits for trade object +0x44 == 3, then sets
+step 14 and phase 3 (`0x95f7e0`). No code stores 1, so the abort phase never starts and no path
+through the worker reaches own state 7. A store through a computed address is not excluded; a write
+breakpoint on worker+0x10 would settle it. A station whose +0x15 is clear waits the random 2..302
+updates before its 0x0b. What `0xdd07cc` returns and how the stored halfword maps onto the `b901XX`
+bytes are untraced.
 
-Z-A 在交换提示中选择“取消”会发送 `0103b9020100`（第 1 轮，原因 0），并且一旦其玩家再次选择，就会使用主机之前的提议重新绘制提示，而无需重新发送。其下一个确认是`0102b90101`和`0104b90101`。在第 0 轮下应答的主机将被忽略（处理程序拒绝低于 +0x152 的轮次）并且游戏机等待“正在通信”；第 1 轮完成交换。 `pokeldn.za.host` 从游戏机自己的 `0102`、`0103` 和 `0104` 中获胜。
+A Z-A choosing Cancel on the trade prompt sends `0103b9020100` (round 1, reason 0) and, once its
+player picks again, redraws the prompt with the host's earlier offer without a resend. Its next
+confirmation is `0102b90101` and `0104b90101`. A host answering under round 0 is ignored (the
+handlers reject a round below +0x152) and the console waits on "Communicating"; round 1 completes the
+trade. `pokeldn.za.host`
+takes the round from the console's own `0102`, `0103` and `0104`.
+
 ### 加入方对这些流的欠债
 
 根据参考对和模拟主机的确认进行测量：
@@ -597,26 +631,74 @@ LDN 会话属性将 +0xa6 设置为 `stationAcceptPolicy == 0`（NetworkInfo +0x
 `bin/za_host.py` 用类型 4 回答每个类型 3； `bin/za_join.py` 在离开 `--hold` 或 `--hold-after-trade` 时发送自己的类型 3，并继续类型 4 或在第四次发送后。
 ### A 主机离开
 
-`LeaveMeshWithHostMigrationJob` 命名下一个主机 (`CalcNextHost` `0x255a6fc`)，然后
-`SendStartHostMigrationMessage` (`0x255a91c`) 每秒发送类型 9 一次，直到 5000 毫秒截止时间 (`0x255a8c8`)，之后作业将失败并显示 `0x6c0e`。一旦设置了字节 +0xe0，`WaitStartHostMigrationAck` (`0x255abb4`) 就会完成。 type-10阅读器`0x2550a64`仅在主机上接收21字节消息，仅当字节11到20是主机自己的id时，并通过设置+0xe0
-`0x255a630`，当字节 1 到 10 是指定的下一个主机时。
+> 本节已随上游更新，以下内容暂保留英文。
 
-由于类型 9 未得到答复，一个零售 Z-A 主持交换，其玩家退出，间隔一秒发送 5 个类型 9，然后每 0.5 秒从源 0 发送 Net 0x11 序列 3，持续约 4 秒，然后 Net 0x40 约 2 秒，并在第一个类型 9 后沉默 10.82 至 10.86 秒（四个出发）；在板上追踪到的网络中，其网络在 11.26 秒后出现故障。在模拟对中，加入方在 48 ms 后用类型 10 应答类型 9，主机发送 Net 0x11 序列 3，加入方应答
-`0112000000000003`;主机的网络在类型 9 后 0.25 秒消失。加入方的类型 10 和
-0x12 退出，标头标志为 2，目的地为 0，数据包 ID 为 0，没有页脚。
+`LeaveMeshWithHostMigrationJob` names the next host (`CalcNextHost` `0x255a6fc`), then
+`SendStartHostMigrationMessage` (`0x255a91c`) sends the type 9 once a second until a 5000 ms
+deadline (`0x255a8c8`), after which the job fails with `0x6c0e`. `WaitStartHostMigrationAck`
+(`0x255abb4`) completes as soon as byte +0xe0 is set. The type-10 reader `0x2550a64` takes a 21-byte
+message only on the host, only when bytes 11 to 20 are the host's own ids, and sets +0xe0 through
+`0x255a630` when bytes 1 to 10 are the named next host's.
 
-当类型 10 和 0x12 立即发送时，零售主机在类型 9 之后 0.04 秒发送 0x11，然后每 0.3 秒发送 Net 0x40（`01 40 00 00`，源 0），持续 4.06 秒，而加入方仍留在其网络上；没有第二个9型来了。离开第一个 0x40，加入方在类型 9 后 0.09 秒断开网络（没有交换，玩家退出盒子）。
+With the type 9 unanswered, a retail Z-A hosting a trade whose player backed out sent five type 9 one
+second apart, then Net 0x11 sequence 3 from source 0 every 0.5 s for about 4 s, then Net 0x40 for
+about 2 s, and went silent 10.82 to 10.86 s after its first type 9 (four departures); its network
+went down 11.26 s after it in the one traced on the board. In an emulated pair the joiner answered
+the type 9 with a type 10 48 ms later, the host sent Net 0x11 sequence 3 and the joiner answered
+`0112000000000003`; the host's network was gone 0.25 s after its type 9. The joiner's type 10 and
+0x12 went out with header flags 2, destination 0, packet id 0 and no footer.
 
-`bin/za_join.py` 回答类型 9，将其命名为类型 10，并在其后面使用 Net 0x11
-0x12，并在第一个网络 0x40 上离开网络（或者一旦游戏机静默了一秒钟）。
+With the type 10 and the 0x12 sent at once, a retail host sent the 0x11 0.04 s after its type 9
+and then Net 0x40 (`01 40 00 00`, source 0) every 0.3 s for 4.06 s while the joiner stayed on its
+network; no second type 9 came.
+
+The Net 0x11 is the leaving host's connection status in the migration form of
+`NetDestroyNetworkJob` (`0x2516444`, flag at job+0xd8, set when the disconnecting station is host,
+`0x2503c44`): `0x2501930` bumps the sequence (NetProtocol+0x15c) and byte 29, the is-migrating byte,
+is 1 while the NetHostMigration state NetProtocol+0x12d0 is 1 (`0x250f084`). It asks every client
+for a Net 0x12 of that sequence; a client stores the sequence, sets NetProtocol+0x308 and answers
+(`0x2503164`, `0x25035c0`). The host waits up to 4000 ms for every 0x12, then sends the 0x40 every
+300 ms for 4000 ms, or 2000 ms when the wait expired, until it is alone, and destroys its network
+(`0x251693c`, `0x25169f8`).
+
+The 0x40 starts the next host's work: `0x2503d44`, on a station that is not host, calls
+NetHostMigration start `0x25099a4`, which picks the next host (`0x2505d10`) and runs
+`NetHostMigrationJob` (`0x2509da0`). On LDN it leaves the old network (`0x2503b14`); the next host
+opens a network (`0x2507050`) and waits 6000 ms for the remaining clients, dropping any that do not
+come back (`0x250acf0`); a client waits 1000 ms and reconnects. Success clears NetProtocol+0x12d0
+and stores result 1 or 2 (host) or 3 (client) at NetProtocol+0x12d4; failure stores 4 with error
+`0xc406`.
+
+A Link Trade ends at the handover. The type-9 handler `0x2550684` removes the leaving host's station
+(`0x2548500`) before starting `ProcessHostMigrationJob`, which drops the session's station count
+(session+0x110). The trade scene update `0x95f398` runs the trade only while that count is above 1
+(`0x95f45c`) and otherwise ends it with reason 3 (`0x95f508`), the ending a partner's leave request
+also reaches. In a two-station trade the leaver is the only partner, so the trade ends whatever the
+migration does, and the leaving console destroys its network.
+
+Leaving on that first 0x40, the joiner was off the network 0.09 s after the type 9 (no trade, the
+player backing out of the box).
+
+`bin/za_join.py` answers a type 9 naming it with the type 10, and the Net 0x11 after it with the
+0x12, and leaves the network on the first Net 0x40 (or once the console has been silent for a
+second).
+
 ## 神秘礼物
 
 2.0.2版神秘礼物提供网络获取、密码获取、查看神秘礼物；没有本地无线路径。
 ## 未解决
 
-- 游戏代码是否通过 CloseParticipation 以外的方式达到外观索引 19。托管的链接交换搜索通过 CloseParticipation 到达了一个加入方。
-- 附带的脚本是否调用将任何整数存储到 L 中的绑定 `0x1673170`，以及语言选择表 `[x0+0x50]` 保存的内容（断点 `0x16734c0`，在 `0x2c204ac` 处读取）。
-- 写入交换工作者的错误字 +0x10 的内容，它选择自己的状态 7 。
-- 可选的定时关闭 (`--hold-after-trade`) 是否可以在游戏机仍然就座时让游戏机不发生错误。默认主机等待游戏机离开（[Hosting](#hosting)）。   离开的零售主机首先发送类型9（[A 主机离开](#a-host-leaving)）； `bin/za_host.py` 中的定时关闭不发送任何内容。
-- 类型 9 之后的 Net 0x11 序列 3 询问下一个主机（`NetHostMigrationJob`，来自 `0x2509d60` 的 vtable 插槽）的内容，以及零售会话是否可以在切换后继续交换。
-- 站点如何处理协议 0 消息以及 keepalive 的标头字节（`04 00` 通过标头差异）。游戏机没有其他可发送到的已坐站的捕获。
+> 本节已随上游更新，以下内容暂保留英文。
+
+- Whether game code reaches facade index 19 other than through CloseParticipation. A hosted Link
+  Trade search with one joiner reached it from CloseParticipation.
+- Whether a shipped script calls the binding `0x1673170` that stores any integer into L, and what the
+  language-select table `[x0+0x50]` holds (breakpoint `0x16734c0`, read at `0x2c204ac`).
+- Whether an optional timed close (`--hold-after-trade`) can leave the console without an error
+  while it is still seated. The default host waits for the console's departure ([Hosting](#hosting)).
+  A leaving retail host sends the type 9 first ([A host leaving](#a-host-leaving)); the timed close
+  in `bin/za_host.py` sends none.
+- What a retail Z-A shows and keeps after its trade ends at a handover it receives: the partner-left
+  message, and whether the network it recreates stays open for a new joiner (`0x961a40` onward).
+- What a station does with a protocol-0 message, and the keepalive's header bytes (`04 00` by the
+  header diff). A capture of a seated station the console has nothing else to send to.

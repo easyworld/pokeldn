@@ -3,6 +3,7 @@ title: The Link Trade
 parent: Sword and Shield
 nav_order: 3
 ---
+
 # 使用零售剑和盾进行交易
 
 从快照交换到保存的剑和盾链接交换。成帧、内容注册和PK8在[同步框架](swsh_protocol.md)上。
@@ -90,26 +91,60 @@ ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错
 游戏机在最后一个同步命令 40 (`3`) 之后播放交换动画，期间没有交换消息。加入 `bin/swsh_host.py` 的零售剑在同步命令后 1.2 秒开始动画，并在大约 24 秒时给予玩家控制权。它不会发送任何应用程序消息，直到玩家退出盒子（盒子命令 3）。
 ## 一个交易日连续交易
 
-一次会话会带来一次又一次的交换。 交换状态9发送事件7（成功）或8（失败）并将状态0写入`0x010ca360`，并且玩家回到盒子中。会话的内容 30 和 ping 110 实时（由会话设置 `0x010c9280` 构建一次）；内容 50 和 40 及其 ping 会在每次交换时重建：
+> 本节已随上游更新，以下内容暂保留英文。
 
-|对象|寿命 |代码|
+A session carries one trade after another. Trade state 9 sends event 7 (success) or 8 (failure)
+and writes state 0 at `0x010ca360`, and the player is back in the box. Content 30 and ping 110 live
+for the session (built once by the session setup `0x010c9280`); contents 50 and 40 and their pings
+are rebuilt for every trade:
+
+| object | lifetime | code |
 |---|---|---|
-|内容 30，ping 110 |会议| `0x010c9280` -> `0x010cca10` |
-|内容 50，ping 130 |一次交换 | 交换状态 1 -> `0x010d5440` -> init `0x010d4d90`（新内容，旧内容已发布），在第 0 阶段 `0x010d53fc` 铸造的元素；状态 3 被 `0x010d54b0` 拆除 |
-|内容 40，ping 120 |一次交换 |状态 6 -> `0x010dabc0` -> 初始化 `0x010da470`；由 `0x010dac90` 在状态 8 中发布 |
-|内容的 SyncPing |它的元素|铸币厂 `0x006d44e0` 构建了一个新的 SyncPing，其 id 偏移量 + 0x50 (`0x006d46d0`)，破坏了前一个 (`0x006cd940`) |
+| content 30, ping 110 | the session | `0x010c9280` -> `0x010cca10` |
+| content 50, ping 130 | one trade | trade state 1 -> `0x010d5440` -> init `0x010d4d90` (new content, old one released), element minted at phase 0 `0x010d53fc`; torn down in state 3 by `0x010d54b0` |
+| content 40, ping 120 | one trade | state 6 -> `0x010dabc0` -> init `0x010da470`; released in state 8 by `0x010dac90` |
+| a content's SyncPing | its element | the mint `0x006d44e0` builds a new SyncPing with id offset + 0x50 (`0x006d46d0`), destroying the previous one (`0x006cd940`) |
 
-达到同步的 SyncPing 永远不会重置到位，因此当游戏机没有内容 50 时发送的 ping 130 不会到达任何持有者。
+A SyncPing that reached synced is never reset in place, so a ping 130 sent while a console has no
+content 50 reaches no holder.
 
-盒子屏幕的步进机（`0x00aa5160`，表`0x2059218`）读取由侦听器`0x00c8d900`设置的伙伴的盒子命令标志。在步骤3中，在伙伴的标志1（其提议）上，它同时清除标志1和4（`0x00aa5688..0x00aa569c`）；第 7 步等待标志 4 (`0x00aa5628`)，并且只有第 10 步发出动作 6，该动作 6 开始交换状态 1。因此，在与要约相同的突发中发送的框命令 4 被擦除，并且游戏机在步骤 7 中等待“En attente d'une réponse”。合作伙伴的 4 必须在游戏机处理完其提议后到达：`pokeldn.swsh.host_trade` 仅在加入方的 4 之后发送其 4，并且加入方发射器发送其 4 作为对主机的答复。
+The box screen's step machine (`0x00aa5160`, table `0x2059218`) reads the partner's box-command flags
+set by the listener `0x00c8d900`. In step 3, on the partner's flag 1 (its offer), it clears flags 1
+and 4 together (`0x00aa5688..0x00aa569c`); step 7 waits for flag 4 (`0x00aa5628`), and only step 10
+issues action 6, which starts trade state 1. A box command 4 sent in the same burst as the offer is
+therefore erased, and the console waits in step 7 with "En attente d'une réponse". The partner's 4
+must arrive after the console has processed its offer: `pokeldn.swsh.host_trade` sends its 4 only
+after the joiner's 4, and the joiner launcher sends its 4 in answer to the host's.
 
-以后的每次交换都会重复交换本身的部分：两个提议和框命令 1，按该顺序两个框命令 4，ping 130（加入方首先 ping），阶段 0 的新内容 50，ping 120，阶段 0 到 4 的新内容 40。没有 0x84 快照，ping 97 或 110，框命令 3 或内容30 次发布发生在交易之间。 `bin/swsh_host.py` 和 `bin/swsh_connect.py` 与重复的 `--offer-file` 在一次会话中每次交换交换一条排队记录，分别使用零售 Sword 加入方和主机；当游戏机离开时主机关闭。
+Step 7 also ends on the player pressing B; no timer ends it. The step machine's ui is the View_Model
+at `[this+0x80]` (`0x00aa4e78`, vtable `0x25376d8`). Its input handler `0x00aab0b0` (slot 16, called
+from the UI dispatcher at `0x00efad28`) sets `ui+0x5cc = 1` when `ui+0x5d0` is armed and the
+pressed-this-frame mask carries bit 49, which the remap table `0x02062928` produces from B alone.
+Steps 2 and 6 arm it after the offer and the acceptance (`0x00aa5434`); every tick clears it
+(`0x00aa5608`). In step 7 a press clears the partner's flags, sends box command 5 (the acceptance
+withdrawn) and leaves the sequence (`0x00aa57d0`); in step 3 it sends box command 2.
 
-`bin/swsh_connect.py` 与重复的 `--offer-file` 在完成阶梯（40040 上的第 4 阶段）后接受游戏机的提议作为下一个交换。它用它的下一条记录回答该提议，因此游戏机的盒子序列已经在步骤3中保存其自己的提议，并清除其每次交换状态：应答的40050和40040对和主体、确认命令队列、选择提议锁存器。 40030 对和 ping 答案会继续保留。 `bin/swsh_host.py --accept-first --lead
-SECONDS` 扮演游戏主机的玩家（首先接受，交换后从盒子中提供下一条排队记录），两个启动器在模拟板上的一个会话中各交换两条记录 (`tests/test_esp32.py`)。
+Every later trade repeats the trade's own part: both offers and box command 1, the two box command
+4s in that order, ping 130 (the joiner pings first), a new content 50 at phase 0, ping 120, a new
+content 40 from phase 0 to 4. No 0x84 snapshot, ping 97 or 110, box command 3 or content 30 publish
+comes between trades. `bin/swsh_host.py` and `bin/swsh_connect.py` with a repeated `--offer-file`
+trade one queued record per trade on one session with a retail Sword joiner and host respectively;
+the host closes when the console leaves.
 
-当零售加入方的玩家在框中按下 B 时，游戏机发送框命令 2 和 3 以及网格
-`0401` 并取消身份验证，没有错误；它的下一个搜索可以加入相同的托管网络（相同的网络ID）。搜索游戏机加入任何通过[匹配规则](swsh_session.md#how-a-searching-sword-finds-a-partner)的网络。
+`bin/swsh_connect.py` with a repeated `--offer-file` takes the console's offer after a finished
+ladder (phase 4 on 40040) as the next trade. It answers that offer with its next record, so the
+console's box sequence is already in step 3 holding its own offer, and clears its per-trade state:
+the 40050 and 40040 pairs and bodies answered, the confirmation command queue, the selection-offer
+latch. The 40030 pair and the ping answers carry over. `bin/swsh_host.py --accept-first --lead
+SECONDS` plays a console host's player (accepts first, offers its next queued record from the box
+after a trade), and the two launchers trade two records each way on one session on simulated boards
+(`tests/test_esp32.py`).
+
+When a retail joiner's player presses B in the box, the console sends box commands 2 and 3 and mesh
+`0401` and deauthenticates with no error; its next search can join the same hosted network (same
+network id). A searching console joins any network that passes the
+[matching rules](swsh_session.md#how-a-searching-sword-finds-a-partner).
+
 ## 盒子状态机
 
 内容 30 包含从交换屏幕到提议的所有内容。 `onBoxSyncStateCommand`

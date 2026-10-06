@@ -3,6 +3,7 @@ title: The link protocol
 parent: FireRed and LeafGreen
 nav_order: 1
 ---
+
 # GBA 链接及其上运行的内容
 
 在实机硬件上测量或从 [pret/pokefirered](https://github.com/pret/pokefirered) 中读取。
@@ -100,9 +101,21 @@ IDLE x75    -> the host pulls the party
 S4_PARTY并在60帧后再次选择。用 `PARTNER_CANCEL_TRADE` 回答 `REQUEST_CANCEL` 会循环游戏机“votre ami veut échanger des 宝可梦”； `bin/frlg_trade_host.py` 用 `BOTH_CANCEL_TRADE`（退出路径）回答第一个。领导者自己的选择不发送任何内容（`SetReadyToTrade`
 [trade.c:1811-1828]);每位玩家的取消信息为 `REQUEST_CANCEL` [trade.c:2049]。首先发送 `READY_TO_TRADE` 的方加入会在领导者第一次取消时绘制 `PLAYER_CANCEL_TRADE`；
 `bin/frlg_trade_join.py` 然后在菜单中取消，因此领导者的第二次取消会结束会话。
-## 版本和语言不是门
+## Version and language on the link
 
-`IsTryingToTradeAcrossVersionTooSoon` [union_room.c:1499] 仅对既不是火红也不是叶绿的伙伴触发，并打印一条消息而不删除链接； FR↔LG 交换适用于硬件。唯一语言分支，`ConvertInternationalString`，特例日语；法语的火红接受英语的神奇配合。
+> 本节已随上游更新，以下内容暂保留英文。
+
+`IsTryingToTradeAcrossVersionTooSoon` [union_room.c:1499] fires only for a partner that is neither
+FireRed nor LeafGreen, and prints a message without dropping the link; FR↔LG trading works on
+hardware. `ConvertInternationalString` special-cases Japanese names; a French FireRed accepts an
+English Wonder Card. The Union Room's `Task_SearchForChildOrParent` skips Japanese candidates
+[union_room.c:3726]. Mystery Gift uses `Task_ListenForCompatiblePartners`, whose compatible-player
+check uses the serial number and advertised name flag, without that language filter.
+
+After the player selects pokeldn in the Mystery Gift Friend list, the console sends its ROM game
+code in GameData. The host chooses that cartridge's addresses and card layout before delivery.
+The GUI shows this automatic language detection beside the version on its Basic screen.
+
 ## 模拟器可以自行关闭链接
 
 `HandleLinkConnection` 仅在 Switch 版本 [link.c:1654] 上运行 `svc_51`：

@@ -3,6 +3,7 @@ title: The Mystery Gift menu
 parent: Sword and Shield
 nav_order: 4
 ---
+
 # 神秘礼物菜单的本地无线分支
 
 剑和盾的神秘礼物菜单通过本地无线接收神奇卡：分销商在 LDN 网络上做广告，其广告数据中携带有碎片卡。地址是 Shield 1.3.2 的 `main`，除非标记为 Sword；直播行为是根据零售控制台来衡量的。
@@ -408,57 +409,84 @@ IVs：构建器按 HP、Atk、Def、SpA、SpD、Spe 的顺序测试六个字节�
 `+0x11`，`+0x20` 处单词的数量，2070 年 1 月 1 日为归零日期；如果标识符为零，则它不会提供任何内容。
 ## 一张发送到实机的卡
 
-`bin/swsh_gift_host.py` 通过 LDN 将卡传送到零售 Sword。仅当使用 Pia 标头打开广告数据时，零售 Sword 才会列出卡片：
+> 本节已随上游更新，以下内容暂保留英文。
 
-|主机广告的内容 |上市|
+`bin/swsh_gift_host.py` delivers a card to a retail Sword over LDN. A retail Sword lists a card only
+when the advertise data opens with the Pia header:
+
+| what the host advertised | listed |
 |---|---|
-| LDN 协议 3（GBA 应用程序的），以 24 个零字节通告数据开放 |没有|
-| LDN协议1，游戏机自己的，24个零字节|没有|
-| LDN协议1，广告数据前面的Pia头|是的 |
+| LDN protocol 3 (the GBA app's), advertise data opening with 24 zero bytes | no |
+| LDN protocol 1, the console's own, 24 zero bytes | no |
+| LDN protocol 1, the Pia header at the front of the advertise data | yes |
 
-Pia 标头是游戏机自己的礼品广告打开时使用的标头（[剑会话](swsh_session.md)）：随机网络 ID、零密码 CRC、系统通信版本 5、标头大小 0x18、随机会话参数和八个零字节。接受场景 ID 0 和应用程序版本 4；游戏机自带的广告带有场景65535和应用版本7，所以都不会被过滤。 ldn_mitm 不携带 802.11 广告，因此模拟器无法测试这些变量。
+The Pia header is the one the console's own gift advertisement opens with
+([Sword sessions](swsh_session.md)): a random network id, a zero password CRC, system communication
+version 5, header size 0x18, a random session parameter and eight zero bytes. Scene id 0 and
+application version 4 were accepted; the console's own advertisement carries scene 65535 and
+application version 7, so neither is filtered on. ldn_mitm carries no 802.11 advertisement, so an
+emulator cannot test these variables.
 
-|善良|记录|游戏机上的结果|
+| kind | record | result on the console |
 |---|---|---|
-| 1 | `+0x245` = 1, level-1 皮卡丘, 标题索引 1 |上市“Oeuf de 宝可梦”，队伍中的一颗蛋|
-| 2 |商品 ID 位于 `+0x20`，数量位于 `+0x22`：`01 00 03 00`，标题索引 3 | 《大师球》上市，三者收入囊中|
-| 3 |数量 10，位于 `+0x20`，标题索引 1 |列出标题为“Oeuf de 宝可梦”，已添加 10 BP |
-| 3 |数量 10，`+0x20`，标题索引 39，如 EventsGallery Battle Points 卡所携带 |列出“战斗点数”，添加 10 BP |
-| 4 | EventsGallery's Casual Tee (宝可梦 Quest) 卡，标题索引 36 |上市了，衣柜里的T恤|
-| 4 |皮卡丘制服的双子，标题索引 36 |收到五件单品：haut、gants、short、bas 和 chaussures de sport |
-| 5 |金额 100,000，`+0x20`，标题索引 34 |上市“Argent de poche”，涨价10万|
-| 1 | 皮卡丘 with `+0x24B` = 1, Dynamax level 10, title index 21 |摘要中列出了“皮卡丘（宝可梦 Gigamax）”，Gigantamax 标志 |
+| 1 | `+0x245` = 1, level-1 Pikachu, title index 1 | listed "Oeuf de Pokemon", an egg in the party |
+| 2 | item id at `+0x20`, quantity at `+0x22`: `01 00 03 00`, title index 3 | listed "Master Ball", three in the bag |
+| 3 | amount 10 at `+0x20`, title index 1 | listed with the title "Oeuf de Pokemon", 10 BP added |
+| 3 | amount 10 at `+0x20`, title index 39, as the EventsGallery Battle Points cards carry | listed "Points de Combat", 10 BP added |
+| 4 | EventsGallery's Casual Tee (Pokemon Quest) card, title index 36 | listed, the tee in the wardrobe |
+| 4 | the Pikachu uniform's pairs, title index 36 | received five pieces: haut, gants, short, bas and chaussures de sport |
+| 5 | amount 100,000 at `+0x20`, title index 34 | listed "Argent de poche", money up by 100,000 |
+| 1 | Pikachu with `+0x24B` = 1, Dynamax level 10, title index 21 | listed "Pikachu (Pokemon Gigamax)", the Gigantamax mark in its summary |
 
-标题仅来自`+0x15`，无论是什么类型；种类决定交付什么。
+The title comes from `+0x15` alone, whatever the kind; the kind decides what is delivered.
 
-kind-2 记录只需要种类、项目对和数量。解析器将记录 `+0x20..+0x37` 中的六个 id/数量对复制到标头 `+0x30..+0x47` (`0x010b6024..0x010b6080`) 并将标头 `+0x0D` 设置为非零数量的数量 (`0x010b6084..0x010b60e4`)；赎回以非零数量 (`0x01015d00..0x01015dd0`) 每对调用 `Bag::AddItem`。 1.3.2项表有1607个条目； `bin/message/<lang>/common/itemname.dat` 中名字以 `★` 开头的为假人（其中 1279 至 1578）。
+A kind-2 record needs only the kind, the item pairs and a quantity. The parser copies exactly six
+id/quantity pairs from record `+0x20..+0x37` to header `+0x30..+0x47` (`0x010b6024..0x010b6080`) and
+sets header `+0x0D` to the number of non-zero quantities (`0x010b6084..0x010b60e4`); the redemption
+calls `Bag::AddItem` per pair with a non-zero quantity (`0x01015d00..0x01015dd0`). The 1.3.2 item
+table has 1607 entries; those whose name in `bin/message/<lang>/common/itemname.dat` starts with `★`
+are dummies (1279 to 1578 among them). PKHeX names 51 of the 1607 ids `???`; the app's item pickers
+list the 817 ids of `ItemStorage8SWSH.GetAllHeld()`, the set its card check accepts.
 
-种类 4 是服装（[服装](#clothing)）。类型 3 和 5 将 `+0x20` 处的字添加到状态对象中的钳位计数器
-`[[0x2610798]+0x208]`：
+Kind 4 is clothing ([Clothing](#clothing)). Kinds 3 and 5 add the word at `+0x20` to clamped counters in the status object
+`[[0x2610798]+0x208]`:
 
     kind 3  0x01015e00   [status+0x17c] = min(old + amount, 9999)                  0x014390fc
     kind 5  0x010160b0   [status+0x64]: an amount above 9,999,999 sets 9,999,999;
                          otherwise old + amount, clamped to 9,999,999              0x01438f2c
 
-`status+0x64`是零用钱：`AddPocketMoney_`（`0x014ad5e0`）调用相同的`0x01438f20`（`0x014ad624`）和`GetPocketMoney_`（`0x014ad700`）读取它`0x01438ef0`。两次兑换均在标头和记录 `+0x88` 处读取金额，记录 `+0x20`。在独角兽下，`0x010160b0` 的 kind-5 记录为 100,000，将钱从 0 增加到 100,000，从 9,950,000 增加到 9,999,999。 EventsGallery 不包含 kind-5 卡。
+`status+0x64` is pocket money: `AddPocketMoney_` (`0x014ad5e0`) calls the same `0x01438f20`
+(`0x014ad624`) and `GetPocketMoney_` (`0x014ad700`) reads it through `0x01438ef0`. Both redemptions read
+the amount at header-and-record `+0x88`, record `+0x20`. Under unicorn, `0x010160b0` on a kind-5
+record of 100,000 took the money from 0 to 100,000 and from 9,950,000 to 9,999,999. EventsGallery
+holds no kind-5 card.
 
-kind-1兑换`0x010159d0`构建宝可梦（`0x010b6110`；null返回0）并将其提供给队伍（`0x01015b78`，虚拟`+0x28`）。如果队伍拒绝，就会询问盒子商店
-`[[0x2610798]+0x220]` 用于空闲插槽（`0x01408000`、`0x01015bd0`），并且仅当存在时才放置它（`0x01406b00`、`0x01015c08`）。颈部返回 `{1, 0}`，盒子返回 `{1, 1}`，未放置时返回 `{0, 1}`（`0x01015cd0`、`0x01015cf4`）；调用者将其存储在对象 `0x00feb610` 返回（`0x01014fe4`）的 `+0x78` 中，并且从不测试它。未通过房间测试的卡永远不会到达这里（[菜单拒绝的内容](#what-the-menu-refuses)）。
+The kind-1 redemption `0x010159d0` builds the Pokemon (`0x010b6110`; null returns 0) and offers it to
+the party (`0x01015b78`, virtual `+0x28`). If the party refuses, it asks the box store
+`[[0x2610798]+0x220]` for a free slot (`0x01408000`, `0x01015bd0`) and places it only if one exists
+(`0x01406b00`, `0x01015c08`). It returns `{1, 0}` for the party, `{1, 1}` for a box, `{0, 1}` when
+not placed (`0x01015cd0`, `0x01015cf4`); the caller stores that at `+0x78` of the object `0x00feb610`
+returns (`0x01014fe4`) and never tests it. A card that fails the room test never gets here
+([What the menu refuses](#what-the-menu-refuses)).
 
-`Bag::AddItem`（`0x01420790`；bag，id，count，new-flag）从item字段14（`0x00788c50(id, 14)`，item字节`+0x11 & 0xF`）中取出pocket，找到保存id的slot或第一个空的slot，并写入`id | min(count + n, 999) << 15`；已经999的插槽拒绝了。一个槽是一个 u32：id 在位 0-14 中，计数在位 15-29 中，位 30 是新项目标志。保存块的注册方式为
-`0x0141fae0`，密钥`0x1177C2C4`，`0x12F8`字节。口袋，来自 `bag+0x1358`：
+`Bag::AddItem` (`0x01420790`; bag, id, count, new-flag) takes the pocket from item field 14
+(`0x00788c50(id, 14)`, item byte `+0x11 & 0xF`), finds the slot holding the id or the first empty
+one, and writes `id | min(count + n, 999) << 15`; a slot already at 999 refuses. A slot is one u32:
+id in bits 0-14, count in bits 15-29, bit 30 the new-item flag. The save block is registered by
+`0x0141fae0`, key `0x1177C2C4`, `0x12F8` bytes. Pockets, from `bag+0x1358`:
 
-|字段 14 |口袋|插槽 |
+| field 14 | pocket | slots |
 |---|---|---|
-| 0 |医学| 60|
-| 1 |球 | 30|
-| 2 |战斗| 20 |
-| 3 |浆果| 80|
-| 4 |项目 | 550 | 550
-| 5 | TM | 210 | 210
-| 6 |宝藏| 100 | 100
-| 7 |成分| 100 | 100
-| 8 |关键| 64 | 64
+| 0 | Medicine | 60 |
+| 1 | Balls | 30 |
+| 2 | Battle | 20 |
+| 3 | Berries | 80 |
+| 4 | Items | 550 |
+| 5 | TMs | 210 |
+| 6 | Treasures | 100 |
+| 7 | Ingredients | 100 |
+| 8 | Key | 64 |
+
 ## 官方活动卡
 
 桌面应用程序的官方活动模式提供了来自projectpokemon EventsGallery的171张卡片（`pokeldn/swsh/data/events.json`，由`scripts/gen_swsh_events.py`从其`.wc8`文件的文件夹中构建；`pokeldn/swsh/events.py`读取它）。每一个都按照分发的方式逐字节发送。

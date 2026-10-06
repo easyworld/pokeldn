@@ -11,9 +11,10 @@ import flet as ft
 from gui import drop, theme as t
 from gui.localization import SERVICE, translate, gift_description, event_text
 from gui.views.pokemon import NamePicker
+from gui.views.saves import SavePanel
 from gui.views.widgets import PathField
 from pokeldn import gifts, pokemon
-from pokeldn.app import command, gift_builder, gift_files
+from pokeldn.app import command, gift_builder, gift_files, saves
 from pokeldn.frlg.gift import builder as frlg
 from pokeldn.frlg.rom import custom_code
 from pokeldn.swsh import gift_builder as swsh
@@ -24,10 +25,14 @@ def species_frlg():
 
 
 def _number(value, default=0):
-    try:
-        return int(str(value).strip() or default, 0)
-    except ValueError:
-        return default
+    # Decimal first: base 0 refuses a leading zero ("025").
+    text = str(value).strip() or str(default)
+    for base in (10, 0):
+        try:
+            return int(text, base)
+        except ValueError:
+            pass
+    return default
 
 
 def _chips(choices, value, on_change) -> ft.Row:
@@ -82,9 +87,13 @@ class GiftBuilder:
 
     def cards(self) -> list[ft.Control]:
         mode = self.value["mode"]
-        modes = t.segmented(gift_builder.modes(self.game), mode, self._mode)
-        body = {"preset": self.presets, "event": self.events, "build": self.editor, "file": self.file}[mode]()
+        modes = t.segmented(gift_builder.modes(self.game), mode, self._mode, wrap=True)
+        body = {"preset": self.presets, "event": self.events, "build": self.editor, "file": self.file,
+                "save": lambda: SavePanel(self).control()}[mode]()
         self.show_summary()
+        if mode == "save":
+            summary = ft.Column([self.when, self.effects, self.status], spacing=10)
+            return [t.card('礼物', ft.Column([modes, body], spacing=14)), t.card('开始前', summary)]
         actions = [self.save_button]
         if mode == "preset" and self.module.PRESET[self.value["preset"]].state is not None:
             actions.insert(0, t.secondary_button('自定义', self._customize, "sliders-horizontal"))
@@ -125,7 +134,7 @@ class GiftBuilder:
                                      settings=bool(b.options)) for b in preset.members]
                 if on:
                     body.append(self.boost_settings(preset))
-            body.insert(0, ft.ResponsiveRow(tiles, spacing=6, run_spacing=6))
+            body.insert(0, t.grid(tiles))
             intro = getattr(self.module, "GROUP_INTROS", {}).get(group, "")
             if intro:
                 body.insert(0, t.text(translate(intro), 12, t.MUTED))
@@ -143,7 +152,7 @@ class GiftBuilder:
             ft.Column([ft.Row(head, spacing=6),
                        t.text(event_text(summary), 12, t.MUTED)],
                       spacing=1, expand=True),
-        ], spacing=10), padding=ft.Padding(10, 8, 10, 8), border_radius=10, col={"xs": 12, "md": 6},
+        ], spacing=10), padding=ft.Padding(10, 8, 10, 8), border_radius=10,
             tooltip=translate(summary), border=ft.Border.all(1, t.BLUE if active else t.BORDER),
             bgcolor=t.SELECTED if active else None, on_click=on_click)
 
@@ -210,7 +219,7 @@ class GiftBuilder:
     def events(self) -> ft.Control:
         """Every official card the game's builder ships, filtered by a search and a group."""
         cards = self.module.OFFICIAL.load()
-        tiles = ft.ResponsiveRow(spacing=6, run_spacing=6)
+        tiles = ft.Column(spacing=6, tight=True)
         search = t.field(hint='搜索：皮卡丘、大师球、异色…', value=self.value.get("event_search", ""))
         group = {"value": self.value.get("event_group", "")}
 
@@ -218,8 +227,8 @@ class GiftBuilder:
             words = search.value.casefold().split()
             shown = [c for c in cards if (not group["value"] or c["group"] == group["value"])
                      and all(w in f"{c['label']} {c['group']} {c['summary']} {event_text(c['label'])} {event_text(c['summary'])}".casefold() for w in words)]
-            tiles.controls = [self._tile(event_text(c["label"]), c["summary"], c["key"] == self.value["event"],
-                                         lambda e, k=c["key"]: self._event(k)) for c in shown]
+            tiles.controls = t.grid_rows([self._tile(event_text(c["label"]), c["summary"], c["key"] == self.value["event"],
+                                         lambda e, k=c["key"]: self._event(k)) for c in shown])
             count.value = f'{len(shown)} / {len(cards)} 张卡片'
             if update:
                 tiles.update()
@@ -288,7 +297,7 @@ class GiftBuilder:
 
     def number_field(self, label, key, target=None, width=96) -> ft.Control:
         target = self.state if target is None else target
-        box = t.field(value=str(target.get(key, "")), mono=True, width=width,
+        box = t.field(value=str(target.get(key, "")), mono=True, width=width, digits=True,
                       on_change=lambda e: self.edit(key, _number(e.control.value), target=target))
         return t.labeled_control(translate(label), box)
 
@@ -481,9 +490,9 @@ class GiftBuilder:
         rows = [ft.Row([self.name_field('种类', "species", "species", optional=False),
                         *([] if egg else [self.number_field('等级', "level", width=72)])], spacing=10)]
         if not egg:
-            rows += [ft.Row([self.name_field('携带道具', "item", "item"), self.name_field('精灵球', "ball", "ball")],
+            rows += [ft.Row([self.name_field('携带道具', "bag", "item"), self.name_field('精灵球', "ball", "ball")],
                             spacing=10),
-                     ft.Row([self.text_field('昵称', "nickname"), self.text_field("OT", "ot")], spacing=10),
+                     ft.Row([self.text_field('昵称', "nickname", limit=12), self.text_field("OT", "ot", limit=12)], spacing=10),
                      self.switch_row('异色', "shiny", '收到的宝可梦为异色。'),
                      self.switch_row('超极巨化', "gigantamax",
                                      '允许超极巨化；仅适用于具有超极巨化形态的种类。')]
@@ -508,9 +517,9 @@ class GiftBuilder:
             def remove(e):
                 del items[n]
                 self.commit(rebuild=True)
-            return ft.Row([t.labeled_control('道具', NamePicker(self.app, "swsh", "item", str(items[n][0] or ""),
+            return ft.Row([t.labeled_control('道具', NamePicker(self.app, "swsh", "bag", str(items[n][0] or ""),
                                                                 item, optional=False).control, expand=True),
-                           t.labeled_control('数量', t.field(value=str(items[n][1]), mono=True, width=72,
+                           t.labeled_control('数量', t.field(value=str(items[n][1]), mono=True, width=72, digits=True,
                                                                  on_change=quantity)),
                            ft.Container(t.icon_button("close", remove, '移除'), height=t.CONTROL_HEIGHT,
                                         alignment=ft.Alignment.CENTER)],
@@ -579,6 +588,8 @@ class GiftBuilder:
                 lines = preset.effects(self.value["options"].get(preset.key))
             elif preset.state is not None:
                 when, lines = gift_description(self.game, preset.state, self.name)
+        elif mode == "save":
+            when, lines = self.save_summary()
         elif mode == "event":
             when, lines = self.module.OFFICIAL.describe(self.module.OFFICIAL.by_key()[self.value["event"]]["record"],
                                                       self.name)
@@ -587,6 +598,8 @@ class GiftBuilder:
         problem = gift_builder.problem(self.tool, self.value)
         if problem:
             self.status.value, self.status.color = translate(problem), t.RED
+        elif mode == "save":
+            pass
         elif mode != "preset" or self.module.PRESET[self.value["preset"]].args == ():
             gift = gift_builder.compile(self.tool, self.value)
             targets = [translate(frlg.CARTRIDGES.get(code, '剑／盾')) for code in gift.variants]
@@ -600,6 +613,50 @@ class GiftBuilder:
         if update:
             for control in (self.when, self.effects, self.status):
                 control.update()
+
+    def save_summary(self) -> tuple[str, list[str]]:
+        chosen = self.value["save"]
+        if chosen["action"] == "backup":
+            return ('在游戏机上：神秘礼物 → 神奇卡片 → 朋友 → POKELDN。',
+                    ['完整存档将按训练家姓名保存在“我的存档”中。',
+                     '游戏机显示完成消息，并保留原存档。'])
+        entry = saves.entry(chosen["file"]) if chosen["file"] else None
+        if entry is None:
+            return "", []
+        return ('请先备份。在游戏机上：神秘礼物 → 神奇卡片 → 朋友 → POKELDN。',
+                [f"{entry.name} 将替换游戏机存档。",
+                 '游戏机会校验所有部分、加载并保存；未完成时保留原存档。',
+                 '然后在标题画面选择“继续”。'])
+
+    async def select_native_build(self, gift):
+        loop = asyncio.get_running_loop()
+        chosen = loop.create_future()
+        options = [(code, translate(frlg.CARTRIDGES[code])) for code in gift.variants]
+        picker = t.dropdown(options, options[0][0])
+
+        async def finish(e):
+            if not chosen.done():
+                chosen.set_result(picker.value)
+            self.app.page.pop_dialog()
+
+        async def cancel(e):
+            if not chosen.done():
+                chosen.set_result(None)
+            self.app.page.pop_dialog()
+
+        async def dismissed(e):
+            if not chosen.done():
+                chosen.set_result(None)
+
+        self.app.page.show_dialog(t.dialog(
+            title=t.text('导出到哪种卡带？', 18, t.TEXT),
+            content=ft.Column([
+                t.text('.wc3 仅保存一种卡带的礼物，请选择版本和语言。.pokegift 可保留所有支持的卡带变体。', 13, t.MUTED),
+                t.labeled_control('卡带', picker),
+            ], tight=True, spacing=12, width=420),
+            actions=[t.button('取消', cancel, filled=False), t.button('导出', finish)],
+            on_dismiss=dismissed))
+        return await chosen
 
     async def _save(self, e) -> None:
         self.save_button.disabled = True
@@ -616,7 +673,14 @@ class GiftBuilder:
                 file_type=ft.FilePickerFileType.CUSTOM, allowed_extensions=[gifts.EXTENSION, native])
             if path:
                 path += "" if path.lower().endswith((".pokegift", f".{native}")) else ".pokegift"
-                gifts.save(path, gift)
+                build = None
+                if self.game == "frlg" and path.lower().endswith(".wc3") and len({
+                        (v.data.get("card"), v.data.get("ram_script")) for v in gift.variants.values()}) > 1:
+                    build = await self.select_native_build(gift)
+                    if build is None:
+                        self.show_summary()
+                        return
+                gifts.save(path, gift, build=build)
                 self.status.value = f'已保存 {path}'
             else:
                 self.show_summary()
