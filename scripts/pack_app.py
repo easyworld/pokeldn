@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Build a desktop bundle, including PKHeX and the required radio firmware."""
-import argparse
 import os
 import importlib.util
 import platform
@@ -33,13 +32,8 @@ def runtime_id() -> str:
 def runtime_files() -> list[str]:
     tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
     folders = ("bin/", "pokeldn/", "vendor/LDN/ldn/", "docs/", "gui/assets/")
-    files = [name for name in tracked if (name.startswith(folders) or name in
+    return [name for name in tracked if (name.startswith(folders) or name in
             ("config/host.toml", "gui/guide.md", "LICENSE", "vendor/LDN/LICENSE")) and (ROOT / name).is_file()]
-    # Localized docs can be packaged before their first commit, just like modified GUI modules.
-    files += [f"docs/zh-Hans/{Path(name).name}" for name in tracked
-              if name.startswith("docs/") and name.count("/") == 1 and name.endswith(".md")
-              and (ROOT / "docs/zh-Hans" / Path(name).name).is_file()]
-    return list(dict.fromkeys(files))
 
 
 def platform_excludes():
@@ -74,11 +68,6 @@ def clear_cfg(exe: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--onefile", action="store_true", help="Build a single Windows executable.")
-    options = parser.parse_args()
-    if options.onefile and sys.platform != "win32":
-        parser.error("--onefile is supported for Windows only")
     firmware = (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6)
     missing = [str(path) for path in firmware if not path.is_file()]
     if missing:
@@ -134,17 +123,16 @@ def main() -> int:
         console = ["--console", "--hide-console=hide-early"] if sys.platform == "win32" else []
         # A single file unpacks all of itself at every launch and every run (docs/gui.md). Flet's own
         # --onedir refuses macOS; this later PyInstaller flag wins over the --onefile Flet passes.
-        bundle_mode = ["--onefile"] if options.onefile else ["--onedir"]
+        onedir = ["--onedir"]
         for option in (f"--paths={dependencies}", f"--paths={ROOT}", f"--paths={ROOT / 'bin'}", f"--paths={ROOT / 'vendor' / 'LDN'}",
-                       *console, *bundle_mode,
+                       *console, *onedir,
                        *[f"--hidden-import={s}" for s in scripts],
                        *[f"--exclude-module={m}" for m in platform_excludes()], "--collect-all=esptool", "--collect-submodules=unicorn",
                        "--collect-all=esp_pylib", "--collect-submodules=pokeldn",
                        "--collect-submodules=ldn"):
             args.append(f"--pyinstaller-build-args={option}")
         result = subprocess.run(args, cwd=stage, env=dict(os.environ, FLET_VIEW_PATH=str(client))).returncode
-        name = "pokeldn.exe" if options.onefile else ("pokeldn.app" if sys.platform == "darwin" else "pokeldn")
-        expected = ROOT / "dist" / name
+        expected = ROOT / "dist" / (("pokeldn.app" if sys.platform == "darwin" else "pokeldn"))
         if result == 0 and not expected.exists():
             raise SystemExit("The packer produced no desktop application.")
         if result == 0 and sys.platform == "darwin":
@@ -158,7 +146,7 @@ def main() -> int:
                 plistlib.dump(info, dest)
             subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(expected)], check=True)
         if result == 0 and sys.platform == "win32":
-            clear_cfg(expected if options.onefile else expected / "pokeldn.exe")
+            clear_cfg(expected / "pokeldn.exe")
         if result == 0 and sys.platform.startswith("linux"):
             (ROOT / "dist" / f"{APP_ID}.desktop").unlink(missing_ok=True)
         return result

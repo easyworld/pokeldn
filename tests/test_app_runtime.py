@@ -35,7 +35,6 @@ def test_packer_uses_tracked_defaults_and_requires_firmware(monkeypatch, tmp_pat
     spec = importlib.util.spec_from_file_location("pack_app", path)
     pack = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pack)
-    monkeypatch.setattr(sys, "argv", [str(path)])
     files = pack.runtime_files()
     assert "config/host.toml" in files
     assert "LICENSE" in files and "vendor/LDN/LICENSE" in files
