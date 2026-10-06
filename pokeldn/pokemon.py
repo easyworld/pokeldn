@@ -41,12 +41,15 @@ def _command() -> list[str]:
 
 
 class Service:
-    def __init__(self):
+    def __init__(self, display_language: str = "en"):
+        self.display_language = display_language
         self.lock = threading.Lock()
         self.proc = None
         self.species_cache: dict[str, list[dict]] = {}
 
     def _ask(self, request: dict) -> dict:
+        if self.display_language != "en":
+            request = {**request, "display_language": self.display_language}
         with self.lock:
             for attempt in range(2):
                 if self.proc is None or self.proc.poll() is not None:

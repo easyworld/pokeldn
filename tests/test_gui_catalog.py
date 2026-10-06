@@ -10,6 +10,13 @@ from pokeldn.app.settings import Settings
 TOOLS = [tool for game in GAMES for tool in game.tools if not tool.unavailable]
 
 
+def test_translated_interface_keeps_auto_adapter_arguments():
+    for key in ("frlg-trade-host", "frlg-trade-join"):
+        tool = next(t for t in TOOLS if t.key == key)
+        args = build(tool, {}, {}, Settings())
+        assert args[args.index("--phy") + 1] == "auto"
+
+
 def _check(tool, values):
     parser = parser_of(tool.script)
     args = build(tool, values, {}, Settings())

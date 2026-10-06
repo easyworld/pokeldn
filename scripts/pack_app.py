@@ -30,8 +30,13 @@ def runtime_id() -> str:
 def runtime_files() -> list[str]:
     tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
     folders = ("bin/", "pokeldn/", "vendor/LDN/ldn/", "docs/", "gui/assets/")
-    return [name for name in tracked if (name.startswith(folders) or name in
+    files = [name for name in tracked if (name.startswith(folders) or name in
             ("config/host.toml", "gui/guide.md", "LICENSE", "vendor/LDN/LICENSE")) and (ROOT / name).is_file()]
+    # Localized docs can be packaged before their first commit, just like modified GUI modules.
+    files += [f"docs/zh-Hans/{Path(name).name}" for name in tracked
+              if name.startswith("docs/") and name.count("/") == 1 and name.endswith(".md")
+              and (ROOT / "docs/zh-Hans" / Path(name).name).is_file()]
+    return list(dict.fromkeys(files))
 
 
 def platform_excludes():

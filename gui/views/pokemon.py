@@ -1,5 +1,6 @@
 import threading
 from pathlib import Path
+from typing import Callable
 
 import flet as ft
 
@@ -7,6 +8,7 @@ from pokeldn import pokemon as builder
 from pokeldn.app.command import offers
 from pokeldn.lgpe.session import CODE_PICKER, code_picks
 from gui import drop, theme as t
+from gui.localization import SERVICE, translate, summary as pokemon_summary
 from gui.views.sprites import EDGE, MINI, SIZE as SPRITE_SIZE, Sprite
 from gui.views.widgets import PixelActivity
 
@@ -25,21 +27,21 @@ class PokemonPicker:
         self.on_team, self.on_more = on_team, on_more
         self.value = dict(value or {})
         self.species = t.dropdown([], None, on_select=self._pick, enable_filter=True, editable=True,
-                                  menu_height=320, hint_text="Loading species...", disabled=True)
-        self.species.trailing_icon = PixelActivity("Loading species")
-        self.level = t.field(value=str(self.value.get("level") or ""), hint="auto", mono=True, width=90,
+                                  menu_height=320, hint_text='正在加载种类…', disabled=True)
+        self.species.trailing_icon = PixelActivity('正在加载种类')
+        self.level = t.field(value=str(self.value.get("level") or ""), hint='自动', mono=True, width=90,
                              on_change=lambda e: self._set("level", e.control.value))
         self.sprite = Sprite(app, int(self.value.get("species") or 0), bool(self.value.get("shiny")))
         self.shiny = t.switch(bool(self.value.get("shiny")), self._shiny)
-        self.nickname = t.field(value=self.value.get("nickname", ""), hint="Nickname (optional)", expand=True,
+        self.nickname = t.field(value=self.value.get("nickname", ""), hint='昵称（可选）', expand=True,
                                 on_change=lambda e: self._set("nickname", e.control.value))
-        self.build_button = t.button("Build", self._build, disabled=True)
+        self.build_button = t.button('生成', self._build, disabled=True)
         self.options = OfferOptions(self)
         self.result = ft.Container()
         form = ft.Column([
-            ft.Row([t.labeled_control("Species", self.species, expand=True),
-                    t.labeled_control("Level", self.level),
-                    t.labeled_control("Shiny", ft.Container(
+            ft.Row([t.labeled_control('种类', self.species, expand=True),
+                    t.labeled_control('等级', self.level),
+                    t.labeled_control('异色', ft.Container(
                         self.shiny, width=64, height=t.CONTROL_HEIGHT,
                         alignment=ft.Alignment.CENTER))],
                    spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
@@ -52,9 +54,9 @@ class PokemonPicker:
             ft.Row([tile, form], spacing=14, vertical_alignment=ft.CrossAxisAlignment.START),
             self.options.control,
             self.result,
-            ft.Row([t.secondary_button("Or use a Pokemon file", self._use_file, "file"),
-                    t.secondary_button("Import paste", self._paste, "bulletlist"),
-                    *([t.text("or drop either here", 12, t.FAINT)] if drop.AVAILABLE else [])],
+            ft.Row([t.secondary_button('或使用宝可梦文件', self._use_file, "file"),
+                    t.secondary_button('导入文本', self._paste, "bulletlist"),
+                    *([t.text('也可将文件拖放到此处', 12, t.FAINT)] if drop.AVAILABLE else [])],
                    spacing=10, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ], spacing=10), border_radius=12)
         self.control = drop.target(self.body, self._dropped, glow=glow or self.body)
@@ -78,7 +80,7 @@ class PokemonPicker:
 
     def _load_species(self) -> None:
         try:
-            species = builder.SERVICE.species(self.game)
+            species = SERVICE.species(self.game)
             error = ""
         except Exception as exc:
             species, error = [], str(exc)
@@ -86,19 +88,19 @@ class PokemonPicker:
         def show():
             self.species.trailing_icon = t.pixel_icon("chevron-down", color=t.MUTED)
             if error:
-                self.species.hint_text = "Unavailable"
+                self.species.hint_text = '不可用'
                 self._message(error, t.RED)
             else:
                 self.species.options = [ft.DropdownOption(key=str(s["id"]), text=s["name"]) for s in species]
                 self.species.value = str(self.value["species"]) if self.value.get("species") else None
-                self.species.hint_text = "Search a species"
+                self.species.hint_text = '搜索种类'
                 self.species.disabled = self.build_button.disabled = False
             self.control.update()
         self.app.ui(show)
 
     def _build(self, e) -> None:
         if not self.value.get("species"):
-            self._message("Pick a species first.", t.RED)
+            self._message('请先选择种类。', t.RED)
             self.control.update()
             return
         if problem := self.options.problem():
@@ -106,7 +108,7 @@ class PokemonPicker:
             self.control.update()
             return
         self.build_button.disabled = True
-        self._message("Finding a legal encounter...", t.MUTED, busy=True)
+        self._message('正在寻找合法的遭遇…', t.MUTED, busy=True)
         self.control.update()
         try:
             level = int(self.value.get("level") or 0)
@@ -115,11 +117,11 @@ class PokemonPicker:
 
         def work():
             try:
-                info = builder.SERVICE.make(self.game, self.value["species"], self.app.settings.trainer(self.game),
+                info = SERVICE.make(self.game, self.value["species"], self.app.settings.trainer(self.game),
                                             level, bool(self.value.get("shiny")),
                                             self.value.get("nickname", ""), VERSIONS.get(self.version, ""),
                                             self.value.get("options"))
-                self.value.update(file=info["file"], summary=builder.summary(info), legal=info["legal"],
+                self.value.update(file=info["file"], summary=pokemon_summary(info), legal=info["legal"],
                                   encounter=info["encounter"], moves=info["moves"])
                 self.on_change(dict(self.value))
                 done = self._show_result
@@ -143,7 +145,7 @@ class PokemonPicker:
             if self.on_more:
                 self.on_more(paths[1:])
             else:
-                self.result.content = t.text(f"{len(paths)} files dropped; the first was used.", 12, t.AMBER)
+                self.result.content = t.text(f'{len(paths)} 个文件已拖入，已使用第一个。', 12, t.AMBER)
                 self.control.update()
 
     def load(self, path: str) -> None:
@@ -152,18 +154,18 @@ class PokemonPicker:
             try:
                 text = Path(path).read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                self._message(f"Could not read {Path(path).name}: {exc}", t.RED)
+                self._message(f'无法读取 {Path(path).name}: {exc}', t.RED)
                 self.control.update()
                 return
             self._paste(None, text)
             return
         try:
-            info = builder.SERVICE.import_file(self.game, path)
+            info = SERVICE.import_file(self.game, path)
         except Exception as exc:
-            self._message(f"Not a Pokemon this game can take: {exc}", t.RED)
+            self._message(f'此游戏无法接收该宝可梦：{exc}', t.RED)
             self.control.update()
             return
-        self.value.update(file=info["file"], summary=builder.summary(info), legal=info["legal"],
+        self.value.update(file=info["file"], summary=pokemon_summary(info), legal=info["legal"],
                           encounter=info["encounter"], moves=info["moves"],
                           report="" if info["legal"] else info["report"],
                           species=info["species_id"], shiny=info["shiny"])
@@ -183,7 +185,7 @@ class PokemonPicker:
                          hint="Garchomp @ Choice Scarf\nAbility: Rough Skin\nEVs: 252 Atk / 4 SpD / 252 Spe\n"
                               "Jolly Nature\n- Earthquake\n- Outrage")
         status = ft.Container()
-        apply = t.button("Apply", None)
+        apply = t.button('应用', None)
 
         def close(_=None):
             self.app.page.pop_dialog()
@@ -194,18 +196,18 @@ class PokemonPicker:
         def submit(_):
             text = editor.value or ""
             if not text.strip():
-                show(["Paste a set first."], t.RED)
+                show(['请先粘贴配置。'], t.RED)
                 status.update()
                 return
             apply.disabled = True
-            status.content = ft.Row([PixelActivity("Reading the set"), t.text("Reading the set...", 12, t.MUTED)],
+            status.content = ft.Row([PixelActivity('正在读取配置'), t.text('正在读取配置…', 12, t.MUTED)],
                                     spacing=8)
             status.update()
             apply.update()
 
             def work():
                 try:
-                    sets, error = builder.SERVICE.paste(self.game, text, self.app.settings.trainer(self.game),
+                    sets, error = SERVICE.paste(self.game, text, self.app.settings.trainer(self.game),
                                                         VERSIONS.get(self.version, "")), ""
                 except Exception as exc:
                     sets, error = [], str(exc)
@@ -214,7 +216,7 @@ class PokemonPicker:
                     apply.disabled = False
                     used = sets if self.on_team else sets[:1]
                     problems = [error] if error else [
-                        f"{found.get('species') or f'Set {n}'}: {problem}" if len(used) > 1 else problem
+                        f"{found.get('species') or f'配置 {n}'}: {problem}" if len(used) > 1 else problem
                         for n, found in enumerate(used, start=1) for problem in found["errors"]]
                     if problems:
                         show(problems, t.RED)
@@ -225,20 +227,19 @@ class PokemonPicker:
                     notes = list(sets[0]["notes"])
                     if len(sets) > 1:
                         notes.insert(0, self.on_team(sets[1:]) if self.on_team else
-                                     f"The paste holds {len(sets)} Pokemon; the first was imported.")
+                                     f'粘贴内容包含 {len(sets)} 只宝可梦，已导入第一只。')
                     self._apply_set(sets[0], notes)
                 self.app.ui(done)
             threading.Thread(target=work, daemon=True).start()
 
         apply.on_click = submit
         self.app.page.show_dialog(t.dialog(
-            title=t.text("Import a Showdown set", 17, weight=ft.FontWeight.W_600),
+            title=t.text('导入 Showdown 配置', 17, weight=ft.FontWeight.W_600),
             content=ft.Container(ft.Column([
-                t.text("Paste a set exported from Pokemon Showdown, Smogon or PKHeX. Its values fill the form; "
-                       "press Build to make a legal Pokemon from them.", 13, t.MUTED),
+                t.text('粘贴从 Pokémon Showdown、Smogon 或 PKHeX 导出的配置。导入后点击“生成”，即可按配置生成合法的宝可梦。', 13, t.MUTED),
                 editor, status], spacing=10, tight=True,
                 horizontal_alignment=ft.CrossAxisAlignment.STRETCH), width=520),
-            actions=[t.secondary_button("Cancel", close), apply],
+            actions=[t.secondary_button('取消', close), apply],
         ))
         if text.strip():
             submit(None)
@@ -259,14 +260,14 @@ class PokemonPicker:
         self.options.reveal()
         self.on_change(dict(self.value))
         name = f"{found['species']}-{found['form']}" if found["form"] else found["species"]
-        lines = [t.text(f"Imported {name}. Check the options below, then press Build.", 12, t.MUTED)]
+        lines = [t.text(f'已导入 {name}。检查下方选项，然后点击“生成”。', 12, t.MUTED)]
         lines += [t.text(note, 12, t.AMBER) for note in notes]
         self.result.content = ft.Column(lines, spacing=2)
         self.control.update()
 
     def _message(self, text: str, color: str, busy: bool = False) -> None:
         message = t.text(text, 12, color, selectable=True, expand=True if busy else None)
-        self.result.content = (ft.Row([PixelActivity("Building Pokemon"), message], spacing=8)
+        self.result.content = (ft.Row([PixelActivity('正在生成宝可梦'), message], spacing=8)
                                if busy else message)
 
     def _show_result(self) -> None:
@@ -278,7 +279,7 @@ class PokemonPicker:
             t.pixel_icon("shield" if legal else "warning-diamond",
                     color=t.GREEN if legal else t.RED),
             t.text(self.value.get("summary", ""), 13, weight=ft.FontWeight.W_600, expand=True),
-            t.badge("Legal" if legal else "Not legal", t.GREEN if legal else t.RED,
+            t.badge('合法' if legal else '不合法', t.GREEN if legal else t.RED,
                     "check" if legal else "warning-diamond"),
         ], spacing=8)]
         detail = " · ".join(x for x in (self.value.get("encounter", ""), ", ".join(self.value.get("moves", []))) if x)
@@ -300,7 +301,7 @@ class OfferQueue:
         self.add_icon = t.pixel_icon("plus", color=t.BLUE)
         self.add_box = t.surface(ft.Container(ft.Row([
             self.add_icon,
-            ft.Column([t.text("Add a trade", 13, weight=ft.FontWeight.W_600), self.count], spacing=0, tight=True),
+            ft.Column([t.text('添加交换', 13, weight=ft.FontWeight.W_600), self.count], spacing=0, tight=True),
         ], spacing=12, tight=True), padding=ft.Padding(16, 10, 22, 10)), on_click=self._add, ink=True)
         self.control = self.rows
         self.card: ft.Container | None = None    # the caller's card around `control`; it lights for one trade
@@ -316,7 +317,7 @@ class OfferQueue:
                                        version=self.version, on_team=lambda sets, s=slot: self._team(s, sets),
                                        on_more=lambda paths, s=slot: self._more(s, paths),
                                        glow=lambda s=slot: s["box"] if len(self.slots) > 1 else self.card)
-        slot["remove"] = t.icon_button("close", lambda e, s=slot: self._remove(s), "Remove this trade")
+        slot["remove"] = t.icon_button("close", lambda e, s=slot: self._remove(s), '移除此交换')
         slot["header"] = ft.Row([slot["title"], slot["remove"]], spacing=8,
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER)
         slot["box"] = ft.Container(ft.Column([slot["header"], slot["picker"].control], spacing=8))
@@ -326,7 +327,7 @@ class OfferQueue:
     def _render(self) -> None:
         several = len(self.slots) > 1
         for n, slot in enumerate(self.slots, start=1):
-            slot["title"].value = f"Trade {n}"
+            slot["title"].value = f'交换 {n}'
             slot["header"].visible = several
             slot["box"].border = ft.Border.all(1, t.DIVIDER) if several else None
             slot["box"].border_radius = 12 if several else None
@@ -335,10 +336,10 @@ class OfferQueue:
         full = len(self.slots) >= self.limit
         self.add_box.disabled = full
         self.add_box.opacity = 0.5 if full else 1.0
-        self.count.value = (f"{len(self.slots)} of {self.limit}, traded in this order" if several
-                            else f"Up to {self.limit} Pokemon in one session")
+        self.count.value = (f'{len(self.slots)} / {self.limit}，按此顺序交换' if several
+                            else f'最多 {self.limit} 只宝可梦可在同一会话中交换')
         if drop.AVAILABLE and not full:
-            self.count.value += "; or drop files here"
+            self.count.value += '；也可将文件拖放到此处'
         self.count.color = t.MUTED
 
     def _spread(self, at: int, items: list) -> list[tuple[dict, object]]:
@@ -374,7 +375,7 @@ class OfferQueue:
         for slot, path in placed:
             slot["picker"].load(path)
         if len(placed) < dropped:
-            self.count.value = f"{dropped - len(placed)} did not fit: one session trades at most {self.limit}."
+            self.count.value = f'{dropped - len(placed)} 只未加入：每次会话最多交换 {self.limit} 只。'
             self.count.color = t.AMBER
             self.count.update()
 
@@ -384,11 +385,10 @@ class OfferQueue:
         for slot, found in placed:
             slot["picker"]._apply_set(found, list(found["notes"]))
         numbers = [self.slots.index(slot) + 1 for slot, _ in placed]
-        message = (f"The paste holds {len(sets) + 1} Pokemon; the others went to "
-                   f"{'trade' if len(numbers) == 1 else 'trades'} {', '.join(map(str, numbers))}." if numbers else
-                   f"The paste holds {len(sets) + 1} Pokemon; only the first fit.")
+        message = (f"粘贴内容包含 {len(sets) + 1} 只宝可梦，其余已加入交换 {', '.join(map(str, numbers))}." if numbers else
+                   f'粘贴内容包含 {len(sets) + 1} 只宝可梦，仅第一只可加入。')
         if len(placed) < len(sets):
-            message += f" {len(sets) - len(placed)} did not fit: one session trades at most {self.limit}."
+            message += f' {len(sets) - len(placed)} 只未加入：每次会话最多交换 {self.limit} 只。'
         return message
 
     def _save(self) -> None:
@@ -416,9 +416,9 @@ class OfferQueue:
             self.footer.update()
 
 
-STATS = (("hp", "HP"), ("atk", "Atk"), ("def", "Def"), ("spa", "SpA"), ("spd", "SpD"), ("spe", "Spe"))
-EFFORT = {"evs": "EVs", "avs": "AVs", "gvs": "Effort levels"}
-GENDERS = (("0", "Male"), ("1", "Female"))
+STATS = (("hp", "HP"), ("atk", '攻击'), ("def", '防御'), ("spa", '特攻'), ("spd", '特防'), ("spe", '速度'))
+EFFORT = {"evs": '努力值', "avs": '觉醒值', "gvs": '奋斗等级'}
+GENDERS = (("0", '雄性'), ("1", '雌性'))
 ANY = "-"
 
 
@@ -437,7 +437,7 @@ class OfferOptions:
         self.body = ft.Column([], spacing=10, visible=False)
         self.chevron = t.pixel_icon("chevron-right", color=t.FAINT)
         self.label = t.text("", 12, t.MUTED)
-        header = ft.Container(ft.Row([self.chevron, t.text("More options", 13, t.TEXT, weight=ft.FontWeight.W_600),
+        header = ft.Container(ft.Row([self.chevron, t.text('更多选项', 13, t.TEXT, weight=ft.FontWeight.W_600),
                                       self.label], spacing=8),
                               padding=ft.Padding(2, 4, 2, 4), border_radius=8, on_click=self._toggle)
         self.control = ft.Column([header, self.body], spacing=8)
@@ -445,7 +445,7 @@ class OfferOptions:
 
     def _label(self) -> None:
         count = sum(1 for k, v in self.chosen.items() if (v if isinstance(v, dict) else v is not None))
-        self.label.value = f"{count} set" if count else "random"
+        self.label.value = f'{count} 项已设置' if count else '随机'
 
     def _toggle(self, e) -> None:
         self._show(not self.open)
@@ -473,21 +473,21 @@ class OfferOptions:
     def _load(self) -> None:
         species = int(self.picker.value.get("species") or 0)
         if not species:
-            self.body.controls = [t.text("Pick a species first.", 12, t.MUTED)]
+            self.body.controls = [t.text('请先选择种类。', 12, t.MUTED)]
             return
         target = (species, int(self.chosen.get("form") or 0))
         if self.loaded_for == target:
             return
         self.loaded_for = target
-        self.body.controls = [ft.Row([PixelActivity("Loading options"),
-                                      t.text("Reading what this species can have...", 12, t.MUTED)], spacing=8)]
+        self.body.controls = [ft.Row([PixelActivity('正在加载选项'),
+                                      t.text('正在读取该种类可用的选项…', 12, t.MUTED)], spacing=8)]
         app = self.picker.app
 
         def work():
             try:
-                found = builder.SERVICE.options(self.picker.game, species, app.settings.trainer(self.picker.game),
+                found = SERVICE.options(self.picker.game, species, app.settings.trainer(self.picker.game),
                                                 VERSIONS.get(self.picker.version, ""), target[1])
-                found["move_names"], error = builder.SERVICE.names(self.picker.game, "moves"), ""
+                found["move_names"], error = SERVICE.names(self.picker.game, "moves"), ""
             except Exception as exc:
                 found, error = None, str(exc)
 
@@ -509,31 +509,31 @@ class OfferOptions:
             self.chosen.pop("gender", None)
         if all(f["id"] != self.chosen.get("form", 0) for f in found["forms"]):
             self.chosen.pop("form", None)
-        first = [t.labeled_control("Nature", self._choice("nature", found["natures"]), expand=True)]
+        first = [t.labeled_control('性格', self._choice("nature", found["natures"]), expand=True)]
         if len(found["forms"]) > 1:
-            first.insert(0, t.labeled_control("Form", self._choice("form", found["forms"], reload=True),
+            first.insert(0, t.labeled_control('形态', self._choice("form", found["forms"], reload=True),
                                               expand=True))
         if len(found["abilities"]) > 1:
-            first.append(t.labeled_control("Ability", self._choice("ability", found["abilities"]), expand=True))
+            first.append(t.labeled_control('特性', self._choice("ability", found["abilities"]), expand=True))
         if found["gendered"]:
-            first.append(t.labeled_control("Gender", self._choice(
+            first.append(t.labeled_control('性别', self._choice(
                 "gender", [{"id": int(k), "name": n} for k, n in GENDERS]), expand=True))
-        second = [t.labeled_control("Ball", self._choice("ball", found["balls"]), expand=True)]
+        second = [t.labeled_control('精灵球', self._choice("ball", found["balls"]), expand=True)]
         if found["held"]:
-            second.insert(0, t.labeled_control("Held item", self._choice("held_item", found["held"], search=True),
+            second.insert(0, t.labeled_control('携带道具', self._choice("held_item", found["held"], search=True),
                                                expand=True))
         effort = found["effort"]
         self.total = effort.get("total")
-        limit = f"0-{effort['max']}" + (f", {effort['total']} in all" if effort.get("total") else "")
+        limit = f"0-{effort['max']}" + (f", {effort['total']} 合计" if effort.get("total") else "")
         return [
             ft.Row(first, spacing=10),
             ft.Row(second, spacing=10),
             self._moves(found["move_names"]),
-            self._stats("ivs", "IVs", 31, "0-31"),
+            self._stats("ivs", '个体值', 31, "0-31"),
             self._stats("effort", EFFORT[effort["kind"]], effort["max"], limit, effort.get("total")),
-            ft.Row([t.text("Empty means random. The build is checked by PKHeX's legality analysis.", 12, t.FAINT,
+            ft.Row([t.text('留空表示随机。生成结果将通过 PKHeX 的合法性分析。', 12, t.FAINT,
                            expand=True),
-                    t.link_button("Clear", self._clear)]),
+                    t.link_button('清除', self._clear)]),
         ]
 
     def _choice(self, key: str, names: list[dict], search: bool = False, reload: bool = False) -> ft.Dropdown:
@@ -550,14 +550,14 @@ class OfferOptions:
                 self.control.update()
             else:
                 self.label.update()
-        options = [(ANY, "Random")] + [(str(n["id"]), n["name"]) for n in
+        options = [(ANY, '随机')] + [(str(n["id"]), n["name"]) for n in
                                        (sorted(names, key=lambda n: n["name"]) if search else names)]
         return t.dropdown(options, ANY if current is None else str(current), on_select=picked,
                           enable_filter=search, editable=search, menu_height=320)
 
     def _moves(self, names: list[dict]) -> ft.Control:
         moves = (list(self.chosen.get("moves", [])) + [0] * 4)[:4]
-        options = [(ANY, "Any")] + [(str(n["id"]), n["name"]) for n in names]
+        options = [(ANY, '任意')] + [(str(n["id"]), n["name"]) for n in names]
 
         def picked(e, slot):
             moves[slot] = 0 if e.control.value == ANY else int(e.control.value)
@@ -572,7 +572,7 @@ class OfferOptions:
                  for n, m in enumerate(moves)]
         for box in boxes:
             box.expand = True
-        return ft.Column([t.text("Moves (empty means the encounter's own)", 12, t.MUTED),
+        return ft.Column([t.text('招式（留空使用该遭遇的原有招式）', 12, t.MUTED),
                           ft.Row(boxes[:2], spacing=6), ft.Row(boxes[2:], spacing=6)], spacing=4)
 
     def _stats(self, group: str, title: str, top: int, limit: str, total: int | None = None) -> ft.Control:
@@ -616,7 +616,7 @@ class OfferOptions:
     def problem(self) -> str:
         """Why the options cannot be sent as they stand, or an empty string."""
         if self.total and sum(self.chosen.get("effort", {}).values()) > self.total:
-            return f"EVs add up to at most {self.total}."
+            return f'努力值总和最多为 {self.total}.'
         return ""
 
 
@@ -628,36 +628,37 @@ class NamePicker:
     """A searchable list of the species, moves, items or balls a game has, by name; the value is the id."""
 
     def __init__(self, app, game: str, kind: str, value: str, on_change, optional: bool = True,
-                 names: list[dict] | None = None):
+                 names: list[dict] | Callable[[], list[dict]] | None = None):
         """`names` ([{"id", "name"}]) replaces the PKHeX list, for a game whose ids differ from it."""
         self.app, self.game, self.kind, self.optional = app, game, NAME_LISTS[kind], optional
         self.names = names
         self.dropdown = t.dropdown([], None, on_select=lambda e: on_change("" if e.control.value == EMPTY
                                                                            else e.control.value),
                                    enable_filter=True, editable=True, menu_height=320,
-                                   hint_text="Loading...", disabled=True)
+                                   hint_text='加载中…', disabled=True)
         self.value = value
-        self.dropdown.trailing_icon = PixelActivity("Loading names")
+        self.dropdown.trailing_icon = PixelActivity('正在加载名称')
         self.control = self.dropdown
         threading.Thread(target=self._load, daemon=True).start()
 
     def _load(self) -> None:
         try:
-            names = self.names if self.names is not None else builder.SERVICE.names(self.game, self.kind)
+            names = ((self.names() if callable(self.names) else self.names) if self.names is not None
+                     else SERVICE.names(self.game, self.kind))
         except Exception:
             names = None
 
         def show():
             self.dropdown.trailing_icon = t.pixel_icon("chevron-down", color=t.MUTED)
             if names is None:
-                self.dropdown.hint_text = "Unavailable"
+                self.dropdown.hint_text = '不可用'
             else:
                 options = [ft.DropdownOption(key=str(n["id"]), text=n["name"]) for n in names]
                 if self.optional:
-                    options.insert(0, ft.DropdownOption(key=EMPTY, text="Not set"))
+                    options.insert(0, ft.DropdownOption(key=EMPTY, text='未设置'))
                 self.dropdown.options = options
                 self.dropdown.value = str(self.value) if self.value else (EMPTY if self.optional else None)
-                self.dropdown.hint_text = "Search"
+                self.dropdown.hint_text = '搜索'
                 self.dropdown.disabled = False
             self.dropdown.update()
         self.app.ui(show)
@@ -666,8 +667,8 @@ class NamePicker:
 # The Let's Go link code picker, in its order (pokeldn.lgpe.session.CODE_PICKER): national dex numbers
 # for the sprites and the names shown under them.
 CODE_SPECIES = (25, 133, 1, 4, 7, 16, 10, 19, 39, 50)
-CODE_NAMES = ("Pikachu", "Eevee", "Bulbasaur", "Charmander", "Squirtle",
-              "Pidgey", "Caterpie", "Rattata", "Jigglypuff", "Diglett")
+CODE_NAMES = ('皮卡丘', '伊布', '妙蛙种子', '小火龙', '杰尼龟',
+              '波波', '绿毛虫', '小拉达', '胖丁', '地鼠')
 CODE_TILE = MINI + 2 * EDGE
 
 
@@ -700,7 +701,7 @@ class LinkCodePicker:
 
     def _render(self, update: bool = True) -> None:
         self.slots.controls = [
-            self._tile(pick, CODE_NAMES[pick] if pick is not None else f"Slot {n + 1}",
+            self._tile(pick, CODE_NAMES[pick] if pick is not None else f'位置 {n + 1}',
                        lambda e, n=n: self._toggle(n), selected=self.open == n)
             for n, pick in enumerate(self.picks)]
         self.grid.visible = self.open is not None

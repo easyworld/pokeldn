@@ -22,12 +22,12 @@ from pokeldn import __version__  # noqa: E402
 from pokeldn.app.paths import ROOT  # noqa: E402
 
 PAGES = (
-    ("games", "Games", "gamepad"),
-    ("board", "Board", "cpu"),
-    ("docs", "Docs", "book-open"),
+    ("games", '游戏', "gamepad"),
+    ("board", '开发板', "cpu"),
+    ("docs", '文档', "book-open"),
 )
-SETTINGS = ("settings", "Settings", "gear")
-UPDATE = ("update", "Update", "download")
+SETTINGS = ("settings", '设置', "gear")
+UPDATE = ("update", '更新', "download")
 
 
 def main(page: ft.Page) -> None:
@@ -135,17 +135,16 @@ def offer_update(app: App) -> None:
 
     direct = release.download != release.page
     app.page.show_dialog(t.dialog(
-        semantics_label="Update available",
-        title=t.text(f"pokeldn {release.version} is available", 17, weight=ft.FontWeight.W_600),
+        semantics_label='有可用更新',
+        title=t.text(f'pokeldn {release.version} 已发布', 17, weight=ft.FontWeight.W_600),
         content=ft.Container(t.text(
-            f"You have {__version__}. "
-            + ("Download the new version, then replace this app with it. " if direct else
-               "Download the new version for your computer from the release page, then replace this app "
-               "with it. ")
-            + "Your settings, keys and received Pokemon stay where they are.", 13, t.MUTED), width=460),
-        actions=[t.link_button("What's new", open_(release.page)),
-                 t.secondary_button("Later", close),
-                 t.button("Download", open_(release.download), "download")],
+            f'当前版本：{__version__}. '
+            + ('下载新版本，然后替换当前应用。' if direct else
+               '从发布页面下载适用于此电脑的新版本，然后替换当前应用。')
+            + '设置、密钥和已接收的宝可梦将保留在原位置。', 13, t.MUTED), width=460),
+        actions=[t.link_button('更新内容', open_(release.page)),
+                 t.secondary_button('稍后', close),
+                 t.button('下载', open_(release.download), "download")],
     ))
     app.page.update()   # also shown from a background check, where Flet does not flush on its own
 
@@ -176,30 +175,29 @@ def welcome(app: App) -> None:
 
     body = ft.Column([
         ft.Row([ft.Image(src="logo.svg", width=28, height=32), ft.Container(expand=True),
-                t.icon_button("close", close, "Close welcome")],
+                t.icon_button("close", close, '关闭欢迎页面')],
                vertical_alignment=ft.CrossAxisAlignment.START),
-        t.text("Welcome to pokeldn", 22, weight=ft.FontWeight.W_600),
-        t.text("Trade and send gifts over local wireless, right from your computer.", 13, t.MUTED),
+        t.text('欢迎使用 pokeldn', 22, weight=ft.FontWeight.W_600),
+        t.text('直接通过电脑，以本地无线通信交换宝可梦和发送礼物。', 13, t.MUTED),
         ft.Container(height=6),
         t.step_list([
-            "Choose prod.keys dumped from your own console. The keys decrypt local wireless messages and stay "
-            "on this computer.",
-            "Plug in your ESP32 with a USB data cable.",
-            "Pick a game, choose a tool and follow the console steps.",
+            '选择从自己的游戏机导出的 prod.keys。密钥用于解密本地无线通信消息，并保存在此电脑上。',
+            '使用 USB 数据线连接 ESP32。',
+            '选择游戏和功能，然后按照游戏机操作步骤进行。',
         ]),
-        ft.Row([t.link_button("Read the setup guide", instructions)]),
+        ft.Row([t.link_button('阅读设置指南', instructions)]),
     ], spacing=8, tight=True)
     app.page.show_dialog(t.dialog(
         modal=True, content_padding=0, actions_padding=0, inset_padding=32,
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-        semantics_label="Welcome to pokeldn",
+        semantics_label='欢迎使用 pokeldn',
         content=drop.target(ft.Container(ft.Column([
             ft.Container(body, padding=ft.Padding(28, 22, 18, 8)),
             ft.Container(ft.Row([
-                t.text("Drop prod.keys here, or add keys later in Settings." if drop.AVAILABLE else
-                       "Add keys later in Settings.", 12, t.FAINT, expand=True),
-                t.secondary_button("Later", close),
-                t.button("Choose prod.keys", choose, "key"),
+                t.text('将 prod.keys 拖放到此处，或稍后在设置中添加密钥。' if drop.AVAILABLE else
+                       '稍后可在设置中添加密钥。', 12, t.FAINT, expand=True),
+                t.secondary_button('稍后', close),
+                t.button('选择 prod.keys', choose, "key"),
             ], spacing=8), padding=ft.Padding(28, 12, 24, 24)),
         ], spacing=0, tight=True), width=500, border_radius=20), dropped),
     ))

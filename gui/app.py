@@ -12,9 +12,9 @@ from pokeldn.app import settings, update
 from pokeldn.app.paths import SESSION
 from gui.views.widgets import on_ui
 
-NO_FIRMWARE = "No pokeldn firmware"
-PORT_BUSY = "Port busy or not allowed"
-PORT_DENIED = "Port not allowed"
+NO_FIRMWARE = '未检测到 pokeldn 固件'
+PORT_BUSY = '端口被占用或无权限'
+PORT_DENIED = '无端口访问权限'
 
 
 @dataclass(frozen=True)
@@ -75,45 +75,43 @@ class App:
         if not present:
             hidden = board.bridges_without_port() if sys.platform.startswith("linux") else []
             if hidden:
-                fix = ("Ubuntu 22.04's braille service takes CH340 boards: sudo apt remove brltty, then "
-                       "unplug and replug the board." if "WCH CH340" in hidden else
-                       "Unplug and replug it; the kernel log (sudo dmesg) says why.")
-                return BoardStatus("missing", "Board found without a serial port",
-                                   f"Linux gave the {hidden[0]} no serial port. {fix}")
-            return BoardStatus("missing", "No board plugged in",
-                               "Plug the ESP32 in with a USB data cable. Charge-only cables show nothing.")
+                fix = ("Ubuntu 22.04 的盲文服务占用了 CH340 开发板：执行 sudo apt remove brltty，然后拔出并重新连接。"
+                       if "WCH CH340" in hidden else "请拔出并重新连接；内核日志（sudo dmesg）可查看原因。")
+                return BoardStatus("missing", '已找到开发板，但没有串口',
+                                   f"Linux 未给 {hidden[0]} 分配串口。{fix}")
+            return BoardStatus("missing", '未连接开发板',
+                               '请使用 USB 数据线连接 ESP32。仅支持充电的线缆无法识别开发板。')
         port = device or self.radio_port(present)
         if not port:
-            return BoardStatus("choose", "Several boards plugged in",
-                               "Open the Board page and pick the one to use.")
+            return BoardStatus("choose", '连接了多个开发板',
+                               '打开“开发板”页，选择要使用的开发板。')
         found = next((p for p in present if p.device == port), None)
         if found is None:
-            return BoardStatus("missing", "Board unplugged", "Plug it back in.", port)
+            return BoardStatus("missing", '开发板已断开', '请重新连接。', port)
         ident = self.identities.get(port)
         if isinstance(ident, board.Identity):
             if ident.current:
                 version = f" v{ident.firmware_version}" if ident.firmware_version else ""
-                return BoardStatus("ready", "Board ready", f"pokeldn firmware{version} answered.", port)
-            return BoardStatus("flash", "Firmware out of date",
-                               "Flash the board to update it.", port)
+                return BoardStatus("ready", '开发板已就绪', f"pokeldn 固件{version} 已响应。", port)
+            return BoardStatus("flash", '固件版本过旧',
+                               '请刷写开发板以更新固件。', port)
         if ident == PORT_DENIED:
             group = "uucp" if os.path.exists("/etc/arch-release") else "dialout"
-            fix = (f"Add yourself to the {group} group (sudo usermod -aG {group} $USER), then log out and "
-                   "back in." if sys.platform.startswith("linux") else "Unplug and replug the board.")
-            return BoardStatus("denied", "No permission to open the board", fix, port)
+            fix = (f"将自己加入 {group} 用户组（sudo usermod -aG {group} $USER），然后注销并重新登录。"
+                   if sys.platform.startswith("linux") else '请拔出并重新连接开发板。')
+            return BoardStatus("denied", '无权访问开发板', fix, port)
         if ident == PORT_BUSY:
-            return BoardStatus("busy", "Board port busy",
-                               "Another program holds the port. Close it, or unplug and replug the board.",
+            return BoardStatus("busy", '开发板端口被占用',
+                               '其他程序占用了端口。请关闭该程序，或拔出并重新连接开发板。',
                                port)
         if ident == NO_FIRMWARE:
             if board.wrong_port(found, self.chips.get(port, "")):
-                return BoardStatus("wrong-port", "Use the board's other USB port",
-                                   f"The {self.chips[port]} firmware talks over the native USB port. Move the "
-                                   "cable to the port marked USB (not COM or UART).", port)
-            return BoardStatus("flash", "No pokeldn firmware on the board",
-                               "Flash the board. If you just flashed it, press its RESET (RST) button.",
+                return BoardStatus("wrong-port", '请使用开发板的另一个 USB 接口',
+                                   f"{self.chips[port]} 固件通过原生 USB 接口通信。请连接标有 USB 的接口，避开 COM 或 UART。", port)
+            return BoardStatus("flash", '开发板未安装 pokeldn 固件',
+                               '请刷写开发板。如果刚刚刷写完成，请按 RESET（RST）按钮。',
                                port)
-        return BoardStatus("checking", "Checking the board", "Asking the board for its firmware.", port)
+        return BoardStatus("checking", '正在检查开发板', '正在查询开发板固件。', port)
 
     def check_board(self, device: str, blink: bool = False, log=None) -> None:
         """Ask the board's firmware for its identity in the background; opening the port can restart it."""
@@ -188,7 +186,7 @@ class App:
 
     async def copy(self, value: str) -> None:
         await self.clipboard.set(value)
-        self.page.show_dialog(ft.SnackBar(ft.Text("Copied"), duration=1500))
+        self.page.show_dialog(ft.SnackBar(ft.Text('已复制'), duration=1500))
 
 
 def keys_found(path: str) -> bool:

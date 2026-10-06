@@ -183,7 +183,7 @@ def test_settings_cleanup_requires_confirmation_and_rechecks_the_active_run(loca
     view._clear_local(None)
     app.process = SimpleNamespace(running=True)
     dialogs[-1].actions[1].on_click(None)
-    assert not dialogs and record.exists() and "Finish the current run" in view.storage_result.value
+    assert not dialogs and record.exists() and "请先完成当前运行" in view.storage_result.value
     view._clear_local(None)
     assert not dialogs and record.exists()
     app.process = None
@@ -206,4 +206,4 @@ def test_settings_cleanup_requires_confirmation_and_rechecks_the_active_run(loca
     monkeypatch.setattr(storage, "clear", guarded)
     dialogs[-1].actions[1].on_click(None)
     assert not record.exists() and not dialogs and not app.busy
-    assert view.clear_button.disabled and "Freed 6 B" in view.storage_result.value
+    assert view.clear_button.disabled and "已释放 6 B" in view.storage_result.value

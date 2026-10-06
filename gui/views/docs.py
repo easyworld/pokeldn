@@ -5,12 +5,21 @@ from dataclasses import dataclass, field
 import flet as ft
 
 from gui import theme as t
+from gui.localization import translate
 from gui.views.widgets import MarkdownDocument
 from pokeldn.app.paths import ROOT
 
 DOCS = os.path.join(ROOT, "docs")
 GUIDE = os.path.join(ROOT, "gui", "guide.md")
 SITE = "https://decryptu.github.io/pokeldn/"
+
+
+def document_path(file: str) -> str:
+    """The app reads Chinese document bodies while retaining the original navigation keys."""
+    if file == "guide":
+        return GUIDE
+    localized = os.path.join(DOCS, "zh-Hans", file)
+    return localized if os.path.isfile(localized) else os.path.join(DOCS, file)
 
 
 @dataclass
@@ -58,9 +67,9 @@ class DocsView:
                                   expand=True)
         self.control = ft.Row([
             t.panel(ft.Column([
-                t.panel_header("Docs", t.icon_button("external-link",
+                t.panel_header('文档', t.icon_button("external-link",
                                                      lambda e: self.app.page.run_task(self.app.open_url, SITE),
-                                                     "Open the docs website")),
+                                                     '打开文档网站')),
                 t.fade(self.nav),
             ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
             t.surface(t.fade(self.scroll), radius=20, expand=True),
@@ -73,7 +82,7 @@ class DocsView:
 
     def show(self, file: str, update: bool = True) -> None:
         self.file = file
-        path = GUIDE if file == "guide" else os.path.join(DOCS, file)
+        path = document_path(file)
         with open(path, encoding="utf-8") as f:
             _, body = split_front_matter(f.read())
         self.markdown.set_value(body)
@@ -86,8 +95,8 @@ class DocsView:
             self.control.update()
 
     def render_nav(self) -> None:
-        rows = [self.row("Start here", "guide", 0)]
-        rows.append(ft.Container(t.text("Documentation", 11, t.FAINT, weight=ft.FontWeight.W_600),
+        rows = [self.row('入门指南', "guide", 0)]
+        rows.append(ft.Container(t.text('文档', 11, t.FAINT, weight=ft.FontWeight.W_600),
                                  padding=ft.Padding(10, 14, 8, 4)))
 
         def walk(items, depth):
@@ -102,7 +111,7 @@ class DocsView:
         active = file == self.file
         expanded = file in self.open_parents
         return ft.Container(ft.Row([
-            t.text(title, 13, t.TEXT if active else (t.MUTED if depth else t.SOFT),
+            t.text(translate(title), 13, t.TEXT if active else (t.MUTED if depth else t.SOFT),
                    weight=ft.FontWeight.W_600 if depth == 0 else None, expand=True),
             t.pixel_icon("chevron-down" if expanded else "chevron-right",
                     color=t.FAINT) if folder else ft.Container(),

@@ -7,9 +7,10 @@ import flet as ft
 
 from gui import board
 from gui.app import keys_found
-from pokeldn import pokemon as builder
 from pokeldn.app import command, received, runner
 from gui import theme as t
+from gui.localization import SERVICE, translate, summary as pokemon_summary
+from gui.advanced_zh_hans import description as advanced_description
 from pokeldn.app.catalog import GAMES, Field, Game, Tool
 from pokeldn.app.introspect import flags_of
 from pokeldn.app.paths import SESSION
@@ -18,10 +19,9 @@ from gui.views.gifts import GiftBuilder
 from gui.views.sprites import MINI, Sprite
 from gui.views.widgets import CodeBlock, Log, PathField, open_folder
 
-TOOL_ICONS = {"Trade": "arrows-horizontal", "Mystery Gift": "gift"}
+TOOL_ICONS = {'交换': "arrows-horizontal", '神秘礼物': "gift"}
 EMPTY = "-"   # a dropdown option cannot carry an empty key
-ADVANCED_NOTE = ("The tested defaults work for most players. Change these only when a guide or a bug report "
-                 "asks you to. A value set here overrides the Basic tab.")
+ADVANCED_NOTE = ('经过测试的默认值适用于大多数玩家。请仅按指南或问题排查要求修改。此处的设置将覆盖“基本”页的值。')
 
 
 def tool_icon(tool: Tool):
@@ -31,9 +31,9 @@ def tool_icon(tool: Tool):
 def tool_role(tool: Tool) -> str:
     """Who looks for whom, said from the console's side."""
     if tool.key.endswith("-host"):
-        return "Your console joins pokeldn"
+        return '游戏机加入 pokeldn'
     if tool.key.endswith("-join"):
-        return "pokeldn joins your console"
+        return 'pokeldn 加入游戏机'
     return ""
 
 
@@ -58,11 +58,11 @@ class GamesView:
         center = ft.Stack([
             t.fade(self.body, 48),
             ft.Container(t.notch(self.tabs,
-                                 t.icon_button("book-open", self._open_doc, "Read the docs for this game")),
+                                 t.icon_button("book-open", self._open_doc, '阅读此游戏的文档')),
                          top=0, left=0, right=0),
         ], expand=True)
         self.control = ft.Row([
-            t.panel(ft.Column([t.panel_header("Games"), t.fade(self.tree)], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
+            t.panel(ft.Column([t.panel_header('游戏'), t.fade(self.tree)], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
             center,
             self.session.control,
         ], spacing=t.GAP, expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
@@ -104,8 +104,8 @@ class GamesView:
             self.tab, self.search = "basic", ""
         self.game, self.tool = game, tool
         self.summary.value = tool.summary
-        self.tabs.content = t.segmented([("basic", "Basic", "sliders-horizontal"),
-                                          ("all", "Advanced", "bulletlist")], self.tab, self._tab)
+        self.tabs.content = t.segmented([("basic", '基本', "sliders-horizontal"),
+                                          ("all", '高级', "bulletlist")], self.tab, self._tab)
         self.render_tree()
         self.render_body()
         self.session.show(tool)
@@ -133,7 +133,7 @@ class GamesView:
                         t.pixel_icon(tool_icon(tool), color=t.BLUE if active else t.FAINT),
                         ft.Column([name, t.text(role, 11, t.FAINT)], spacing=0, expand=True) if role else
                         ft.Container(name, expand=True),
-                        t.badge("Soon", t.FAINT) if tool.unavailable else ft.Container(),
+                        t.badge('即将推出', t.FAINT) if tool.unavailable else ft.Container(),
                     ], spacing=10), padding=ft.Padding(24, 7, 8, 7), border_radius=12, tooltip=tool.summary,
                         bgcolor=t.SELECTED if active else None,
                         on_click=lambda e, g=game, x=tool: self.select(g, x)))
@@ -143,7 +143,7 @@ class GamesView:
     def render_body(self) -> None:
         if self.tool.unavailable:
             self.tabs.visible = False
-            self.cards.controls = [t.card("Not available yet", None, self.tool.unavailable)]
+            self.cards.controls = [t.card('暂不可用', None, self.tool.unavailable)]
             return
         self.tabs.visible = True
         self.cards.controls = self.basic_cards() if self.tab == "basic" else self.all_rows()
@@ -196,7 +196,7 @@ class GamesView:
                 out.append(t.card(item, ft.Column(rows, spacing=10),
                                   " ".join(f.help for f in fields if f.help), trailing=sprite))
         if not self.tool.fields:
-            out.append(t.text("Nothing to fill in.", 13, t.MUTED))
+            out.append(t.text('无需填写。', 13, t.MUTED))
         return out
 
     def shiny(self) -> bool:
@@ -263,13 +263,13 @@ class GamesView:
     # All tab
 
     def all_rows(self) -> list[ft.Control]:
-        search = t.field(value=self.search, hint="Search the options", autofocus=False,
+        search = t.field(value=self.search, hint='搜索选项', autofocus=False,
                          prefix_icon=ft.Container(t.pixel_icon("search", color=t.FAINT),
                                                   width=40, alignment=ft.Alignment.CENTER),
                          on_change=self._search)
         self.flag_list = ft.Column(spacing=0)
         self._fill_flags()
-        return [t.card("Advanced options", ft.Column([search, self.flag_list], spacing=10,
+        return [t.card('高级选项', ft.Column([search, self.flag_list], spacing=10,
                                                      horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
                        ADVANCED_NOTE)]
 
@@ -282,7 +282,7 @@ class GamesView:
         try:
             flags = flags_of(self.tool.script)
         except Exception as error:
-            self.flag_list.controls = [t.text(f"Could not read the options: {error}", 12, t.RED)]
+            self.flag_list.controls = [t.text(f'无法读取选项：{error}', 12, t.RED)]
             return
         query = self.search.lower().strip()
         hidden = {f.key: f for f in self.tool.fields if f.hidden}
@@ -290,11 +290,13 @@ class GamesView:
         # The settings kept off the Basic tab come first.
         for flag in sorted(flags, key=lambda f: f.option not in hidden):
             field = hidden.get(flag.option)
-            text = " ".join((flag.option, flag.help, field.label, field.help) if field else (flag.option, flag.help))
+            localized = advanced_description(flag.help, flag.option)
+            text = " ".join((flag.option, flag.help, localized, field.label, field.help) if field else
+                            (flag.option, flag.help, localized))
             if query and query not in text.lower():
                 continue
             rows.append(self.flag_row(flag))
-        empty = "No option matches." if flags else "This tool takes no options beyond its Basic fields."
+        empty = '没有匹配的选项。' if flags else '此功能没有额外的高级选项。'
         self.flag_list.controls = rows[:200] or [t.text(empty, 12, t.MUTED)]
 
     def flag_row(self, flag) -> ft.Control:
@@ -319,7 +321,7 @@ class GamesView:
         if flag.kind == "switch":
             control = t.switch(bool(value), lambda e: store(e.control.value))
         elif flag.kind == "choice":
-            control = ft.Container(t.dropdown([(EMPTY, "default")] + [(c, c) for c in flag.choices],
+            control = ft.Container(t.dropdown([(EMPTY, "默认")] + [(c, translate(c)) for c in flag.choices],
                                               value or EMPTY,
                                               on_select=lambda e: store("" if e.control.value == EMPTY else e.control.value)),
                                    width=220)
@@ -333,10 +335,10 @@ class GamesView:
                 detail = dict(field.choice_help).get(value or flag.default, "")
                 break
         lines = ([bound.help] if bound and bound.help else
-                 [" ".join(line.split()) for line in flag.help.splitlines()])
+                 [advanced_description(flag.help, flag.option)])
         if detail:
             lines.append(detail)
-        help_ = t.text("\n".join(l for l in lines if l) or "No description.", 12, t.MUTED, max_lines=4,
+        help_ = t.text("\n".join(l for l in lines if l) or '暂无说明。', 12, t.MUTED, max_lines=4,
                        overflow=ft.TextOverflow.ELLIPSIS)
 
         def toggle(e):
@@ -348,7 +350,7 @@ class GamesView:
                                t.text(flag.option, 12, t.BLUE if value != bound.default else t.MUTED,
                                       font_family=t.MONO)], spacing=8) if bound else
                        t.text(flag.option, 13, t.BLUE if value else t.TEXT, font_family=t.MONO),
-                       ft.Container(help_, on_click=toggle, tooltip="Show all" if len(lines) > 4 else None)],
+                       ft.Container(help_, on_click=toggle, tooltip='显示全部' if len(lines) > 4 else None)],
                       spacing=3, expand=True),
             control,
         ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
@@ -358,7 +360,7 @@ class GamesView:
 def pokemon_row(app, species: int, shiny: bool, summary: str, tip: str = "") -> ft.Control:
     """A small sprite, then pokeldn.pokemon.summary on two lines: species, level and shininess, then the rest."""
     parts = summary.split(" · ")
-    head = 3 if len(parts) > 2 and parts[2] == "shiny" else 2
+    head = 3 if len(parts) > 2 and parts[2] in ("shiny", "异色") else 2
     lines = [t.text(" · ".join(parts[:head]), 13, weight=ft.FontWeight.W_600, max_lines=1,
                     overflow=ft.TextOverflow.ELLIPSIS)]
     if parts[head:]:
@@ -378,9 +380,9 @@ class SessionPanel:
         self.status_dot = ft.Container(width=10, height=10, border_radius=5, bgcolor=t.MUTED,
                                        animate_opacity=ft.Animation(800, ft.AnimationCurve.EASE_IN_OUT),
                                        on_animation_end=self._pulse)
-        self.status_label = ft.Semantics(content=self.status_dot, label="Idle")
+        self.status_label = ft.Semantics(content=self.status_dot, label='空闲')
         self.status = ft.Container(self.status_label, width=24, height=24,
-                                   alignment=ft.Alignment.CENTER, tooltip="Idle")
+                                   alignment=ft.Alignment.CENTER, tooltip='空闲')
         self.board_line = ft.Container()   # the checklist before Start, or one line once all is set
         self.offering = ft.Container(visible=False)
         self.offered = None                # what the offering card shows, to rebuild it only on a change
@@ -396,31 +398,31 @@ class SessionPanel:
         self.command_text = command_block.text
         self.command_box = command_block.control
         self.command_box.visible = False
-        self.log = Log(app.page, "The session's output appears here.")
+        self.log = Log(app.page, '会话输出显示在此处。')
         tools = ft.Row([
-            t.icon_button("code", self._toggle_command, "Show the command"),
-            t.icon_button("copy", self._copy_log, "Copy the log"),
-            t.icon_button("folder", self._open_received, "Open the Received folder"),
+            t.icon_button("code", self._toggle_command, '显示命令'),
+            t.icon_button("copy", self._copy_log, '复制日志'),
+            t.icon_button("folder", self._open_received, '打开接收文件夹'),
         ], spacing=0)
         self.control = t.panel(ft.Column([
-            t.panel_header("Session", self.status),
+            t.panel_header('会话', self.status),
             # The checklist and the steps scroll; Start stays in view below them.
             ft.Container(t.fade(ft.Column([self.board_line, self.offering, self.received, self.steps], spacing=24,
                                           scroll=ft.ScrollMode.AUTO)),
                          padding=ft.Padding(18, 8, 18, 0), expand=3),
             ft.Container(ft.Column([
                 self.action,
-                ft.Row([t.text("Output", 12, t.MUTED, weight=ft.FontWeight.W_600, expand=True), tools]),
+                ft.Row([t.text('输出', 12, t.MUTED, weight=ft.FontWeight.W_600, expand=True), tools]),
                 self.command_box,
             ], spacing=12), padding=ft.Padding(18, 14, 18, 8)),
             ft.Container(self.log.control, padding=ft.Padding(12, 0, 12, 12), expand=2),
         ], spacing=0, expand=True), width=t.SESSION_WIDTH)
-        self.set_status("Ready", t.MUTED)
+        self.set_status('就绪', t.MUTED)
         app.board_listeners.append(lambda: self.refresh() if games.visible else None)
 
     def set_status(self, label: str, color: str) -> None:
-        description = "Idle" if label == "Ready" else label
-        running = label.startswith("Running")
+        description = '空闲' if label == '就绪' else label
+        running = label.startswith('运行中')
         self.status_dot.bgcolor = color
         self.status.tooltip = description
         self.status_label.label = description
@@ -438,11 +440,11 @@ class SessionPanel:
     def show(self, tool: Tool) -> None:
         if tool is not self.tool and not (self.app.process and self.app.process.running):
             self.log.clear()
-            self.set_status("Ready", t.MUTED)
+            self.set_status('就绪', t.MUTED)
             self.seen, self.received.content, self.received.visible = {}, None, False
             self.traded = 0
         self.tool = tool
-        self.steps.content = t.section("On the console", t.step_list(list(tool.steps)))
+        self.steps.content = t.section('在游戏机上操作', t.step_list(list(tool.steps)))
         self.refresh(update=False)
 
     def checklist(self) -> list[tuple[str, str, str, str]]:
@@ -452,25 +454,26 @@ class SessionPanel:
         board_state = ("ok" if status.ready else "wait" if status.state == "checking" else
                        "block" if status.state in ("missing", "choose") else "warn")
         items = [
-            ("ok", "Switch keys added", "", "") if keys_found(self.app.settings.keys) else
-            ("block", "Add your Switch keys", "Choose prod.keys in Settings.", "settings"),
+            ("ok", '已添加 Switch 密钥', "", "") if keys_found(self.app.settings.keys) else
+            ("block", '添加 Switch 密钥', '请在设置中选择 prod.keys。', "settings"),
             (board_state, status.title, "" if status.ready else status.detail, "board"),
         ]
         if missing := command.missing_offer(self.tool, self.games.values):
-            hint = " Pick a species, then press Build." if missing.startswith("Build") else ""
-            items.append(("block", "Pokemon to offer", missing + hint, ""))
-        items += [("block", "Check the options", problem, "") for problem in
+            missing = translate(missing)
+            hint = '选择种类，然后点击“生成”。' if missing.startswith('请先生成') else ""
+            items.append(("block", '用于交换的宝可梦', missing + hint, ""))
+        items += [("block", '检查选项', translate(problem), "") for problem in
                   command.problems(self.tool, self.games.values)]
         return items
 
     def render_checklist(self, items) -> ft.Control:
         if all(state == "ok" for state, *_ in items):
             return ft.Row([t.pixel_icon("checkbox-on", color=t.GREEN),
-                           t.text("Ready to start", 13, t.TEXT, expand=True),
-                           t.secondary_button("Board", lambda e: self.app.navigate("board"), "cpu")], spacing=8)
+                           t.text('准备就绪', 13, t.TEXT, expand=True),
+                           t.secondary_button('开发板', lambda e: self.app.navigate("board"), "cpu")], spacing=8)
         looks = {"ok": ("checkbox-on", t.GREEN), "wait": ("refresh", t.BLUE),
                  "warn": ("warning-diamond", t.AMBER), "block": ("warning-diamond", t.RED)}
-        labels = {"settings": "Settings", "board": "Board"}
+        labels = {"settings": '设置', "board": '开发板'}
         rows = []
         for state, what, how, page in items:
             icon, color = looks[state]
@@ -481,7 +484,7 @@ class SessionPanel:
                 t.secondary_button(labels[page], lambda e, k=page: self.app.navigate(k))
                 if page and state != "ok" else ft.Container(),
             ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.START))
-        return t.section("Before you start", ft.Column(rows, spacing=10))
+        return t.section('开始前', ft.Column(rows, spacing=10))
 
     def refresh(self, update: bool = True) -> None:
         tool, s = self.tool, self.app.settings
@@ -492,12 +495,12 @@ class SessionPanel:
         self.board_line.content = None if here else self.render_checklist(items)
         blocked = any(state == "block" for state, *_ in items)
         if here:
-            action = t.button("Stop", self._stop, "stop", t.RED, expand=True)
+            action = t.button('停止', self._stop, "stop", t.RED, expand=True)
         elif session:
-            action = t.button(f"Stop {self.running_tool.name} and start", self._start, "play", expand=True,
+            action = t.button(f'停止 {self.running_tool.name} 并开始', self._start, "play", expand=True,
                               disabled=self.restart or blocked or bool(tool.unavailable))
         else:
-            action = t.button("Start", self._start, "play", expand=True,
+            action = t.button('开始', self._start, "play", expand=True,
                               disabled=self.app.busy or blocked or bool(tool.unavailable))
         self.action.content = ft.Row([action])
         self.render_offering()
@@ -519,24 +522,24 @@ class SessionPanel:
             return
         self.offered = (shown, self.traded)
         self.offering.visible = bool(shown)
-        done = t.text(f"{self.traded} traded", 12, t.GREEN) if self.traded else None
+        done = t.text(f'{self.traded} 次交换已完成', 12, t.GREEN) if self.traded else None
         if not shown:
             self.offering.content = None
         elif len(shown) == 1:
             species, shiny, summary = shown[0]
-            self.offering.content = t.section("Offering", pokemon_row(self.app, species, shiny, summary),
+            self.offering.content = t.section('正在提供', pokemon_row(self.app, species, shiny, summary),
                                               trailing=done)
         else:
             tiles = []
             for n, (species, shiny, summary) in enumerate(shown, start=1):
                 sprite = Sprite(self.app, species, shiny, size=MINI)
                 traded = n <= self.traded
-                sprite.frame.tooltip = f"Trade {n}{' (done)' if traded else ''}: {summary}"
+                sprite.frame.tooltip = f"交换 {n}{('（已完成）' if traded else '')}: {summary}"
                 tiles.append(ft.Stack([sprite.control, ft.Container(
                     t.pixel_icon("checkbox-on", color=t.GREEN), right=0, bottom=0, visible=traded)]))
-            progress = (f"{min(self.traded, len(shown))} of {len(shown)} traded" if self.traded
-                        else f"{len(shown)} trades, in order")
-            self.offering.content = t.section("Offering", ft.Row(tiles, spacing=6, run_spacing=6, wrap=True),
+            progress = (f'{min(self.traded, len(shown))} / {len(shown)} 次交换已完成' if self.traded
+                        else f'{len(shown)} 次交换，按顺序进行')
+            self.offering.content = t.section('正在提供', ft.Row(tiles, spacing=6, run_spacing=6, wrap=True),
                                               trailing=t.text(progress, 12, t.GREEN if self.traded else t.MUTED))
 
     def scan_received(self, run: tuple) -> None:
@@ -551,7 +554,7 @@ class SessionPanel:
             if path in self.seen and self.seen[path][:2] == (size, mtime):
                 continue
             try:
-                info = builder.SERVICE.check(game, path)
+                info = SERVICE.check(game, path)
             except Exception:
                 info = None
             if self.run is not run:
@@ -568,14 +571,14 @@ class SessionPanel:
         for path, (_, _, info) in list(self.seen.items()):
             name = os.path.basename(path)
             if info is None:
-                rows.append(pokemon_row(self.app, 0, False, f"Not read by PKHeX · {name}", path))
+                rows.append(pokemon_row(self.app, 0, False, f'PKHeX 无法读取 · {name}', path))
             else:
                 rows.append(pokemon_row(self.app, int(info.get("species_id") or 0), bool(info.get("shiny")),
-                                        builder.summary(info), path))
+                                        pokemon_summary(info), path))
         self.received.visible = True
-        self.received.content = t.section("Received", ft.Column(rows, spacing=8),
+        self.received.content = t.section('已接收', ft.Column(rows, spacing=8),
                                        trailing=t.icon_button("folder", self._open_received,
-                                                              "Open the Received folder"))
+                                                              '打开接收文件夹'))
         self.received.update()
 
     def _toggle_command(self, e) -> None:
@@ -602,21 +605,21 @@ class SessionPanel:
             return
         port = self.app.radio_port()
         problems = [p for p in (
-            "" if port else "No board found. Plug it in, or pick one on the Board page.",
-            "" if os.path.isfile(os.path.expanduser(s.keys)) else "Choose your prod.keys in Settings.",
+            "" if port else '未找到开发板。请连接开发板，或在“开发板”页选择一个。',
+            "" if os.path.isfile(os.path.expanduser(s.keys)) else '请在设置中选择自己的 prod.keys。',
             command.missing_offer(tool, self.games.values), *command.problems(tool, self.games.values)) if p]
         self.log.clear()
         if problems:
             for p in problems:
-                self.log.add(f"[app] {p}")
-            self.set_status("Not started", t.RED)
+                self.log.add(f"[app] {translate(p)}")
+            self.set_status('尚未开始', t.RED)
             self.refresh()
             return
         try:
             command.prepare(tool, self.games.values)
         except (OSError, ValueError) as error:
             self.log.add(f"[app] {error}")
-            self.set_status("Not started", t.RED)
+            self.set_status('尚未开始', t.RED)
             self.refresh()
             return
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -651,7 +654,7 @@ class SessionPanel:
         process = run[0]
         while process.running:
             elapsed = int(time.monotonic() - process.started)
-            self.app.ui(lambda e=elapsed: (self.set_status(f"Running {e // 60:02d}:{e % 60:02d}", t.BLUE),
+            self.app.ui(lambda e=elapsed: (self.set_status(f'正在运行 {e // 60:02d}:{e % 60:02d}', t.BLUE),
                                            self.status.update())
                         if self.app.process is process and process.running else None)
             self.scan_received(run)
@@ -666,11 +669,11 @@ class SessionPanel:
     def _exited(self, code: int) -> None:
         def done():
             if self.stopping:
-                self.set_status("Stopped", t.MUTED)
+                self.set_status('已停止', t.MUTED)
             elif code == 0:
-                self.set_status("Finished", t.GREEN)
+                self.set_status('已完成', t.GREEN)
             else:
-                self.set_status(f"Failed ({code})", t.RED)
+                self.set_status(f'失败（{code})', t.RED)
             self.log.add(f"[app] Exited with code {code}.")
             if self.restart:
                 self.restart = False

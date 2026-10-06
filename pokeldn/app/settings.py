@@ -7,8 +7,8 @@ from pathlib import Path
 from pokeldn.app.paths import DATA, RECEIVED
 
 PATH = DATA / "settings.json"
-LANGUAGES = (("2", "English"), ("3", "French"), ("5", "German"), ("4", "Italian"), ("7", "Spanish"),
-             ("1", "Japanese"), ("8", "Korean"))
+LANGUAGES = (("2", '英语'), ("3", '法语'), ("5", '德语'), ("4", '意大利语'), ("7", '西班牙语'),
+             ("1", '日语'), ("8", '韩语'))
 # Switch titles show the 32-bit trainer id as id % 10**6 and id // 10**6 (docs/gui.md, Your trainer).
 SWITCH_TID_LIMIT = 1_000_000
 

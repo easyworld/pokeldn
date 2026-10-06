@@ -42,10 +42,10 @@ class Sprite:
             self._set(self._image(shown), update)
         if CACHE.known_missing(species, shiny) and (not shiny or CACHE.known_missing(species)):
             if not shown:
-                self._set(self._placeholder("No sprite for this species."), update)
+                self._set(self._placeholder('此种类没有图像。'), update)
             return
         if not shown:
-            self._set(PixelActivity("Loading sprite"), update)
+            self._set(PixelActivity('正在加载图像'), update)
         threading.Thread(target=self._load, args=(token, species, shiny, bool(shown)), daemon=True).start()
 
     def _load(self, token: int, species: int, shiny: bool, shown: bool) -> None:
@@ -62,8 +62,8 @@ class Sprite:
 
     def _why(self) -> str:
         if not self.app.settings.sprites:
-            return "Sprite downloads are off in Settings."
-        return "Sprite not available. It downloads once when the app is online."
+            return '设置中已关闭图像下载。'
+        return '图像暂不可用。应用联网后会下载并缓存。'
 
     def _image(self, data: bytes) -> ft.Control:
         if self.size >= SIZE:

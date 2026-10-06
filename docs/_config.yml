@@ -37,3 +37,5 @@ footer_content: >-
 
 exclude:
   - _config.yml
+  # Desktop-only Chinese copies use the original navigation metadata.
+  - zh-Hans/

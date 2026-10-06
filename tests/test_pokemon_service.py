@@ -17,6 +17,32 @@ TRAINER = {"ot": "POKELDN", "tid": 12345, "sid": 54321, "language": 2, "gender":
 FORMATS = {"frlg": "PK3", "lgpe": "PB7", "swsh": "PK8", "bdsp": "PB8", "pla": "PA8", "sv": "PK9", "za": "PA9"}
 
 
+def test_chinese_display_preserves_species_and_cartridge_ids(service):
+    localized = pokemon.Service(display_language="zh-Hans")
+    try:
+        national = {entry["id"]: entry["name"] for entry in localized.species("frlg")}
+        cartridge = {entry["id"]: entry["name"] for entry in localized.names("frlg", "species3")}
+        assert national[25] == cartridge[25] == "皮卡丘"
+        assert national[252] == cartridge[277] == "木守宫"
+        assert {entry["id"]: entry["name"] for entry in service.species("frlg")}[25] == "Pikachu"
+    finally:
+        localized.close()
+
+
+def test_chinese_display_imports_english_showdown_and_keeps_trainer(service):
+    localized = pokemon.Service(display_language="zh-Hans")
+    try:
+        found = localized.paste("sv", "Pikachu @ Light Ball\nAbility: Static\nTimid Nature\n- Thunderbolt", TRAINER)[0]
+        assert not found["errors"] and found["species_id"] == 25 and found["species"] == "皮卡丘"
+        assert found["options"]["held_item"] == 236 and found["options"]["ability"] == 9
+        assert found["moves"] == ["十万伏特"]
+        info = localized.make("sv", 25, TRAINER)
+        assert info["legal"] and info["ot"] == TRAINER["ot"]
+        assert service.check_bytes("sv", base64.b64decode(info["data"]))["legal"]
+    finally:
+        localized.close()
+
+
 @pytest.mark.parametrize("failure, error, requests", [
     ("interrupted", None, 2),
     ("persistent", "could not complete its legality analysis after restarting", 2),

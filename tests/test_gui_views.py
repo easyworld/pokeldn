@@ -77,8 +77,8 @@ def test_a_pasted_team_fills_the_trades_after_its_picker_up_to_the_limit(monkeyp
     sets = [{"species_id": n, "notes": []} for n in (25, 133, 150)]
     message = queue.slots[0]["picker"].on_team(sets)
     assert saved[-1] == [{"species": 1}, {"species": 25}, {"species": 133}, {"species": 4}]
-    assert [s["title"].value for s in queue.slots] == ["Trade 1", "Trade 2", "Trade 3", "Trade 4"]
-    assert "trades 2, 3" in message and "1 did not fit" in message
+    assert [s["title"].value for s in queue.slots] == ["交换 1", "交换 2", "交换 3", "交换 4"]
+    assert "交换 2, 3" in message and "1 只未加入" in message
     assert queue.add_box.disabled
 
 
@@ -96,7 +96,7 @@ def test_a_queue_keeps_each_trades_pokemon_in_order_through_add_and_remove(monke
     assert len(queue.slots) == 3
     queue._remove(queue.slots[1])
     assert saved[-1] == [{"file": "a.pk9"}, {"file": "c.pk9"}]
-    assert [s["title"].value for s in queue.slots] == ["Trade 1", "Trade 2"]
+    assert [s["title"].value for s in queue.slots] == ["交换 1", "交换 2"]
     assert not queue.add_box.disabled
     queue._remove(queue.slots[0])
     queue._remove(queue.slots[0])
@@ -113,7 +113,7 @@ def test_files_dropped_on_a_trade_or_on_add_a_trade_fill_untouched_trades_then_n
     assert [v.get("file") for v in saved[-1]] == [None, "b.pk9", None]
     queue._append(["c.pk9", "d.pk9", "e.pk9"])
     assert [v.get("file") for v in saved[-1]] == [None, "b.pk9", None, "c.pk9", "d.pk9"]
-    assert queue.count.value.startswith("1 did not fit")
+    assert queue.count.value.startswith("1 只未加入")
 
     queue = stub_queue([{"species": 1}, {}, {}], 6, saved.append)
     queue._append(["f.pk9"])
@@ -200,6 +200,10 @@ def test_start_waits_for_keys_and_a_built_offer_but_not_for_a_doubtful_board(tmp
     states = [state for state, *_ in SessionPanel.checklist(panel)]
     assert ("block" in states) == blocked
     assert ("ok" in states) and len(states) >= 2
+    if not offer:
+        missing = next(how for _, what, how, _ in SessionPanel.checklist(panel) if what == "用于交换的宝可梦")
+        assert "请先生成用于交换的宝可梦" in missing
+        assert "Build the Pokemon" not in missing
 
 
 def test_a_board_that_never_answers_on_a_bridge_is_named_by_its_rom_and_sent_to_the_usb_socket(monkeypatch):
@@ -241,10 +245,11 @@ def test_a_port_the_user_may_not_open_names_the_group_not_a_busy_port(tmp_path, 
     assert status.state == "denied" and "usermod -aG" in status.detail
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Linux sysfs paths contain colons, unsupported on Windows")
 @pytest.mark.parametrize("tty, title", [
-    (None, "Board found without a serial port"),          # brltty took it: no tty under the interface
-    ("ttyUSB0", "No board plugged in"),                    # usb-serial: <interface>/ttyUSB0
-    ("tty/ttyACM0", "No board plugged in"),                # cdc-acm: <interface>/tty/ttyACM0
+    (None, "已找到开发板，但没有串口"),          # brltty took it: no tty under the interface
+    ("ttyUSB0", "未连接开发板"),                    # usb-serial: <interface>/ttyUSB0
+    ("tty/ttyACM0", "未连接开发板"),                # cdc-acm: <interface>/tty/ttyACM0
 ])
 def test_a_ch340_on_usb_with_no_tty_names_brltty_on_linux(tmp_path, monkeypatch, tty, title):
     device = tmp_path / "1-1"
@@ -318,8 +323,8 @@ def test_the_released_firmware_lands_only_when_every_image_matches_its_checksum(
 
 def test_a_pokemon_file_shows_its_own_species_and_shininess(monkeypatch):
     import asyncio
-    monkeypatch.setattr(pokemon.builder.SERVICE, "species", lambda game: [{"id": 25, "name": "Pikachu"}])
-    monkeypatch.setattr(pokemon.builder.SERVICE, "import_file", lambda game, path: {
+    monkeypatch.setattr(pokemon.SERVICE, "species", lambda game: [{"id": 25, "name": "Pikachu"}])
+    monkeypatch.setattr(pokemon.SERVICE, "import_file", lambda game, path: {
         "file": path, "species": "Charizard", "species_id": 6, "level": 50, "shiny": True, "legal": True,
         "encounter": "", "moves": [], "report": ""})
 
@@ -361,7 +366,8 @@ def test_the_gift_builder_renders_every_mode_and_kind_and_exports_what_it_shows(
         return str(path)
 
     view = SimpleNamespace(tool=tool, values={}, extra={},
-        app=SimpleNamespace(settings=Settings(), picker=SimpleNamespace(save_file=save_file), ui=lambda f: None))
+        app=SimpleNamespace(settings=Settings(), picker=SimpleNamespace(save_file=save_file), ui=lambda f: None,
+                            page=SimpleNamespace(run_task=lambda *args: None)))
     view.set_value = lambda field, value, rebuild=False: view.values.__setitem__(field.key, value)
     module = gift_builder.module(gift_builder.GAMES[key])
     builder = view_module.GiftBuilder(view, field)
@@ -521,11 +527,11 @@ def test_settings_keep_a_six_digit_switch_id_beside_the_five_digit_one(tmp_path,
     def type_into(label, text, at=0):
         fields[label][at].on_change(SimpleNamespace(control=SimpleNamespace(value=text)))
 
-    type_into("ID, Switch games", "967295")
-    type_into("Secret ID", "4294", at=1)
-    type_into("ID, Switch games", "1000000")      # seven digits
-    type_into("Secret ID", "4295", at=1)          # past 32 bits
-    type_into("ID, FireRed and LeafGreen", "65536")
+    type_into("ID（Switch 游戏）", "967295")
+    type_into("里 ID", "4294", at=1)
+    type_into("ID（Switch 游戏）", "1000000")      # seven digits
+    type_into("里 ID", "4295", at=1)          # past 32 bits
+    type_into("ID（火红／叶绿）", "65536")
     saved = settings_module.load()
     assert (saved.tid, saved.sid, saved.switch_tid, saved.switch_sid) == (1, 2, 967295, 4294)
     assert saved.ids("frlg") == (1, 2) and saved.ids("za") == (0xFFFF, 0xFFFF)
@@ -557,6 +563,213 @@ def test_the_boost_settings_leave_with_the_last_unticked_boost(monkeypatch):
     preset = next(p for p in gift_builder.module(gift_builder.GAMES["frlg-gift"]).PRESETS if hasattr(p, "members"))
     member = preset.members[0]
     builder._toggle(preset, member.key)
-    assert frlg_builder.KEEP.label in texts(builder.presets())
+    assert "保存增强功能供以后使用" in texts(builder.presets())
     builder._toggle(preset, member.key)
-    assert frlg_builder.KEEP.label not in texts(builder.presets())
+    assert "保存增强功能供以后使用" not in texts(builder.presets())
+
+
+def test_official_events_search_in_chinese_keeps_original_event_keys(monkeypatch):
+    import flet as ft
+    from gui.views import gifts as view_module
+    from pokeldn.app.catalog import GAMES
+    from pokeldn.app.settings import Settings
+    from pokeldn.swsh import events
+
+    tool = next(t for game in GAMES for t in game.tools if t.key == "swsh-gift")
+    field = next(f for f in tool.fields if f.kind == "builder")
+    view = SimpleNamespace(tool=tool, values={}, extra={},
+                           app=SimpleNamespace(settings=Settings(), picker=None, ui=lambda f: None))
+    view.set_value = lambda *args, **kwargs: None
+    builder = view_module.GiftBuilder(view, field)
+    builder.value["event_search"] = "皮卡丘"
+    listing = builder.events()
+
+    def walk(control):
+        yield control
+        for child in [*(getattr(control, "controls", None) or []), getattr(control, "content", None)]:
+            if isinstance(child, ft.Control):
+                yield from walk(child)
+
+    controls = list(walk(listing))
+    assert any("皮卡丘" in c.value for c in controls if isinstance(c, ft.Text))
+    count = next(c.value for c in controls if isinstance(c, ft.Text) and c.value.endswith("张卡片"))
+    assert int(count.split(" / ")[0]) > 0
+    tile = next(c for c in controls if isinstance(c, ft.Container) and c.on_click
+                and isinstance(c.content, ft.Row))
+    tile.on_click(None)
+    selected = events.by_key()[builder.value["event"]]
+    assert "Pikachu" in selected["label"]
+    assert events.gift(selected["key"]).variants["swsh"].data["wc8"] == selected["record"]
+
+
+def test_advanced_descriptions_cover_each_current_tool_without_changing_cli_help():
+    import re
+    from gui.advanced_zh_hans import description
+    from pokeldn.app.catalog import GAMES
+    from pokeldn.app.introspect import flags_of
+
+    for game in GAMES:
+        for tool in game.tools:
+            if tool.unavailable:
+                continue
+            for flag in flags_of(tool.script):
+                shown = description(flag.help, flag.option)
+                assert re.search(r'[\u4e00-\u9fff]', shown), (tool.key, flag.option, shown)
+    host = next(t for game in GAMES for t in game.tools if t.key == 'frlg-trade-host')
+    slot = next(f for f in flags_of(host.script) if f.option == '--slot')
+    assert slot.help.startswith('0-based host party slot')
+    assert slot.default == 1
+
+
+def test_advanced_rows_show_chinese_help_and_keep_saved_argument_values():
+    import flet as ft
+    from pokeldn.app.catalog import GAMES
+    from pokeldn.app.introspect import flags_of
+
+    tool = next(t for game in GAMES for t in game.tools if t.key == 'frlg-trade-host')
+    view = SimpleNamespace(tool=tool, values={}, extra={'--slot': '2'})
+    flags = {f.option: f for f in flags_of(tool.script)}
+
+    def walk(control):
+        yield control
+        for child in [*(getattr(control, 'controls', None) or []), getattr(control, 'content', None)]:
+            if isinstance(child, ft.Control):
+                yield from walk(child)
+
+    for key, expected in [('--slot', '队伍位置'), ('--slots', '逗号'), ('--out-format', '已解密'),
+                          ('--union-room', '联合房间'), ('--colosseum', '竞技场')]:
+        row = GamesView.flag_row(view, flags[key])
+        assert any(expected in c.value for c in walk(row) if isinstance(c, ft.Text))
+    assert view.extra['--slot'] == '2'
+    assert next(c for c in walk(GamesView.flag_row(view, flags['--slot'])) if isinstance(c, ft.TextField)).value == '2'
+
+
+def test_advanced_search_finds_chinese_and_original_parameter_names():
+    from pokeldn.app.catalog import GAMES
+    tool = next(t for game in GAMES for t in game.tools if t.key == 'frlg-trade-host')
+    view = SimpleNamespace(tool=tool, values={}, extra={}, flag_list=SimpleNamespace(controls=[]))
+    view.flag_row = lambda flag: flag.option
+    for query in ['竞技场', '--colosseum', 'COLOSSEUM']:
+        view.search = query
+        GamesView._fill_flags(view)
+        assert '--colosseum' in view.flag_list.controls
+
+
+def test_docs_load_chinese_bodies_without_changing_navigation_or_links():
+    from pathlib import Path
+    from gui.views import docs
+    from scripts.pack_app import runtime_files
+
+    original = Path(docs.DOCS)
+    bundled = set(runtime_files())
+    for path in original.glob('*.md'):
+        selected = Path(docs.document_path(path.name))
+        assert selected == original / 'zh-Hans' / path.name
+        source_meta, _ = docs.split_front_matter(path.read_text(encoding='utf-8'))
+        local_meta, body = docs.split_front_matter(selected.read_text(encoding='utf-8'))
+        assert source_meta == local_meta
+        assert any('\u4e00' <= c <= '\u9fff' for c in body)
+        assert 'docs/zh-Hans/' + path.name in bundled
+    assert Path(docs.document_path('guide')) == Path(docs.GUIDE)
+    home = Path(docs.document_path('index.md')).read_text(encoding='utf-8')
+    assert '支持的游戏与功能' in home and '文档章节' in home
+    assert '[无线通信层](ldn.md)' in home
+    assert 'Seven games, all on retail hardware' not in home
+
+
+def test_chinese_docs_keep_original_code_and_link_destinations():
+    import re
+    from collections import Counter
+    from pathlib import Path
+    from gui.views import docs
+
+    for path in Path(docs.DOCS).glob('*.md'):
+        source = path.read_text(encoding='utf-8')
+        translated = Path(docs.document_path(path.name)).read_text(encoding='utf-8')
+        # Inline identifiers and examples remain readable and executable as authored.
+        code = lambda text: Counter(m[0] for m in re.finditer(r'(`+).*?\1', text, re.S))
+        assert code(source) == code(translated), path.name
+        links = lambda text: Counter(re.findall(r'\]\(([^\n]*?)\)', text))
+        assert links(source) == links(translated), path.name
+        fences = lambda text: [m[0] for m in re.finditer(
+            r'(?m)^(`{3,}|~{3,})[^\n]*\n.*?^\1[^\n]*(?:\n|$)',text,re.S)]
+        assert fences(source) == fences(translated), path.name
+        assert 'ZXQK' not in translated and 'ZXQBOUNDARYQXZ' not in translated
+
+
+def test_desktop_translates_all_static_pkhex_validation_messages():
+    import re
+    from pathlib import Path
+    from gui.localization import translate
+
+    program = (Path(__file__).resolve().parents[1] / 'services/pkhex/Program.cs').read_text(encoding='utf-8')
+    messages = re.findall(r'(?:throw new \w+\(|(?:errors|notes)\.Add\()"([^"\n]+)"', program)
+    assert messages
+    for message in messages:
+        assert re.search(r'[\u4e00-\u9fff]', translate(message)), message
+
+
+def test_display_logs_keep_raw_diagnostics_and_identifiers():
+    from gui.views.widgets import Log
+    from gui.localization import translate_app_log, translate
+
+    raw = '[app] Firmware for ESP32-S3: C:/Pikachu/firmware.bin'
+    assert Log._line(raw).value == '[app] 适用于 ESP32-S3 的固件：C:/Pikachu/firmware.bin'
+    assert translate_app_log('[app] Checking COM3; the board may restart.') == '[app] 正在检查 COM3；开发板可能会重启。'
+    assert translate_app_log('Writing at 0x1000... (50%)') == 'Writing at 0x1000... (50%)'
+    assert translate('16 bytes; returned 1 after 2 frames (4 instructions) and answers 0x00000001.') == '16 字节；在 2 帧后返回 1（执行 4 条指令），回复值为 0x00000001。'
+
+
+def test_flash_progress_is_chinese_and_preserves_protocol_parsing():
+    from types import SimpleNamespace
+    from gui.views.boards import BoardView
+
+    view = SimpleNamespace(app=SimpleNamespace(chips={}, ui=lambda fn: fn()), selected='COM3',
+                           log=SimpleNamespace(add=lambda line: None),
+                           progress=SimpleNamespace(value=None, update=lambda: None),
+                           progress_text=SimpleNamespace(value='', update=lambda: None))
+    BoardView._flash_line(view, '[app] Firmware for ESP32-S3: C:/firmware.bin')
+    BoardView._flash_line(view, 'Writing at 0x1000... (50%)')
+    assert view.app.chips['COM3'] == 'ESP32-S3'
+    assert view.progress.value == 0.5
+    assert view.progress_text.value == '正在写入 50%'
+
+
+def test_all_gift_presets_outfits_and_summaries_have_chinese_display():
+    import re
+    from gui.localization import translate, gift_description
+    from pokeldn.app.gift_builder import module
+    from pokeldn.swsh import gift_builder as swsh
+
+    for game in ('frlg', 'swsh'):
+        for preset in module(game).PRESETS:
+            for item in [preset, *getattr(preset, 'members', ())]:
+                for key in ('label', 'summary', 'group'):
+                    text = getattr(item, key, '')
+                    if text:
+                        assert re.search(r'[\u4e00-\u9fff]', translate(text)), (game, key, text)
+                        if game == 'swsh':
+                            assert not re.search(r'[A-Za-z]{3,}', translate(text).replace('POKELDN', '')), text
+    for outfit in swsh.OUTFITS:
+        assert re.search(r'[\u4e00-\u9fff]', translate(outfit.label)), outfit.label
+    for kind in ('money', 'clothing', 'items', 'bp', 'egg', 'pokemon'):
+        state = swsh.blank(kind=kind)
+        when, lines = gift_description('swsh', state, lambda kind, ident: '皮卡丘' if kind == 'species' else '大师球')
+        assert re.search(r'[\u4e00-\u9fff]', when), when
+        assert all(re.search(r'[\u4e00-\u9fff]', line) for line in lines), lines
+
+
+def test_static_gift_validation_messages_are_translated():
+    import ast
+    import re
+    from pathlib import Path
+    from gui.localization import translate
+
+    root = Path(__file__).resolve().parents[1]
+    for name in ('pokeldn/gifts.py', 'pokeldn/swsh/gift_builder.py', 'pokeldn/frlg/gift/builder.py',
+                 'pokeldn/app/gift_builder.py', 'pokeldn/frlg/rom/custom_code.py'):
+        for node in ast.walk(ast.parse((root / name).read_text(encoding='utf-8'))):
+            if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call) and node.exc.args:
+                message = node.exc.args[0]
+                if isinstance(message, ast.Constant) and isinstance(message.value, str):
+                    assert re.search(r'[\u4e00-\u9fff]', translate(message.value)), (name, message.value)

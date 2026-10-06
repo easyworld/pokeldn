@@ -4,6 +4,7 @@ using PKHeX.Core;
 using static PKHeX.Core.GameVersion;
 
 var strings = GameInfo.GetStrings("en");
+var displayLanguage = "en";
 var games = new Dictionary<string, Game>
 {
     ["frlg"] = new([FR, LG, E, R, S], PersonalTable.FR, EntityContext.Gen3, () => new PK3(), DecryptedParty),
@@ -22,6 +23,9 @@ while (Console.ReadLine() is { } line)
     try
     {
         var request = JsonNode.Parse(line)!.AsObject();
+        // Interface language never changes the entity's trainer language or the Showdown parser.
+        displayLanguage = (string?)request["display_language"] == "zh-Hans" ? "zh-Hans" : "en";
+        strings = GameInfo.GetStrings(displayLanguage);
         var game = games[(string)request["game"]!];
         reply = (string)request["cmd"]! switch
         {
@@ -77,6 +81,13 @@ JsonObject Names(Game game, string list)
 {
     if (list == "species")
         return new JsonObject { ["names"] = Species(game)["species"]!.DeepClone() };
+    if (list == "species3")
+    {
+        var species = new JsonArray();
+        for (ushort s = 1; s <= 386; s++)
+            species.Add(new JsonObject { ["id"] = SpeciesConverter.GetInternal3(s), ["name"] = strings.specieslist[s] });
+        return new JsonObject { ["names"] = species };
+    }
     var blank = game.Blank();
     var names = new JsonArray();
     void Add(int id, string name)
@@ -304,7 +315,7 @@ JsonObject Make(Game game, JsonObject request)
                 if (la.Valid && unmet is null)
                     return Describe(game, pk, la);
                 if (unmet is null)
-                    firstProblem ??= la.Report();
+                    firstProblem ??= la.Report(displayLanguage);
                 else
                     firstUnmet ??= unmet;
             }
@@ -493,7 +504,7 @@ JsonObject Paste(Game game, JsonObject request)
     var sets = new JsonArray();
     var blank = game.Blank();
     var dummied = MoveInfo.GetDummiedMovesHashSet(game.Context);
-    var errorText = BattleTemplateParseErrorLocalization.Get();
+    var errorText = BattleTemplateParseErrorLocalization.Get(displayLanguage);
     foreach (var set in ShowdownParsing.GetShowdownSets(lines))
     {
         var errors = new JsonArray();
@@ -648,7 +659,7 @@ JsonObject Event(Game game, JsonObject request)
             break;
     }
     if (!la.Valid)
-        throw new InvalidDataException($"PKHeX made an illegal {name}: {la.Report()}");
+        throw new InvalidDataException($"PKHeX made an illegal {name}: {la.Report(displayLanguage)}");
     return new JsonObject
     {
         ["data"] = Convert.ToBase64String(game.Write(pk)),
@@ -740,7 +751,7 @@ JsonObject Describe(Game game, PKM pk, LegalityAnalysis la)
         ["encounter"] = la.EncounterOriginal.LongName,
         ["parsed"] = la.Parsed,
         ["legal"] = la.Valid,
-        ["report"] = la.Report(),
+        ["report"] = la.Report(displayLanguage),
     };
 }
 
