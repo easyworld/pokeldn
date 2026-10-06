@@ -435,6 +435,16 @@ S3、C3 和 C6 通过 USB 串行/JTAG 使用相同的 COBS、CRC 和 CREDIT 协�
 `POKELDN_RADIO=esp32:<port>` 将各启动器的 `ldn` 调用转交给开发板。`esp32:auto` 选择唯一连接的 USB 串口（`/dev/cu.usbserial-*`、`/dev/cu.SLAB_USBtoUART*`、`/dev/cu.wchusbserial*`、`/dev/cu.usbmodem*`、`/dev/ttyUSB*`、`/dev/ttyACM*`；Windows 上为 USB COM 端口）；若连接了多个则拒绝自动选择，因为打开端口可能重置开发板。每个进程只打开一次端口，DTR 和 RTS 均释放；macOS 上的 CP2102 开发板仍会在打开时复位，因此主持端在切换到 921600 前，会在 5 秒内重试 HELLO。Windows 以独占方式打开 COM 端口：只要本进程或其他进程仍持有句柄，第二次打开就会因 `PermissionError(13, 'Access is
 denied.')` 失败。所以开发板始终不应答 HELLO 时，启动器必须先关闭端口再重试。
 
+在 Windows 11 上，使用 Silicon Labs 驱动 11.6.0.420，通过 CP2102 连接经典 ESP32，测得以下结果：
+
+| `open()` 前的信号状态 | 打开次数 | 复位启动信息 | ROM 下载模式 | 后续行为 |
+|---|---|---|---|---|
+| DTR 和 RTS 均释放（主持端的打开方式） | 40 | 0 | 0 | 正在运行的固件发出 CREDIT 帧；HELLO 在 0.06 s 内得到应答，30 次测试全部成功 |
+| pyserial 默认状态，两者均置为有效 | 20 | 20，`rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)` | 0 | 固件在启动时发出 INFO，约在打开端口后 0.3 s |
+| DTR 释放、RTS 置为有效 | 20 | 0 | 0 | 端口打开期间没有字节：RTS 在双晶体管自动复位电路中使 EN 保持低电平 |
+
+开发板停留在 ROM 下载模式时不会应答 HELLO，应用检查会提示未安装 pokeldn 固件。若其他进程占用端口，打开操作会立即失败，应用会提示端口被占用。
+
 使用开发板时，启动器跳过所有 nl80211 步骤：`--phy auto` 解析为 `esp32`，不删除虚拟接口，也不执行 `iw`、`ip`、`nmcli` 或 `sysctl`；加入方的 `--mac` 改为开发板站点地址。macOS 不需要 root 权限。扫描会跳过 5 GHz 信道（36 及以上），因为开发板只支持 2.4 GHz，无法连接在 5 GHz 上主持会话的主机。FRLG 主持端不注入信标，由开发板接入点自行广播。
 
 `POKELDN_ESP32_TRACE=FILE` 逐行追加所有串口消息：Unix 时间、`>`（主持端）或 `<`（开发板）、类型及十六进制载荷。

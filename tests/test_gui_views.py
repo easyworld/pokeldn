@@ -153,6 +153,7 @@ def _app(port, ident, chip=""):
     app.settings = SimpleNamespace(radio_port="", keys="")
     app.identities = {port.device: ident} if ident is not None else {}
     app.chips = {port.device: chip} if chip else {}
+    app.hidden_bridges = []
     return app
 
 
@@ -269,6 +270,54 @@ def test_a_ch340_on_usb_with_no_tty_names_brltty_on_linux(tmp_path, monkeypatch,
     assert ("apt remove brltty" in status.detail) == (tty is None)
 
 
+@pytest.mark.parametrize("devices, title, step", [
+    ("USB\\VID_10C4&PID_EA60\\0001\r\n", "已找到开发板，但未安装驱动", "silabser.inf"),
+    ("USB\\VID_1A86&PID_7523\\5&2A1B&0&2\r\n", "已找到开发板，但未安装驱动", "CH341SER.EXE"),
+    ("USB\\VID_046D&PID_C52B\\6&3&0&1\r\n", "未连接开发板", None),   # a mouse receiver
+    ("", "未连接开发板", None),
+])
+def test_a_bridge_with_no_driver_names_its_install_steps_on_windows(monkeypatch, devices, title, step):
+    """A CP210x or CH340 with no Windows driver gets no COM port; Device Manager lists it with a
+    problem code, and the status names the driver to install."""
+    import subprocess
+    calls = []
+
+    def powershell(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, devices, "")
+
+    app = _app(UART, None)
+    app.hidden_bridges = board_module.bridges_without_driver(run=powershell)
+    monkeypatch.setattr(sys, "platform", "win32")
+    status = app.board_status([])
+    assert calls[0][0] == "powershell" and "ConfigManagerErrorCode" in calls[0][-1]
+    assert status.state == "missing" and status.title == title
+    assert step is None or step in status.detail
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+def test_board_help_is_chinese_and_only_shows_the_platforms_setup(monkeypatch, platform):
+    import flet as ft
+    from gui.views.boards import BoardView
+
+    monkeypatch.setattr(sys, "platform", platform)
+    view = BoardView.__new__(BoardView)
+    view.app = SimpleNamespace()
+
+    def texts(control):
+        if isinstance(control, ft.Text):
+            yield control.value
+        for child in [*(getattr(control, "controls", None) or []), getattr(control, "content", None)]:
+            if isinstance(child, ft.Control):
+                yield from texts(child)
+
+    shown = "\n".join(texts(view.help_card()))
+    assert "没有看到开发板？" in shown
+    assert ("silabser.inf" in shown) == (platform == "win32")
+    assert ("CH341SER.EXE" in shown) == (platform == "win32")
+    assert ("sudo usermod -aG dialout $USER" in shown) == (platform == "linux")
+
+
 def _release_server(routes: dict):
     import http.server
     import threading
@@ -343,10 +392,14 @@ def test_a_pokemon_file_shows_its_own_species_and_shininess(monkeypatch):
     assert (saved[-1]["species"], saved[-1]["shiny"], picker.species.value, picker.shiny.value) == (6, True, "6", True)
 
 
+@pytest.mark.parametrize("assembler", [True, False])   # a computer without the Arm toolchain sees the install hint
 @pytest.mark.parametrize("key", ["frlg-gift", "swsh-gift"])
-def test_the_gift_builder_renders_every_mode_and_kind_and_exports_what_it_shows(tmp_path, monkeypatch, key):
+def test_the_gift_builder_renders_every_mode_and_kind_and_exports_what_it_shows(tmp_path, monkeypatch, key,
+                                                                                assembler):
     import asyncio
     from gui.views import gifts as view_module
+    if not assembler:
+        monkeypatch.setattr(view_module.custom_code, "toolchain", lambda: None)
     from pokeldn import gifts
     from pokeldn.app import gift_builder
     from pokeldn.app.catalog import GAMES

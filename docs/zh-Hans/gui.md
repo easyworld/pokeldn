@@ -22,6 +22,17 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 
 所有连接游戏机的工具都会使用此训练家作为本机玩家，替换参考消息中的名称（`tests/test_gui_catalog.py`）。火红／叶绿、Let's Go!、剑／盾和晶灿钻石／明亮珍珠的启动器会将 ID 写入相应记录。火红和叶绿名称最多七个第三世代字符，过长会截断为七个；名称含不受支持的字符时改用 `POKELDN`（`Settings.name`）。
 
+## Windows USB 驱动
+
+经典 ESP32 开发板通过 USB 转串口芯片连接电脑，芯片型号印在 USB 接口旁。Windows 只有在安装该芯片的驱动后才会分配 COM 端口；未安装时，应用的开发板列表中不会显示它，设备管理器会显示警告（问题代码 28，未安装驱动）。ESP32-S3、C3 和 C6 使用原生 USB 接口时无需安装此类驱动。
+
+| 桥接芯片 | USB ID | 驱动 | 安装方法 |
+|---|---|---|---|
+| Silicon Labs CP2102 / CP210x | `10c4:ea60` | [CP210x VCP 驱动](https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers)，下载 CP210x Universal Windows Driver 压缩包 | 解压，右键单击 `silabser.inf` 并选择“安装”，然后拔出并重新连接开发板 |
+| WCH CH340 | `1a86:7523` | [CH341SER.EXE](https://www.wch-ic.com/downloads/CH341SER_EXE.html) | 运行并点击“安装”，然后拔出并重新连接开发板 |
+
+没有列出 COM 端口时，开发板页面每 2 秒查询一次 Windows 中设备管理器报告异常的 USB 设备（`Get-CimInstance Win32_PnPEntity`、`ConfigManagerErrorCode <> 0`），识别已知桥接芯片并显示对应驱动的安装步骤（`gui/board.py` 的 `bridges_without_driver`）。
+
 ## Linux 串口
 
 该应用程序以用户身份打开开发板，无需 root 也无需内核网络。打开端口需要`dialout`组（Arch上为`uucp`）；用户可能无法打开的端口会失败并显示 `EACCES`，然后 Board 页面会命名该组而不是繁忙端口。

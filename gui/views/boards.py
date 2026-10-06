@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import threading
 import time
 
@@ -67,7 +68,14 @@ class BoardView:
     def _poll(self) -> None:
         while self.visible:
             time.sleep(2)
-            if self.visible and [p.device for p in board.ports()] != [p.device for p in self.ports]:
+            present = board.ports()
+            if sys.platform == "win32":
+                hidden = [] if present else board.bridges_without_driver()
+                if hidden != self.app.hidden_bridges:
+                    self.app.hidden_bridges = hidden
+                    self.app.ui(self.scan)
+                    continue
+            if self.visible and [p.device for p in present] != [p.device for p in self.ports]:
                 self.app.ui(self.scan)
 
     def scan(self, update: bool = True) -> None:
@@ -366,13 +374,19 @@ class BoardView:
             return t.secondary_button(label, lambda e: self.app.page.run_task(self.app.open_url, url),
                                       "external-link")
 
-        return t.card('没有看到开发板？', ft.Column([
-            t.text('请尝试其他数据线或 USB 接口。许多线缆仅支持充电。', 13),
-            t.text('Windows 和 macOS 需要安装开发板 USB 芯片驱动：', 13),
-            ft.Row([link("CP210x", board.DRIVERS["Silicon Labs CP210x"]),
-                    link("CH340", board.DRIVERS["WCH CH340"])], spacing=6, wrap=True),
-            t.text('Linux：授予串口权限，然后注销并重新登录：', 13),
-            CodeBlock(self.app, "sudo usermod -aG dialout $USER").control,
-            t.text('Arch 及其衍生发行版使用 uucp 用户组，而不是 dialout。', 13, t.MUTED),
-            t.text('请使用经典 ESP32（ESP32-D0WD、WROOM-32E），或通过原生 USB 接口连接 ESP32-S3、C3、C6。不支持 S2 开发板。', 13, t.MUTED),
-        ], spacing=8))
+        lines = [t.text('请尝试其他数据线或 USB 接口。许多线缆仅支持充电。', 13)]
+        if sys.platform == "win32":
+            lines += [
+                t.text('Windows 需要安装开发板 USB 芯片的驱动，芯片型号印在 USB 接口旁的芯片上（CP2102 或 CH340）：', 13),
+                ft.Row([link("CP210x 驱动", board.DRIVERS["Silicon Labs CP210x"]),
+                        link("CH340 驱动", board.DRIVERS["WCH CH340"])], spacing=6, wrap=True),
+                t.text(f"CP210x: {board.DRIVER_STEPS['Silicon Labs CP210x']}", 13, t.MUTED),
+                t.text(f"CH340: {board.DRIVER_STEPS['WCH CH340']}", 13, t.MUTED)]
+        elif sys.platform.startswith("linux"):
+            lines += [
+                t.text('授予串口权限，然后注销并重新登录：', 13),
+                CodeBlock(self.app, "sudo usermod -aG dialout $USER").control,
+                t.text('Arch 及其衍生发行版使用 uucp 用户组，而不是 dialout。', 13, t.MUTED)]
+        lines.append(t.text('请使用经典 ESP32（ESP32-D0WD、WROOM-32E），或通过原生 USB 接口连接 ESP32-S3、C3、C6。不支持 S2 开发板。',
+                            13, t.MUTED))
+        return t.card('没有看到开发板？', ft.Column(lines, spacing=8))

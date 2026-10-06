@@ -1,12 +1,14 @@
-# pokeldn 0.12.1
+# pokeldn 0.12.2
 
 This desktop app trades with seven Pokemon game families on a Switch or Switch 2
 through an ESP32 radio connected by USB. Nothing is installed on the console.
 
 ## What is new
 
-- Windows: a board that does not answer at first no longer leaves its port locked, so the retries
-  stop failing with "Access is denied", and the error names every attempt's cause.
+- Windows: a board whose USB chip has no driver is named on the Board page ("Board found without a
+  driver") with the steps to install the CP210x or CH340 driver.
+- The Board page's help shows only what applies to your computer: driver links and steps on Windows,
+  the serial-port group on Linux.
 
 The firmware is unchanged (1.4.0); a board flashed by 0.7.0 or later needs no reflash.
 
@@ -35,6 +37,8 @@ The separate `pokeldn-radio*.bin` files are merged firmware images for manual fl
    - Windows: if SmartScreen stops the app, choose More info, then Run anyway.
 2. Choose `prod.keys` when prompted.
 3. Connect one supported board with a USB data cable. S3, C3 and C6 boards use native USB Serial/JTAG.
+   On Windows, a classic ESP32 needs its USB chip's driver first (CP210x or CH340); the Board page
+   links both, says how to install them and names the one missing.
    A board that ships an external antenna, such as the Seeed Studio XIAO ESP32C3 or XIAO ESP32S3,
    needs it attached; larger S3 boards such as the N8R2 and N16R8 have an onboard antenna.
 4. On Board, press Flash. The app checks the board on its own and shows Board ready.
