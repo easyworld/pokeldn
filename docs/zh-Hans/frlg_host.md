@@ -63,7 +63,7 @@ stateDiagram-v2
 | LDN 发现 |名称和公共 TID |
 |皮亚会议 | UTF-8 参与者姓名 |
 |链接播放器 | `SID << 16 \| TID`，版本、语言、性别和进度标志；第三代名称 |
-|教练卡|第三代名称；主机垫带有 `0xFF`，连接器保留原生 `0x00` |
+|训练家卡|第三代名称；主机垫带有 `0xFF`，连接器保留原生 `0x00` |
 ## 失败处理
 
 - 预检会拒绝没有 AP 支持的无线收发设备。
@@ -86,7 +86,7 @@ stateDiagram-v2
 | `bin/frlg_trade_host.py` | CLI、配置、入口点 |
 | `pokeldn/frlg/host_cli.py` |共享主机 CLI 选项 |
 | `pokeldn/frlg/link/host_app.py` | `HostApplication` |
-| `pokeldn/frlg/config.py` |培训师、交换计划、神秘礼物发票、LDN、角色和运行配置 |
+| `pokeldn/frlg/config.py` |训练家、交换计划、神秘礼物发票、LDN、角色和运行配置 |
 | `pokeldn/frlg/link/trade_runtime.py` | CLI 日志记录、队列加载、槽解析、输出保存 |
 | `pokeldn/frlg/link/host_beacon.py` |捕获交换信标，发现突变，`BeaconInjector` |
 | `pokeldn/host_support.py` |面向操作系统的支持（sudo 感知键路径解析）|

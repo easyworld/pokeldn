@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a desktop bundle, including PKHeX and the required radio firmware."""
+import argparse
 import os
 import importlib.util
 import platform
@@ -73,6 +74,11 @@ def clear_cfg(exe: Path) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--onefile", action="store_true", help="Build a single Windows executable.")
+    options = parser.parse_args()
+    if options.onefile and sys.platform != "win32":
+        parser.error("--onefile is supported for Windows only")
     firmware = (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6)
     missing = [str(path) for path in firmware if not path.is_file()]
     if missing:
@@ -128,16 +134,17 @@ def main() -> int:
         console = ["--console", "--hide-console=hide-early"] if sys.platform == "win32" else []
         # A single file unpacks all of itself at every launch and every run (docs/gui.md). Flet's own
         # --onedir refuses macOS; this later PyInstaller flag wins over the --onefile Flet passes.
-        onedir = ["--onedir"]
+        bundle_mode = ["--onefile"] if options.onefile else ["--onedir"]
         for option in (f"--paths={dependencies}", f"--paths={ROOT}", f"--paths={ROOT / 'bin'}", f"--paths={ROOT / 'vendor' / 'LDN'}",
-                       *console, *onedir,
+                       *console, *bundle_mode,
                        *[f"--hidden-import={s}" for s in scripts],
                        *[f"--exclude-module={m}" for m in platform_excludes()], "--collect-all=esptool", "--collect-submodules=unicorn",
                        "--collect-all=esp_pylib", "--collect-submodules=pokeldn",
                        "--collect-submodules=ldn"):
             args.append(f"--pyinstaller-build-args={option}")
         result = subprocess.run(args, cwd=stage, env=dict(os.environ, FLET_VIEW_PATH=str(client))).returncode
-        expected = ROOT / "dist" / (("pokeldn.app" if sys.platform == "darwin" else "pokeldn"))
+        name = "pokeldn.exe" if options.onefile else ("pokeldn.app" if sys.platform == "darwin" else "pokeldn")
+        expected = ROOT / "dist" / name
         if result == 0 and not expected.exists():
             raise SystemExit("The packer produced no desktop application.")
         if result == 0 and sys.platform == "darwin":
@@ -151,7 +158,7 @@ def main() -> int:
                 plistlib.dump(info, dest)
             subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(expected)], check=True)
         if result == 0 and sys.platform == "win32":
-            clear_cfg(expected / "pokeldn.exe")
+            clear_cfg(expected if options.onefile else expected / "pokeldn.exe")
         if result == 0 and sys.platform.startswith("linux"):
             (ROOT / "dist" / f"{APP_ID}.desktop").unlink(missing_ok=True)
         return result

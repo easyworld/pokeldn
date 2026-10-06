@@ -35,7 +35,10 @@ UPDATE = ("update", '更新', "download")
 def main(page: ft.Page) -> None:
     page.title = "pokeldn"
     page.theme_mode = ft.ThemeMode.DARK
-    page.theme = page.dark_theme = t.app_theme()
+    # CanvasKit web previews cannot use the desktop host's installed fonts.
+    page.theme = page.dark_theme = t.app_theme(system_fonts=not page.web)
+    chinese = ft.Locale("zh", "CN", "Hans")
+    page.locale_configuration = ft.LocaleConfiguration(supported_locales=[chinese], current_locale=chinese)
     page.bgcolor = t.BG
     page.padding = 0
     # 1440 x 900 overflows a 13-inch MacBook Air (1440 x 932 points less the menu bar): fit, then center.

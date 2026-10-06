@@ -32,7 +32,7 @@ nav_order: 2
 | 0x14 | `NetRecodeData` | 694 | 694 `RECORD` 120、`RANDOM_SEED` 132、`TvRecodeData` 204、4 x `TV_STR_DATA` 36、`RECORD_HEAD` 48、10 个整数、6 个字节 |
 | 0x15 | `BallDecoData` | 143 | 143 affixSealCount、Is3DEditMode、IsAppliedTemplate，然后 `AttachSealData` 140 (20 x `SealParam{short x, y, z; byte id}`) |
 | 0x18，0x54 | `UgSecretBase` | 616 | 616短zoneID、posX、posY；字节方向、扩展状态； int 好计数； 30×`UgStoneStatue` 20；布尔 isEnable (4) |
-| 0x22 | `StanbyListData` | 20 | 5 x `StandbyData`（isAddPlayer、hostIndex、myIndex、langId）|
+| 0x22 | `StanbyListData` | 20 | 5 个 `StandbyData`（isAddPlayer、hostIndex、myIndex、langId）|
 | 0x24 | `TradeTranerData` | 32 | 32 13 UTF-16 字符、uint tranerId、字节 cassetVersion、字节 langId |
 | 0x29，0x61 | `UgStationID_to_DigFossilIDList` | 8 | `byte DigFossilIDs[8]`，0..7 的排列 |
 | 0x38 | `BattleMatchingPokeData` | 481 | 481 328 字节 PB8，20 x `SealParam` 7，uint AttachPokemonId，uint AttachPersonalRnd，字节索引，num，is3DEditMode，isAppliedTemplate，affixSealCount |
@@ -51,10 +51,10 @@ nav_order: 2
 
 |编号 |类 |可靠 |不可靠|尺寸|
 |---|---|---|---|---|
-| 0x01 | `NetJoinData` | 2070 | 2070 0 | 17 | 17
-| 0x02 | `NetPosData` | 0 | 60| 72 | 72
-| 0x12 | `NetRequestData` | 4333 | 55 | 55 1 |
-| 0x23 | `NetDataIsMatchWaitData` | 1734 | 1734 0 | 1 |
+| 0x01 | `NetJoinData` | 2070 | 0 | 17 |
+| 0x02 | `NetPosData` | 0 | 60 | 72 |
+| 0x12 | `NetRequestData` | 4333 | 55 | 1 |
+| 0x23 | `NetDataIsMatchWaitData` | 1734 | 0 | 1 |
 
 根据请求，它还发送 0x09（一个字节，0 表示没有战斗设置）和 0x22；在一项活动中，0x14 和
 0x15。交换消息位于[交换页面](bdsp_trade.md)。
@@ -78,7 +78,7 @@ nav_order: 2
 |要求|次 |
 |---|---|
 | `NetDataIsMatchWaitData` (0x23) | 4333 |
-| `NetCharacterStateData` (0x04) | 55 | 55
+| `NetCharacterStateData` (0x04) | 55 |
 
 游戏在创建角色时询问每个角色的站状态，因此 0x04 请求表示角色存在（55 个请求，在 265 个未绘制角色的连接中没有一个请求）； `bin/bdsp_connect.py` 将其打印为判决。游戏机重复其 0x23 请求，直到客户端确认其可靠窗口； 75 秒内收到了 487 个未确认的请求。
 
@@ -283,7 +283,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 | `lang` |限制|
 |---|---|
 | 1、8、9、10 | 6 |
-|任何其他正值| 12 | 12
+| 其他任意正值 | 12 |
 | 0 或以下 | UI 的当前语言决定 |
 
 语言为PlayerInfo字节0x7A。 Mesh Station 协议的解析器 [0x0154f044..0x0154f5e0] 每次迭代读取一个 195 字节的 PlayerInfo (`add w23, w23, #0xc3` 0x0154f588)；无论编码如何，偏移量都是固定的：
@@ -301,11 +301,11 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 `INLpiaSessionGetPlayerInfo`到达`0x01391a90`，默认该字节为0xFF[0x01391b44]，并将站记录的+0x480原封不动地复制到`NetGamerNameGet`的`nameStringLanguage`中[0x01391bb0]。该字节是 `MsgLangId`：
 
     JPN 1, USA 2, FRA 3, ITA 4, DEU 5, ESP 7, KOR 8, SCH 9, TCH 10
- 游戏机通过 `IlcaNetBase$$PlatformInitialize2` [0x01e13ce0] 发送自己的 `MessageManager$$get_UserLanguageID` 及其 `CheckNGTrainerName` 检查名称（`SessionConnector$$ResetParam` [0x0202f050]） `PiaPlugin$$RegisterStartupSessionSetting` [0x0227d5a0]，并且站协议的 PlayerInfo writer 将 +0x480 放在字节 0x7A [0x01550e98] 处。法国游戏机的连接响应（站协议类型2）携带编码1、其名称、字节0x79 0和字节0x7A 3。
+ 游戏机通过 `IlcaNetBase$$PlatformInitialize2` [0x01e13ce0] 发送自己的 `MessageManager$$get_UserLanguageID` 及其 `CheckNGTrainerName` 检查名称（`SessionConnector$$ResetParam` [0x0202f050]） `PiaPlugin$$RegisterStartupSessionSetting` [0x0227d5a0]，并且站协议的 PlayerInfo writer 将 +0x480 放在字节 0x7A [0x01550e98] 处。法语版游戏机的连接响应（站协议类型2）携带编码1、其名称、字节0x79 0和字节0x7A 3。
 
 语言为发送者的游戏文字语言，保存`CONFIG.msg_lang_id`（PlayerWork +0xac，
 `get_msgLangID` [0x0237e100]); `GameManager.<OnetimeInitializeOperation>` [0x01e0eb44]仅当存储的值在1..10之外时才从系统语言（`GetCurrentIetfCode`）填充。本站记录的+0x480是由`strb w8, [x23, x22]` [0x0154956c]写入`0x015494f0`，从
-`JoinMeshJob::SetupLocalPlayerInfo` [0x0155b988]，在 Pia 会话条目中设置生成器 [0x0156fa08] 填充（条目 +0x80，跨步 0x98）。法国游戏机在 30 个 PlayerInfo（17 个连接响应，13 个连接请求）中的 30 个中发送了字节 0x7A 3 和字节 0x51 0。
+`JoinMeshJob::SetupLocalPlayerInfo` [0x0155b988]，在 Pia 会话条目中设置生成器 [0x0156fa08] 填充（条目 +0x80，跨步 0x98）。法语版游戏机在 30 个 PlayerInfo（17 个连接响应，13 个连接请求）中的 30 个中发送了字节 0x7A 3 和字节 0x51 0。
 
 `bin/bdsp_connect.py` 和 `bin/bdsp_host.py` 都使用 `pokeldn/bdsp/host.py` 构建 PlayerInfo
 `player_info`（编码1，UTF-8名称，字节0x51 0）并发送`--language`，默认3；桌面应用程序通过其培训语言。 3岁以下，11个字符的名字显示完整。
@@ -324,8 +324,8 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 |西班牙语 | `Perla.` | `Diamant.` |
 |日本，jpn_kanji | `パール.` | `ダイヤ.` |
 |韩语 | `펄.` | `다이아몬드.` |
-| simp_chinese | `帕尔.` | `戴亚.` |
-| trad_chinese | `帕爾.` | `戴亞.` |
+| 简体中文（simp_chinese） | `帕尔.` | `戴亚.` |
+| 繁体中文（trad_chinese） | `帕爾.` | `戴亞.` |
 ### talkState，以及导致游戏崩溃的值
 
 `TalkState` 为 `{CHECK = 0, GREETING = 1, NONE = 2}`；停放的游戏机在 `GREETING` 中等待。
@@ -340,7 +340,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 | 3, 17 |战斗| `TransitionBattle` | +0x38 或 +0x40 由 `isRecruitment` (`tbz w4`) |
 | 4, 18 | 交换 | `TransitionTradePoke` | +0x50, `tradeJoinStateModel` |
 | 5, 19 |混合记录| `RecodeMatching$$Open` | +0x60 |
-| 6、20 |教练卡| `TransitionShowTrainerCard` | +0x70 |
+| 6、20 |训练家卡| `TransitionShowTrainerCard` | +0x70 |
 | 7、21 |球胶囊| `BallDecoMatching$$Open` | +0x80 |
 | 8 至 16 |无 | |没有任何;返回 |
 
@@ -366,29 +366,20 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 `DPData`) 元帅位于包 4，`TvRecode*` 结构位于包 8；在这些字段大小下没有填充结果。
 ### 战斗天梯
 
-> 本节已随上游更新，以下内容暂保留英文。
+对战（“Combattre”，招募时状态字节为 3）按以下交互流程进行；招募方主机在每一步都等待加入方（此处为客户端）：
 
-A battle ("Combattre", state byte 3 while recruiting) runs a ladder; the recruiting console waits on
-the joiner (here the client) at every rung:
-
-| the joiner sends | the console does |
+| 加入方发送 | 主机的行为 |
 |---|---|
-| `NetDataTalkData{GREETING}` | shows "Un combat ? OK ! Donne-moi juste une minute !" and waits |
-| `NetDataSelectData{0}` (0x08) | shows "POKELDN est en train de choisir quoi faire..." and waits |
-| `NetDataBattleTypeData{0}` (0x09, `BattleModeID.Single`) | asks its player "voulez-vous faire un combat selon ces règles ?"; on yes sends `NetDataTransitionData{17, 0}`, state byte 17, and opens the solo lobby at "connexion en cours" |
-| `NetDataBattleMatchingJoin` (0x30) `{uint id, byte stationIndex, index, language, colorId, avatarId, sexId, cassetVersion}` | answers with its own join (`id` its trainer id, station 0, index 0) and relays the joiner's back; the joiner's character appears in the lobby's second slot |
-| `NetDataBattleMatchingReady` (0x32, empty) | `BattleMatchingManager$$ReceiveReadyData`: when every member is ready, `NetDataBattleMatchingState{0, 6}` (0x33), `MatchingState.SelectBattleTeam` (4 and 5 skipped for a solo battle), and its player gets the team-selection button |
-| nothing | on the player's team choice, six `NetDataBattleMatchingSelectPokemon` (0x38, 481 bytes), then "en attente d'autres personnes" |
+| `NetDataTalkData{GREETING}` | 显示“Un combat ? OK ! Donne-moi juste une minute !”（要对战？好！稍等我一下！）并等待 |
+| `NetDataSelectData{0}` (0x08) | 显示“POKELDN est en train de choisir quoi faire...”（POKELDN 正在选择要做的事情……）并等待 |
+| `NetDataBattleTypeData{0}` (0x09, `BattleModeID.Single`) | 询问玩家“voulez-vous faire un combat selon ces règles ?”（是否按这些规则对战？）；选择是后发送 `NetDataTransitionData{17, 0}`，状态字节为 17，并打开显示“connexion en cours”（正在连接）的单打大厅 |
+| `NetDataBattleMatchingJoin` (0x30) `{uint id, byte stationIndex, index, language, colorId, avatarId, sexId, cassetVersion}` | 以本站的加入消息回复（`id` 为训练家 ID，station 为 0，index 为 0），并转发加入方的消息；加入方角色出现在大厅的第二个位置 |
+| `NetDataBattleMatchingReady`（0x32，内容为空） | `BattleMatchingManager$$ReceiveReadyData`：全员准备完毕后发送 `NetDataBattleMatchingState{0, 6}`（0x33），进入 `MatchingState.SelectBattleTeam`（单打跳过 4 和 5），玩家获得队伍选择按钮 |
+| 不发送消息 | 玩家选择队伍后，发送六条 `NetDataBattleMatchingSelectPokemon`（0x38，481 字节），随后显示“en attente d'autres personnes”（等待其他玩家） |
 
-Each 0x38 holds an encrypted PB8 whose checksum verifies (the picked team, in order), twenty
-`SealParam` slots of identical heap residue with `affixSealCount` 0, `attachPokemonId` and
-`attachPersonalRnd` 0, `index` 0 to 5 and `num` 6. A console accepted a 0x30 whose `id` was
-0x0badc0de; no check on the field is located. `BattleMatchingManager.MatchingState`: None 0,
-Initialize 1, Load 2, RecruitmentMember 3, SelectTeamMember 4, SelectRule 5, SelectBattleTeam 6,
-SelectPokemon 7, GoBattle 8, Result 9, Resume 10, Closing 11, LeavedOtherMembers 12.
+每条 0x38 包含一个校验和有效的加密 PB8（按选中队伍的顺序）、二十个具有相同堆残留数据的 `SealParam` 槽位；其中 `affixSealCount` 为 0，`attachPokemonId` 和 `attachPersonalRnd` 为 0，`index` 为 0 至 5，`num` 为 6。一台主机接受了 `id` 为 0x0badc0de 的 0x30；尚未找到对该字段的检查。`BattleMatchingManager.MatchingState` 的枚举值为：None 0、Initialize 1、Load 2、RecruitmentMember 3、SelectTeamMember 4、SelectRule 5、SelectBattleTeam 6、SelectPokemon 7、GoBattle 8、Result 9、Resume 10、Closing 11、LeavedOtherMembers 12。
 
-`NetDataSelectData` (0x08) is `{byte index}`. Its one receiver [`UnionRoomManager$$SetNetData`,
-0x01e52a30] reads the sender's station and never the index:
+`NetDataSelectData`（0x08）对应 `{byte index}`。唯一的接收器 [`UnionRoomManager$$SetNetData`，0x01e52a30] 读取发送方的站点，而不读取 index：
 
     m = stateController.battleRecruitmentModel                  UnionStateController +0x38
     m.ChangeBattleRecruitmentState(BATTLE_RULE_SELECT_WAIT 4)   0x01d2aab0
@@ -397,35 +388,13 @@ SelectPokemon 7, GoBattle 8, Result 9, Resume 10, Closing 11, LeavedOtherMembers
     if m.unionMsgBattleWindow != null:
         SetTargetDataMessage(window, station, 1, 1); OpenMsgWindow(window, 3, 2)   0x01f86fa0
 
-A 0x08 drives the battle recruitment model whatever conversation is open. Both senders write 0
-(`UnionBattleContextMenu$$SendRuleSelectState` [0x01f87c60], a tail call, and
-`<ShowBattleJoinYesNoWindow>b__0` [0x01f8800c]).
+无论当前打开哪种对话，0x08 都会驱动对战招募模型。两个发送器都写入 0（`UnionBattleContextMenu$$SendRuleSelectState` [0x01f87c60] 为尾调用，以及 `<ShowBattleJoinYesNoWindow>b__0` [0x01f8800c]）。
 
-The receiver never tests the model for null: it loads +0x38 [0x01e52a78] and case 4 writes
-through it in `NetStateModel$$SetState` [0x023e2604]. The only store to +0x38 is
-`CreateSelectStateModel` [0x01e4bb08], building a `BattleRecruitmentStateModel` for state 3 or 17
-when the player recruits a battle (`stateModelType` 0; the A press passes 1 and builds a
-`BattleJoinStateModel`). `UnionStateController` is built once per `UnionRoomManager`
-(`UnionRoomManager$$SetUp`, `.ctor` 0x01e4d01c), and a link battle keeps both
-(`EvDataManager$$UpdateStart` -> `UnionRoomManager$$ReturnBattle` [0x01b02a78], no constructor).
-Each entry builds a new `UnionRoomManager`: `EvDataManager$$EvCmdUnionProc` [0x01b35f70] adds it to a
-`new GameObject("UnionRoomManager")` [0x01b36090] before the warp into the room, with no
-`DontDestroyOnLoad`. `UnionRoomManager$$Init` [0x01e49e40] passes the zones {484, 491, 492, 493}
-(`UNION`, `UNION01` to `UNION03`) to `NetUseManager.SetEnableZone` [0x026cfca0], which subscribes to
-`FieldManager`'s zone-change event; `NetUseManager.OnZoneChange` [0x026cfef0] calls
-`Object.Destroy(gameObject)` [0x026d00f0] on the first zone outside the list. Leaving (`LeaveUnion`
-[0x01e4e300], its coroutine setting the transition zone at [0x01e560e0]) is such a change, so
-`UnionRoomManager$$OnDestroy` [0x01e4c540] runs and calls `Clear`. The recruitment model therefore
-starts null on every visit. A 0x08 reaching a console whose player has not recruited a battle in that
-visit writes through null.
+接收器从不检查模型是否为空：它加载 +0x38 [0x01e52a78]，并在分支 4 中通过该指针调用 `NetStateModel$$SetState` [0x023e2604] 写入。唯一写入 +0x38 的是 `CreateSelectStateModel` [0x01e4bb08]：玩家招募对战时，为状态 3 或 17 创建 `BattleRecruitmentStateModel`（`stateModelType` 为 0；按 A 传入 1 并创建 `BattleJoinStateModel`）。每个 `UnionRoomManager` 只创建一次 `UnionStateController`（`UnionRoomManager$$SetUp`、`.ctor` 0x01e4d01c），连接对战保留两者（`EvDataManager$$UpdateStart` → `UnionRoomManager$$ReturnBattle` [0x01b02a78]，没有构造函数）。每次进入都会新建 `UnionRoomManager`：`EvDataManager$$EvCmdUnionProc` [0x01b35f70] 在传送进房间前把它添加到 `new GameObject("UnionRoomManager")` [0x01b36090]，没有 `DontDestroyOnLoad`。`UnionRoomManager$$Init` [0x01e49e40] 把区域 {484, 491, 492, 493}（`UNION`、`UNION01` 至 `UNION03`）传给 `NetUseManager.SetEnableZone` [0x026cfca0]，后者订阅 `FieldManager` 的区域变化事件；`NetUseManager.OnZoneChange` [0x026cfef0] 在首次进入列表外区域时调用 `Object.Destroy(gameObject)` [0x026d00f0]。离开（`LeaveUnion` [0x01e4e300]，其协程在 [0x01e560e0] 设置过渡区域）正是这样的变化，因此执行 `UnionRoomManager$$OnDestroy` [0x01e4c540] 并调用 `Clear`。所以每次进入时，招募模型最初都为空；若玩家本次尚未招募对战便收到 0x08，就会通过空指针写入。
 
-The ladder's 0x08 row was measured on a console that had recruited the battle. A 0x08 under a
-sequence id the client already used is discarded by the reliable window ([the Pia
-page](pia.md#what-the-receiver-discards-in-silence)); the 22 sent to a talking console that had not
-recruited went out under an id one of the client's own 0x64 answers already held, so none reached
-the null path.
+流程表中的 0x08 是在已经招募对战的主机上测得的。客户端已使用过的序列号会被可靠窗口丢弃（[Pia 页](pia.md#what-the-receiver-discards-in-silence)）；向尚未招募对战、正在对话的主机发送的 22 条消息，使用了客户端此前某条 0x64 回复的序列号，因此没有一条进入空指针路径。
 
-Never send 0x08 unless the console's own 0x04 says state 3 with `isRecruiment` 1.
+只有主机自身的 0x04 表明状态为 3 且 `isRecruiment` 为 1 时，才可发送 0x08。
 
 ### 地下大洞窟
 

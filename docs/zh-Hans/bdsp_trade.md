@@ -104,7 +104,7 @@ SECURIY_TRADE 丢弃解码后的宝可梦并调用 `SetSecurityTradeParam()`，�
 
 `GetPokeRarityNum` 按顺序遍历三个静态 `MonsNo[]` 列表（0x1cbe614、0x1cbe698、0x1cbe71c；无 0x1cbe730），由 `Utils$$.cctor` 填充[0x1cbe9a0] 从 1.3.0 开始：`global-metadata.dat`：
 
-|静态场|稀有度|元数据 |物种 |
+|静态场|稀有度|元数据 |种类 |
 |---|---|---|---|
 | `very_rare_monsno` +0x78 | 3 | `0x666aa6` | 151、251、385、386、489、490、491、492、493（神话）|
 | `legend_rare_monsno` +0x80 | 2 | `0x666b06` | 150、249、250、382、383、384、483、484、487（盒子传奇）|
@@ -155,7 +155,7 @@ SEND_READYOK;下一轮从游戏机的下一个 `NetTradePokeData` 开始。
 `NetDataReturnSelectData` (0x45)、`45 00 01 00` (`{isReturnSelect: 0}`) 是游戏机对重置的响应（[盒子阶段](#box-phases-and-the-messages-that-reset-a-round)）：`{1}`，或0x21 在框阶段 5 或以下的选择窗口中着陆，通过相同路径 [0x1c3440c] 重置并显示 `SS_box_588`。它不要求任何答案（`{1}` 答案会绘制 `{0}` 并重置已经清除的回合）。在 26 笔捕获交易中的 26 笔中，客户端通过动画每秒重复其状态一次，`{0}` 跟随客户端的 0x21 之一 25 到 300 毫秒，玩家看到
 `SS_box_588`;在游戏机的 SEND_READYOK 之后没有 0x21，在两种角色的 5 个零售交易中的 5 个中（每个角色中有两个在一个协会中排队），游戏机没有发送 0x45 并且没有显示取消。 `TradeSelectPokeModel$$SendReturnSelectPoke` [0x01c27c20] 构建它（`isReturnSelect` = 不是它的参数，为 `tradeTargetIndex` +0x48）；它没有直接的 `bl` 调用者。
 
-交易链在一个关联中，每个交易都从选择窗口循环，没有第二次方法或培训师记录：三笔交易与 `bin/bdsp_connect.py` 连续完成（框屏幕在每笔交易后返回），两笔交易与 `bin/bdsp_host.py` 托管。 `TradeStateModel$$ReturnTradePokeSelectWindow` [0x01c29590]运行`PlayerSave`，然后模型在+0x80处回调；其调用者未被追踪。第二次交换会读回游戏机存储的内容。当玩家选择（框第 5 阶段或以下）时，SEND_READYOK (5) 0x21 着陆会重置该回合，因此游戏机的 SEND_READYOK 之后不会重复。
+交易链在一个关联中，每个交易都从选择窗口循环，没有第二次方法或训练家记录：三笔交易与 `bin/bdsp_connect.py` 连续完成（框屏幕在每笔交易后返回），两笔交易与 `bin/bdsp_host.py` 托管。 `TradeStateModel$$ReturnTradePokeSelectWindow` [0x01c29590]运行`PlayerSave`，然后模型在+0x80处回调；其调用者未被追踪。第二次交换会读回游戏机存储的内容。当玩家选择（框第 5 阶段或以下）时，SEND_READYOK (5) 0x21 着陆会重置该回合，因此游戏机的 SEND_READYOK 之后不会重复。
 ## 宝可梦
 
 `NetTradePokeData`携带328字节，Gen 8 `SIZE_STORED`：加密的PB8，[剑／盾页面](swsh_protocol.md#the-pk8)上的格式(`pokeldn/gen8.py`; `pokeldn/bdsp/pokemon.py` PB8视图)。 0x06 处的校验和对解密的主体求和，因此解码构建的宝可梦可以验证它，但错误的块顺序除外，16 位字的总和无法看到。
@@ -176,9 +176,9 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing))：
 提议是一个真正的宝可梦，但命名字段已更改（`pokemon.build_from`）；游戏机本身的数据、功能区、处理程序记录和语言都是非零的。
 ## 游戏机对收到的宝可梦做了什么
 
-由其初训家接收回来，两个字节发生变化：`IsNicknamed`（0x08F第7位，IV32第31位）当名称与游戏语言中的物种名称不同时设置，校验和如下。名称字符串保持不变；物种名称仍然是物种名称。
+由其初训家接收回来，两个字节发生变化：`IsNicknamed`（0x08F第7位，IV32第31位）当名称与游戏语言中的种类名称不同时设置，校验和如下。名称字符串保持不变；种类名称仍然是种类名称。
 
-由另一位训练器接收，十一个字节发生变化，`ot_name` 未被触及：
+由另一位训练家接收，十一个字节发生变化，`ot_name` 未被触及：
 
     0x0A8..0x0B2   HandlingTrainerName, UTF-16LE
     0x0C3          HandlingTrainerLanguage (3, French)
@@ -191,27 +191,27 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing))：
 
 `PokeDupeChecker`（1.3.0中添加）在重复的宝可梦上设置非法标志。标志为解密后的PB8字节0x52的位0（块A+0x4A，`CoreDataBlockA.set_dpr_illegal_flag` `0x027bb040`）； PKHeX 将其读取为 `PB8.IsDprIllegal`。被标记的宝可梦无法进行交易（“Un Probleme avec votre 宝可梦 rend tout echange不可能。”）。
 
-`UpdateIllegalFlagAll` [`0x01de5860`] 按顺序在腰部、1 至 40 号盒子和日托处运行 `CheckDuplicate` [`0x01de59d0`]。宝可梦参与时，其原始游戏是晶灿钻石或明亮珍珠（`version & ~1 == 0x30`），它不是鸡蛋，其标志是清晰的，并且不是游戏内交换宝可梦（`IsLocalKoukanPokemonParam` [`0x01de66d0`]：遇到位置30001，训练家ID，加密常数和性质与`LocalKoukanData` 条目）。每一个都与之前的每一个进行比较；第一个副本保持干净，并且后面的每个副本都被标记。
+`UpdateIllegalFlagAll` [`0x01de5860`] 按顺序在腰部、1 至 40 号盒子和日托处运行 `CheckDuplicate` [`0x01de59d0`]。宝可梦参与时，其原始游戏是晶灿钻石或明亮珍珠（`version & ~1 == 0x30`），它不是蛋，其标志是清晰的，并且不是游戏内交换宝可梦（`IsLocalKoukanPokemonParam` [`0x01de66d0`]：遇到位置30001，训练家ID，加密常量和性格与`LocalKoukanData` 条目）。每一个都与之前的每一个进行比较；第一个副本保持干净，并且后面的每个副本都被标记。
 
 `IsDuplicatedPokemonParam` [`0x01de62f0`] 匹配所有：
 
 |领域 |配件| PB8偏移|
 |---|---|---|
-|加密常数| `GetPersonalRnd` | 0x00 |
+|加密常量| `GetPersonalRnd` | 0x00 |
 | PID| `GetColorRnd` | 0x1C |
 | 训练家 ID (TID16, SID16) | `GetID` | 0x0C |
-|自然 | `GetSeikaku` | 0x20 |
+|性格 | `GetSeikaku` | 0x20 |
 |六个 IV | `GetTalentHp` .. | 0x8C |
 
-铁面忍者（291）和脱壳忍者（292）对永远不会重复。不比较物种、形态、昵称和OT名称。
+铁面忍者（291）和脱壳忍者（292）对永远不会重复。不比较种类、形态、昵称和OT名称。
 
-`UpdateIllegalSpecialTraining` [`0x01de6830`] 标记 99 级或以下且具有任何超级训练位设置的晶灿钻石或明亮珍珠宝可梦。
+`UpdateIllegalSpecialTraining` [`0x01de6830`] 标记 99 级或以下且具有任何极限训练位设置的晶灿钻石或明亮珍珠宝可梦。
 
 该检查在保存加载（`PlayerWork.OnPostLoad_NeedMD`）、交换框（`TradeSelectPokeModel` [`0x01c28310`]）中的每次选择时以及Wonder交换保存（`Dpr.GMS`）之前运行；收到交换后，什么都不运行。本地交换中的标记选择将 `UnionWork.boxState` 设置为
 `INVALID_DATA` 并且盒子拒绝；在线交换将选择发送至
 改为 `NetworkManager.RequestValidateTrade`。 `ClearIllegalFlagAll` 没有调用者，因此标志永远不会被清除。
 
-切勿提供加密常量、PID、训练家 ID、性质和 IV 均与接收保存中的宝可梦匹配的晶灿钻石或明亮珍珠记录。 `bin/bdsp_host.py --fresh-pid`提取新的加密常数和PID，保持异色状态；以这种方式交易到保存原始记录的记录中没有任何标志。
+切勿提供加密常量、PID、训练家 ID、性格和 IV 均与接收保存中的宝可梦匹配的晶灿钻石或明亮珍珠记录。 `bin/bdsp_host.py --fresh-pid`提取新的加密常量和PID，保持异色状态；以这种方式交易到保存原始记录的记录中没有任何标志。
 ## 断开连接惩罚
 
 在 `FirstSave` 和 `SecondSave` 之间退出的电台会留下惩罚，并且游戏机拒绝新的本地交换“vous ne pouvez pas faire d'echange en reseau pour le moment”，直到清除：

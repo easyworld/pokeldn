@@ -5,32 +5,33 @@ nav_order: 3
 ---
 # 在游戏机上运行代码
 
-神秘礼物客户端运行通过两个解释器发送给它的代码：`CLI_RUN_MEVENT_SCRIPT`（操作码15）将字节传递给神秘事件VM，`CLI_RUN_BUFFER_SCRIPT`（操作码21）传递给CPU。两者都不需要故障、准备好的保存或任何设置；游戏机保留在其神秘礼物菜单上。
+神秘礼物客户端通过两种执行机制运行收到的代码：`CLI_RUN_MEVENT_SCRIPT`（操作码 15）将字节交给神秘事件虚拟机，`CLI_RUN_BUFFER_SCRIPT`（操作码 21）将代码交给 CPU 执行。两者都不需要利用游戏漏洞、准备特殊存档或进行其他设置；游戏机停留在神秘礼物菜单即可。
 
-本页地址为法文火红，墨盒BPRF，软件版本0x0A。 叶绿的在[叶绿](frlg_leafgreen.md)；这些表格位于 [ROM 映射](frlg_rom_map.md) 上。
+本页地址对应法文版《火红》，卡带标识为 BPRF，软件版本为 0x0A。《叶绿》的地址见[叶绿](frlg_leafgreen.md)，相关表格见 [ROM 映射](frlg_rom_map.md)。
 # 神秘事件虚拟机
 
-一个单独的解释器[src/mystery_event_script.c]，有自己的17个命令表[data/mystery_event_script_cmd_table.s]，与神奇旋转的交付脚本编译到的字段脚本VM不同。 `pokeldn/frlg/rom/mystery_event.py` 汇编每个命令（`MysteryEventScript.blob()` 保存数据，汇编器解析指针）。每个操作码都在实机硬件上进行验证。
+这是一个独立的解释器 [src/mystery_event_script.c]，拥有包含 17 条命令的命令表 [data/mystery_event_script_cmd_table.s]，与接收神奇卡片礼物的脚本所使用的场景脚本虚拟机不同。`pokeldn/frlg/rom/mystery_event.py` 负责汇编各条命令（`MysteryEventScript.blob()` 保存数据，汇编器解析指针）。每个操作码都已在零售版实机上验证。
 ## 命令表
 
-| ＃|命令 |操作码字节之后的操作数 |返回 |效果||---|---|---|---|---|
-| 0 | `nop`|  |错误 |什么都没有|
-| 1 |`checkcompat`| u32 基础、u16、u32、u16、u32 |正确 |兼容性门|
-| 2 |`end`|  |正确 |`StopScript` |
-| 3 | `setmsg`| u8 选择器，ptr |错误 |`StringExpandPlaceholders(gStringVar4, str)`当选择器是`0xFF`或等于状态 |
-| 4 |`setstatus`| u8 |错误 |`ctx->data[2] = value` |
-| 5 | `runscript`|指针 |错误 |`RunScriptImmediately`在现场脚本上 |
-| 6 |`initramscript`| u8 组、u8 地图、u8 对象、ptr、ptr |错误 |`InitRamScript`绑定到任何地图和对象|
-| 7 |`setenigmaberry`|指针 |错误 |写`gSaveBlock1Ptr->enigmaBerry` |
-| 8 | `giveribbon`| u8 索引、u8 功能区 ID |错误 |一条礼物丝带绑在每个非鸡蛋的肩上
-| 9 |`givenationaldex`|  |错误 |`EnableNationalPokedex()` |
-| 10 | `addrareword`| u8 |错误 |`EnableRareWord`（Easy Chat 流行语） |
-| 11 | 11`setrecordmixinggift`|  |正确 |死的：`SetIncompatible` |
-| 12 | `givepokemon`|指针 |错误 |一个整体`struct Pokemon`加附邮件入队伍|
-| 13 |`addtrainer`|指针 |错误 |一个 188 字节`BattleTowerEReaderTrainer` |
-| 14 | `enableresetrtc`|  |正确 |死的：`SetIncompatible` |
-| 15 | `checksum`| u32，ptr，ptr |正确 |状态 1 如果`CalcByteArraySum`超出范围不匹配|
-| 16 | 16`crc`| u32，ptr，ptr |正确 |与`CalcCRC16` |
+| # | 命令 | 操作码字节之后的操作数 | 返回值 | 效果 |
+|---|---|---|---|---|
+| 0 | `nop` |  | FALSE | 不执行任何操作 |
+| 1 | `checkcompat` | u32 base, u16, u32, u16, u32 | TRUE | 检查兼容性 |
+| 2 | `end` |  | TRUE | `StopScript` |
+| 3 | `setmsg` | u8 selector, ptr | FALSE | 当 selector 为 `0xFF` 或等于状态值时，执行 `StringExpandPlaceholders(gStringVar4, str)` |
+| 4 | `setstatus` | u8 | FALSE | `ctx->data[2] = value` |
+| 5 | `runscript` | ptr | FALSE | 通过 `RunScriptImmediately` 运行场景脚本 |
+| 6 | `initramscript` | u8 group, u8 map, u8 object, ptr, ptr | FALSE | 通过 `InitRamScript` 将脚本绑定到任意地图和对象 |
+| 7 | `setenigmaberry` | ptr | FALSE | 写入 `gSaveBlock1Ptr->enigmaBerry` |
+| 8 | `giveribbon` | u8 index, u8 ribbonId | FALSE | 为队伍中每只非蛋的宝可梦授予礼物奖章 |
+| 9 | `givenationaldex` |  | FALSE | `EnableNationalPokedex()` |
+| 10 | `addrareword` | u8 | FALSE | `EnableRareWord`（Easy Chat 流行语） |
+| 11 | `setrecordmixinggift` |  | TRUE | 功能已禁用：`SetIncompatible` |
+| 12 | `givepokemon` | ptr | FALSE | 将完整的 `struct Pokemon` 及附带邮件加入队伍 |
+| 13 | `addtrainer` | ptr | FALSE | 添加一个 188 字节的 `BattleTowerEReaderTrainer` |
+| 14 | `enableresetrtc` |  | TRUE | 功能已禁用：`SetIncompatible` |
+| 15 | `checksum` | u32, ptr, ptr | TRUE | 若指定范围的 `CalcByteArraySum` 校验和不匹配，将状态设为 1 |
+| 16 | `crc` | u32, ptr, ptr | TRUE | 同上，使用 `CalcCRC16` 校验 |
 ## `checkcompat` 可选
 
 `checkcompat` 打开每个官方脚本并门控语言和版本掩码（decomp 的
@@ -96,7 +97,7 @@ while (MEventScript_Run(&ret));
 `pokeldn/frlg/save/mevent_pokemon.py` 构建了楼梯：一个 100 字节的加密队列，然后游戏机在 `pointer + sizeof(struct Pokemon)` 处读取 34 字节的 `struct Mail`。
 `--gift mystery-event-celebi` 运送一件。与字段脚本 `givemon` 不同，它：
 
-- 附上邮件。 `ItemIsMail`对其进行门控，因此持有的物品必须是十二件邮件物品[mail_data.c:167]之一； `GiveMailToMon2` 将整个结构（单词、发件人姓名、家 ID、物种、物品）复制到 `gSaveBlock1Ptr->mail` [:100] 中；
+- 附上邮件。 `ItemIsMail`对其进行门控，因此持有物必须是十二件邮件物品[mail_data.c:167]之一； `GiveMailToMon2` 将整个结构（单词、发件人姓名、家 ID、种类、物品）复制到 `gSaveBlock1Ptr->mail` [:100] 中；
 - 在国家号码上设置`FLAG_SET_SEEN`和`FLAG_SET_CAUGHT`；
 - 到达神秘礼物菜单：当菜单关闭时，mon 位于队伍中。
 
@@ -158,7 +159,7 @@ static u32 Client_RunBufferScript(struct MysteryGiftClient * client)
 该应用程序的神秘礼物构建器使用相同的工具链（`pokeldn/frlg/rom/custom_code.py`）组装ARM源代码，或者采用原始`.bin`，并在发送之前在模拟游戏机上运行它。 `.pokegift` 文件携带编译后的 ARM 字节、卡带目标和响应设置。 [神秘礼物档案](gifts.md#console-code)文档打包分享。
 
 - `asm/*.s`，每个思科一个ARM源代码，由`scripts/gen_buffer_scripts.py`组装成承诺的`pokeldn/frlg/rom/buffer_payloads.py`； `tests/test_buffer_script.py`安装`arm-none-eabi-as`时重新组装并比较。
-- `pokeldn/frlg/rom/buffer_script.py`：注册表、验证和 `emulate()` / `emulate_repeating`，它们使用游戏机的三个参数在 GBA 内存映射上的独角兽下运行 VOC；发生故障或永不返回的 1 永远不会到达空中。
+- `pokeldn/frlg/rom/buffer_script.py`：注册表、验证和 `emulate()` / `emulate_repeating`，它们使用游戏机的三个参数在 GBA 内存映射上的Unicorn下运行 VOC；发生故障或永不返回的 1 永远不会到达空中。
 - `pokeldn/frlg/gift/mg_script.py`：`CLIENT_SCRIPT_RUN_BUFFER`（接收、运行、加载返回通道、发送、接收下一个脚本）和`CLIENT_SCRIPT_BUFFER_SUCCESS`。
 - `pokeldn/frlg/gift/mg_server.py`：`SCRIPT_RUN_BUFFER_SCRIPT`。无卡无抛掷提示；保持保持的神奇关系。
 - 两个模拟控制台均独立地从解压缩中编写，通过每帧重新输入来执行火灾：`tests/test_mystery_gift_flow.py` 中的 `pokeldn/frlg/gift/mg_client.py` 和 `ConsoleClientModel`。
@@ -184,7 +185,7 @@ static u32 Client_RunBufferScript(struct MysteryGiftClient * client)
 
 `__malloc_av_` 和它之后的 malloc 计数器仅从 newlib 的 stdio 到达，这仅
 `AGBPrintf`，在发布版本中未使用，调用（pokefirered_switch.elf：唯一的`bl`到`_malloc_r`，
-`_calloc_r` 和 `_free_r` 位于 libc 内部）。一个 0xA5 填充物在 mGBA 的菜单、行走和法国火红上的一场疯狂战斗中幸存下来。 GB-Link Team 卡将其重新定位的脚本保留在那里 ([frlg_gift.md](frlg_gift.md#gb-link-team-cards))。
+`_calloc_r` 和 `_free_r` 位于 libc 内部）。一个 0xA5 填充物在 mGBA 的菜单、行走和法语版《火红》上的一场疯狂战斗中幸存下来。 GB-Link Team 卡将其重新定位的脚本保留在那里 ([frlg_gift.md](frlg_gift.md#gb-link-team-cards))。
 `scratchpad/ewram_symbol.py ADDR LEN` 检查地址。
 
 切勿选择地址，因为它的读数为零。 0x0202B280、0x020185C4 和 0x0203B0E9 读取数十 KB 的零，是战斗和盒子缓冲区、`gDecompressionBuffer` 的预备阶段和分配器簿记； 0x02012304 位于 `gHeap` 中。 0x0202B280位于`gPokemonStorage`内部：在那里写入可以落在盒装宝可梦的校验和上，然后保存会保留一个坏蛋。
@@ -196,15 +197,15 @@ static u32 Client_RunBufferScript(struct MysteryGiftClient * client)
 0x0203FC00..0x02040000：标题屏幕上存在一个标记，重新加载，菜单，保存，地图更改，战斗和PC盒，软重置（A + B + START + SELECT）将其清除。
 ## 每帧钩子
 
-`gIntrTable` 位于法国墨盒上的 0x03002720；条目 4（V 型毛坯处理程序）保存 `VBlankIntr` (0x0800071D)。它是由 `InitIntrHandlers` 一次写入的十四个函数指针
+`gIntrTable` 位于法语版卡带上的 0x03002720；条目 4（V 型毛坯处理程序）保存 `VBlankIntr` (0x0800071D)。它是由 `InitIntrHandlers` 一次写入的十四个函数指针
 `gIntrTableTemplate` [main.c:339]，由BIOS通过`IntrMain`到达，其地址为向量
 0x03007FFC 成立。替换条目 4 可以让代码在每个游戏状态下的每一帧进行一次调用；
 每当菜单或战斗开始时，`gMain.vblankCallback`和`gMain.callback2`都会被重写。
 
 位于游戏机的 IWRAM 中：`IntrMain_Buffer` 是 0x03002760（英文 0x03002810）并且
-`gSaveBlock1Ptr` 是 0x03004228（英语 0x030042D8），因此盒带的 IWRAM 位于这些地址的英语版本 0xB0 的下方。 IWRAM 不像 EWRAM 那样在构建之间传输。
+`gSaveBlock1Ptr` 是 0x03004228（英语 0x030042D8），因此盒带的 IWRAM 位于这些地址的英语版 0xB0 的下方。 IWRAM 不像 EWRAM 那样在构建之间传输。
 
-|条目 |墨盒|英语 | |
+|条目 |卡带|英语 | |
 |---|---|---|---|
 | 0 V计数 | 0x08000805 | 0x0800081C | `VCountIntr` |
 | 1 连载 | 0x03004B34 | |链接启动时的 IWRAM 处理程序 |
@@ -362,7 +363,7 @@ GBA 代码通过 Sloop 系统调用到达 Switch 模拟器：23 之间
 | 0x05 |调色板，1 KB |自己的| `and w0, w1, #0x3ff` |
 | 0x06 |显存，96 KB |自己的| `and w8, w1, #0x1ffff`，然后 `0x18000..0x1FFFF` 被 `0x8000` 向下折叠 |
 | 0x07 | OAM，1 KB |自己的| `and w0, w1, #0x3ff` |
-| 0x08，0x09 | ROM 等待状态 0 |一个物体覆盖两个| `ldr w8, [x0, #0x34] ; and w0, w8, w1`，墨盒尺寸掩码|
+| 0x08，0x09 | ROM 等待状态 0 |一个物体覆盖两个| `ldr w8, [x0, #0x34] ; and w0, w8, w1`，卡带尺寸掩码|
 | 0x0A，0x0B | ROM 等待状态 1 |一个物体覆盖两个|相同的虚表|
 | 0x0C | ROM 等待状态 2 |自己的|相同的虚表|
 | 0x0D |等待状态 2 的顶部，EEPROM 所在的位置 |自己的|默认虚函数表|
@@ -396,7 +397,7 @@ EWRAM的vtable，`main + 0x1C21A0`（`x0`区域对象，`x1`循环计数器，`x
     source      = r1, resolved through the region table and folded
     destination = 0x0E000000 + r0 * 0x1000, resolved the same way
  目标地址由 32 位算术组成 [main + 0x05737C]：
-`0x0E000000 + ((r0 & 0xFFFFF) << 12)`，区域条目是该地址的最高字节 [main + 0x057384]：`0x0E + ((r0 & 0xFFFFF) >> 12)` mod 256，因此 `r0` 选择该区域。 EWRAM、IWRAM 或磁带缓冲区中的目标通过了两项边界检查 (`fold < size`、
+`0x0E000000 + ((r0 & 0xFFFFF) << 12)`，区域条目是该地址的最高字节 [main + 0x057384]：`0x0E + ((r0 & 0xFFFFF) >> 12)` mod 256，因此 `r0` 选择该区域。 EWRAM、IWRAM 或卡带缓冲区中的目标通过了两项边界检查 (`fold < size`、
 `size - fold >= 0x1000`);对于 `r0 = 0xFA000 + n`，目标会从任何源区域折叠到位于 `n * 0x1000` (`n` 0..0xFFF) 的 ROM 副本的 4 KB 中。卡带缓冲区位于来宾 RAM 占用空间内； ROM 目标的实时行为是无法测量的。
 
 如果 `+0x10` 处的区域后备指针为空，折叠偏移量等于或超过 `+0x20` 处的大小，或者剩余字节少于 `0x1000` ，则每一侧都会被拒绝（指针设置为空）。双方在复制 `0x1000` 字节之前解析。然后 `swi 0x56` 将 `0xFF` 存储在目的地 `+0xFF8` 上，不进行空检查：
@@ -413,7 +414,7 @@ EWRAM的vtable，`main + 0x1C21A0`（`x0`区域对象，`x1`循环计数器，`x
 |致电 |结果 |
 | --- | --- |
 | `r0` 超过闪存大小的扇区，`r1` 未映射的区域 |未写入任何内容，闪存字节相同，无故障，无冻结 |
-| `r0 = 30`、`r1 = 0x08000000`（ROM 标头）|扇区 30 成为盒式磁带的第一个 4 KB，4096 字节中的 4096 个，邻居未受影响 |
+| `r0 = 30`、`r1 = 0x08000000`（ROM 标头）|扇区 30 成为卡带的第一个 4 KB，4096 字节中的 4096 个，邻居未受影响 |
 | `r0 = 30`、`r1` EWRAM 缓冲区填充了污染物 |扇区 30 成为那些字节；缓冲区读回不变|
 
 它不会修改访客寄存器，也不会返回任何状态：只有快速读取才能区分已接受的呼叫和已拒绝的呼叫。
@@ -432,9 +433,9 @@ EWRAM的vtable，`main + 0x1C21A0`（`x0`区域对象，`x1`循环计数器，`x
 | `bkpt #0xFF` |应用程序对象，vtable `main + 0x1B4078` | `main + 0x001140` |使用参数 1 发布事件 `0x82EF0054`，这将退出应用程序 |
 
 加载时，包装器将三个补丁写入来宾的 ROM 副本中，仅超过 10 个字节
-`0x08000000..0x09000000` 与盒式磁带不同，在 v0 和 1.0.1 上类似（块校验和并通过神秘礼物客户端进行读取、零售和模拟）：
+`0x08000000..0x09000000` 与卡带不同，在 v0 和 1.0.1 上类似（块校验和并通过神秘礼物客户端进行读取、零售和模拟）：
 
-|地址 |墨盒|来宾|
+|地址 |卡带|来宾|
 | --- | --- | --- |
 | `0x081E1696` |拇指 `mov ip, r1` (`468c`) | `bkpt #0x52` (`be52`) |
 | `0x081E187C` | ARM `ldr r3, [pc, #0x50]` (`e59f3050`) | `bkpt #0x52` (`e1200572`) |
@@ -462,7 +463,7 @@ hits at +0x0C}`，`main + 0x0546C0`匹配地址并返回原始指令。在`Sio32
 `e59f3050` 有。两者都是宾客亲属； `+0xA` 写入是离开客户机区域的唯一路径：它可以写入 `0x8001` 两个常量字节，最多可超出任何区域的后备分配（包括 16 MB ROM 副本）的 11 个字节。
 #### ROM 缓冲区之后是：Sloop 组件
 
-ROM 对象的掩码 (`+0x34`) 为 `0x1ffffff`，而盒式磁带占用 `0x1000000` 字节，因此折叠 `0xFFFFF6..0xFFFFFF` 通过边界检查，并将写入紧接在 ROM 缓冲区后面的十个字节上。那里的对象是Sloop组件（[断点钩子](#the-breakpoint-hooks)）：它的第一个字是vtable指针
+ROM 对象的掩码 (`+0x34`) 为 `0x1ffffff`，而卡带占用 `0x1000000` 字节，因此折叠 `0xFFFFF6..0xFFFFFF` 通过边界检查，并将写入紧接在 ROM 缓冲区后面的十个字节上。那里的对象是Sloop组件（[断点钩子](#the-breakpoint-hooks)）：它的第一个字是vtable指针
 `main + 0x1C3878`、`+8` `0x000004bf`、`+0xC` `0x0A828400`、`+0x18` 和 `+0x20` `main + 0x16EB83`、
 `+0x28` `0x655db` 堆指针，`+0x60` 和 `+0x88` 进一步的 vtable（`main + 0x1C3948`，
 `main + 0x1C3978`)、`+0xE0` CPU 总线对象。
@@ -470,7 +471,7 @@ ROM 对象的掩码 (`+0x34`) 为 `0x1ffffff`，而盒式磁带占用 `0x1000000
 邻居在引导之间发生变化：一个引导的 ROM 邻居是一个对象，其第一个字是 vtable `main + 0x1C36D8`，其 `+0x60` 是 vtable `main + 0x1C3790`。构造函数
 `main + 0x547CC` 准确地写入该对，读取 `main + 0x86D67E8` 处的静态指针（加数 `main + 0x1C36C8` [main_relocs.json]）。该类的字段由其自己的构造函数和自己的代码编写；访客会话中的任何存储都不会到达他们。
 
-在修补站点，墨盒自己的代码停放自己的 `r0`（`ldr r0, [pc, #0x10]` 加载
+在修补站点，卡带自己的代码停放自己的 `r0`（`ldr r0, [pc, #0x10]` 加载
 `0x0300744A`，它自己的`&gRfuSIO32Id`，IWRAM），所以游戏自己的调度总是折叠到游戏自己的结构：包装器的`0x8001`存储是适配器id到达
 `gRfuSIO32Id.lastId`（`RFU_ID = 0x8001` [librfu.h]），值`AgbRFU_checkID`等待。分支到 `0x081E1696` 的书签会直接跳过该负载并停放自己的 `r0`，这才是移动商店的原因。
 
@@ -478,14 +479,14 @@ ROM 对象的掩码 (`+0x34`) 为 `0x1ffffff`，而盒式磁带占用 `0x1000000
 `ff` 填充在其后面），预/后转储将 `0x66209fa000` 读取为存储之前的 `78 98 6c 08 ...` 和存储之后的 `01 80 6c 08 ...`：两次存储相隔约 90 毫秒（视线的触发器，然后通过与停放的 `r0` 相同的站点进行第二次调度）。
 
 对组件前两个字节的写入会植入 vtable 指针 `0x086C8001`，然后调度程序 `main + 0x1F820` 从中读取钩子槽 19（偏移量 `+0x98`）：位于的 8 个字节
-`main + 0x1C2099` 是 `f7 01 00 00 00 00 00 00`，因此包装器的下一个虚拟调用在来宾 PC `0x1F7` 上执行，这是一个未映射的地址，否则来宾路径无法到达。在模拟器上，这会中止进程（`Unhandled guest exception InstructionAbortLowerEl`）；与区域内的折叠相同的触发器会在本地折叠的只写中结束会话，没有这样的调度。站点上的磁带自身代码排除了其他候选者：`mov ip, r1` 将 `ip` 存储为值 (`mov r0, ip; strh r0, [r4]`)，它永远不会分支。
+`main + 0x1C2099` 是 `f7 01 00 00 00 00 00 00`，因此包装器的下一个虚拟调用在来宾 PC `0x1F7` 上执行，这是一个未映射的地址，否则来宾路径无法到达。在模拟器上，这会中止进程（`Unhandled guest exception InstructionAbortLowerEl`）；与区域内的折叠相同的触发器会在本地折叠的只写中结束会话，没有这样的调度。站点上的卡带自身代码排除了其他候选者：`mov ip, r1` 将 `ip` 存储为值 (`mov r0, ip; strh r0, [r4]`)，它永远不会分支。
 
 仅当 `[component + 0x40] -> [+0xA8] + 0x170` 处的字节被设置时，挂钩才会起作用：虚拟适配器的电源开关。 `swi 0x40` 设置它，`swi 0x41` 清除它（处理程序 `main + 0x05706C` 存储
 `number == 0x40`; [sloopsvc.c:23] 中的“未引用的标志设置器”）。神秘礼物菜单中的 `swi 0x41` 停止 RFU 帧：游戏引发链接错误并离开 LDN。适配器在软重置后保持关闭状态，因此下一个无线菜单报告“L'adaptateur sans fil GBA n'est pas connecté”。该字节在软复位后仍然存在；重新启动，或
 `swi 0x40`，恢复它。每帧读取：`swi 0x41`，然后 `swi 0x40` 在一个 VOC 中是无害的。
 #### 从 bkpt 到解析器的链
 
-NSO 的 vtable 槽保存文件中未重定位的加数；加载程序添加映像库（`main` at `0x8506000`）。应用该基础后，访客 `bkpt #0x52` 运行此链：
+NSO 的 vtable 槽保存文件中未重定位的加数；加载程序添加映像库（`main` 位于 `0x8506000`）。应用该基础后，访客 `bkpt #0x52` 运行此链：
 
 - 两个解码路径（THUMB `main + 0x1EFE0`、ARM `main + 0x1B7B8`）均将调度程序 `main + 0x1F820` 调用为 `(CPU, bkpt address, immediate, &insn)`；
 - 调度程序接受 hook = `[CPU + (imm & 0xff) * 8 + 0x170]`；对于`bkpt #0x52`，即`component + 0x60`，组件的子对象（该组件是GBA CPU对象：`+0x84`当前pc，`+0x170`挂钩表，`+0x960`第二总线表，`+0xE0`总线对象）。它读取钩子自己的vtable（`main + 0x1C3948`）插槽`+0x10`，并将其称为`f(hook, &insn, bkpt address, CPU)`。槽位`+0x10`直接为`main + 0x5499C`；
@@ -570,7 +571,7 @@ NSO 的 vtable 槽保存文件中未重定位的加数；加载程序添加映�
 `main + 0x0511CC` 和 `main + 0x0511F4`，没有系统调用到达。 `main + 0x0511F4` 将其与 10 进行比较，并且在达到或超过该值时，自动加载 `component + 0x2790` 处的标志；设置标志进入
 `main + 0x057250` 的延续，测试第三个参数是否为 null。其呼叫者身份不明。
 
-`bkpt #0x52` 组件还拥有调度程序（其 vtable 的插槽 21）和 2324 个物种名称，每个物种有六种语言，使用 djb2 进行哈希处理（`main + 0x056540`，字符串位于 `main + 0x1C4470`）。由每个处理程序共享的调度程序的帧是保存的寄存器的 `0x40` 字节加上 `0x310`。
+`bkpt #0x52` 组件还拥有调度程序（其 vtable 的插槽 21）和 2324 个种类名称，每个种类有六种语言，使用 djb2 进行哈希处理（`main + 0x056540`，字符串位于 `main + 0x1C4470`）。由每个处理程序共享的调度程序的帧是保存的寄存器的 `0x40` 字节加上 `0x310`。
 
 来自 ψ 的 `bkpt #0xFF` 关闭游戏：包装器归档会话的播放报告，完成 LDN，停止音频，归档从保存构建的报告，提交保存并退出。主机没有应答。 Ryujinx 的 `prepo` 打印的报告：
 
@@ -607,7 +608,7 @@ NSO 的 vtable 槽保存文件中未重定位的加数；加载程序添加映�
 | `TotalHallOfFame` | `0x25E8`，`GAME_STAT_ENTERED_HOF` | `0x2644` | `0x22A8` |
 | `LinkExchange` | `0x2614`，`GAME_STAT_POKEMON_TRADES` | `0x2670` | `0x22D4` |
 | `LinkBattle`，| 的总和`0x261C..0x2624`，链接胜、负、平| `0x2678..0x2680` | `0x22DC..0x22E4` |
-|地区图鉴大小 | 202 | 202 202 | 202 151 | 151
+| 地区图鉴大小 | 202 | 202 | 151 |
 
 游戏统计数据与游戏中的金钱键进行异或运算。
 
@@ -626,7 +627,7 @@ NSO 的 vtable 槽保存文件中未重定位的加数；加载程序添加映�
 
 `swi 0x4D`，处理程序`main + 0x0571FC`，将`r0`解析为GBA地址，后面需要256个字节，将ASCII字符串转换为UTF-16并运行平台的亵渎检查，重写该字符串。 `r1` 非零选择游戏从不使用的第二种模式（`r1` = 1 以相同方式屏蔽）。游戏通过 `svc_BadWordCheck` 调用它，将名称转换为 ASCII 并返回 [sloopsvc.c:211]。仅当命名屏幕回答 0 [naming_screen.c:686] 时，才会保存键入的名称。
 
-|发送的字符串 | `r0` | | 之后的字符串
+| 发送的字符串 | `r0` | 处理后的字符串 |
 | --- | --- | --- |
 | `hello world` | 0 | `hello world` |
 | `hello fuck` | 1 | `hello ` 然后四个 `0xA1` 字节 |
@@ -725,8 +726,8 @@ case 2:  if (CalcCRC16WithTable(...) != link->sendCRC) LinkRfu_FatalError();  //
 
 |一次连接，离线 16 KB |它捕获的尸体|
 |---|---|
-| `memory-dump-multi`，最佳基地连续十六个区块 | 22 | 22
-| `memory-dump-scatter`，最密集的十六个千字节 | 83 | 83
+| `memory-dump-multi`，最佳基址处连续的 16 个区块 | 22 |
+| `memory-dump-scatter`，数据最密集的 16 个千字节区块 | 83 |
 | `memory-dump-scatter`，32块| 119 共 166 |
 
 可读性防护检查每个分散块。这些块在一个文件中首尾相连；
@@ -769,7 +770,7 @@ case 2:  if (CalcCRC16WithTable(...) != link->sendCRC) LinkRfu_FatalError();  //
 |偏移| |
 |---|---|
 | 0x000 | `b .Lcode` |
-| 0x004 |光标：起始地址，由 阑 | 提前
+| 0x004 | 游标：起始地址，由载荷向前推进 |
 | 0x008 |结束 |
 | 0x00C |针|
 | 0x010 |每次调用的块数 |
@@ -778,7 +779,7 @@ case 2:  if (CalcCRC16WithTable(...) != link->sendCRC) LinkRfu_FatalError();  //
 | 0x028 |结果：64×（地址，值）|
 | 0x228 |代码 |
 
-预算保护需要其帧的 RFU 链路。内循环是一个 8 个字的 `ldmia` 和 8 个链式 `cmpne`，每 8 个字大约有 14 条指令；默认的 512 个块是 unicorn 下的一次调用 7703 条指令，大约是来自 EWRAM 的一帧 280896 个周期中的 60000 个周期（16 位总线，ARM 读取约 6 个周期）。 16 MB 盒式磁带可调用 1024 次，大约 17 秒。 `--scan-blocks` 设置；整个主机每秒读取约 60 个子节点帧。
+预算保护需要其帧的 RFU 链路。内循环是一个 8 个字的 `ldmia` 和 8 个链式 `cmpne`，每 8 个字大约有 14 条指令；默认的 512 个块是 unicorn 下的一次调用 7703 条指令，大约是来自 EWRAM 的一帧 280896 个周期中的 60000 个周期（16 位总线，ARM 读取约 6 个周期）。 16 MB 卡带可调用 1024 次，大约 17 秒。 `--scan-blocks` 设置；整个主机每秒读取约 60 个子节点帧。
 
 `max_calls` 默认为范围需要的加二；看门狗停止会用一个短光标来回答，说明从哪里恢复。答案始终是 528 字节，因此 `len(dump) == buffer_dump_size` 证明了重新指向。 `found` 计算每个匹配项，`hits` 保留前 64 个。`ldmia` 只看到字对齐的匹配项：从未与实际步幅字对齐的针返回零。
 ### `table-scan`
@@ -809,7 +810,7 @@ case 2:  if (CalcCRC16WithTable(...) != link->sendCRC) LinkRfu_FatalError();  //
 |偏移| |
 |---|---|
 | 0x000 | `b .Lcode` |
-| 0x004 |光标：起始地址，由 阑 | 提前
+| 0x004 | 游标：起始地址，由载荷向前推进 |
 | 0x008 |结束 |
 | 0x00C |开始 |
 | 0x010 |每次调用 32 字节块 |
@@ -869,7 +870,7 @@ void CreateMon(struct Pokemon *mon, u16 species, u8 level, u8 fixedIV,
 `--create-mon-call` 从 `rom_map.py` 默认为 `CreateMon | 1`； `0` 不调用任何内容并应答归零的缓冲区。答案是 116 字节（四个标头字，100 字节 `struct Pokemon`），并且
 `*param`是个性。
 
-子结构使用 `personality ^ otId` 进行加密并进行校验和，因此有效的校验和可以证明这两个字。 `check_create_mon` 检查物种、级别和 IV； `scratchpad/verify_create_mon.py` 预测十三个派生字段：来自 `gExperienceTables[growthRate][level]` 的 exp，来自 `gSpeciesInfo` 的友谊和能力槽，来自学习集的移动和 PP，来自 `CalculateMonStats` 的六个统计数据。该昵称来自`gSpeciesNames` [pokemon.c:1810]，即墨盒的法语表，并且是读取的，从未预测过。三个字段衡量游戏机：
+子结构使用 `personality ^ otId` 进行加密并进行校验和，因此有效的校验和可以证明这两个字。 `check_create_mon` 检查种类、级别和 IV； `scratchpad/verify_create_mon.py` 预测十三个派生字段：来自 `gExperienceTables[growthRate][level]` 的 exp，来自 `gSpeciesInfo` 的亲密度和特性槽，来自学习集的移动和 PP，来自 `CalculateMonStats` 的六个统计数据。该昵称来自`gSpeciesNames` [pokemon.c:1810]，即卡带的法语表，并且是读取的，从未预测过。三个字段衡量游戏机：
 
 |领域 |价值|它说了什么|
 | --- | --- | --- |
@@ -1008,12 +1009,12 @@ void SavePlayerParty(void)
 `overlay=ADDRESS` 在主世界的右上角将 `ADDRESS` 处的单词绘制为八个十六进制数字（`0x03004220` 是 `gRngValue`）。条目进入`gMain.oamBuffer[120..127]`（`0x030026C8`），两种颜色进入`gPlttBufferFaded`（`0x020375F4`）和`gPlttBufferUnfaded`（`0x020371F4`）的OBJ调色板15，之前`VBlankIntr` 的 `LoadOam` 和 `TransferPlttBuffer`（在其之后，顶行落后一帧）。当两个标记字不同时，128 字节 1bpp 字体（十六个 3x5 位，第 1 至 5 行的像素 2 至 4，`asm/resident/overlay.inc`）将扩展为 OBJ 图块 1008 至 1023。覆盖层会覆盖游戏在调色板 15 和这些图块中保留的所有内容。
 
 `ring=ADDRESS`（140字节；`0x0203FF74`在EWRAM的顶部结束）将`VBlankIntr`找到它时保留`gRngValue`，一个字一帧为32帧，并在`watch`时冻结（`gEnemyParty[0]`的个性，
-`0x02024028`）更改。草的遭遇的个性源自每一粒保存下来的种子。在模拟器上的草地上行走时测量：两个 `Random` 调用一个帧，并且从前一帧的种子开始，自然滚动是第五次调用（`VBlankIntr` 的 [main.c:412]，帧自己的、插槽、级别、性质）。
+`0x02024028`）更改。草的遭遇的个性源自每一粒保存下来的种子。在模拟器上的草地上行走时测量：两个 `Random` 调用一个帧，并且从前一帧的种子开始，性格滚动是第五次调用（`VBlankIntr` 的 [main.c:412]，帧自己的、插槽、级别、性格）。
 #### `shiny`, `ivs`, `noencounter`
 
 `shiny` (`asm/resident/shiny.s`) 倒计时到下一个异色百搭卷。 `VBlankIntr` 每帧调用一次 `Random` [main.c:412]；野生宝可梦以其本性投掷 `Random() % 25`，然后抽牌
-`Random() | Random() << 16`直至性质匹配[wild_encounter.c:233, pokemon.c:1864]；
-`method=1` 采用第一对（脚本化的 `CreateMon`）。 异色为`TID ^ SID ^ high ^ low < 8`，TID和SID来自`gSaveBlock2Ptr`（`0x0300422C`）`+0x0A`。该钩子逐帧跟踪`gRngValue`（最多64步，否则重新启动），在每个空闲帧搜索`search`候选者，并以十进制显示目标的性质和`target - current - offset`（`offset=4`，草情况），或`FF`和搜索距离。当 `slow` (R) 被持有时，它会等待 `slow_frames` 更多的 V 空白帧：`IntrMain` 在处理程序 [crt0.s] 中启用 VCount，因此 `m4aSoundVSync` 运行，并且钩子调用 `m4aSoundMain` （`0x081DF53D`、`gPcmDmaCounter` `0x03002F68` 来自 `gSoundInfo` `0x03005F80`）每个等待的 V 空白并将其清除在 `REG_IF` 中。状态为 36 个字节，位于 `0x0203FF80`。
+`Random() | Random() << 16`直至性格匹配[wild_encounter.c:233, pokemon.c:1864]；
+`method=1` 采用第一对（脚本化的 `CreateMon`）。 异色为`TID ^ SID ^ high ^ low < 8`，TID和SID来自`gSaveBlock2Ptr`（`0x0300422C`）`+0x0A`。该钩子逐帧跟踪`gRngValue`（最多64步，否则重新启动），在每个空闲帧搜索`search`候选者，并以十进制显示目标的性格和`target - current - offset`（`offset=4`，草情况），或`FF`和搜索距离。当 `slow` (R) 被持有时，它会等待 `slow_frames` 更多的 V 空白帧：`IntrMain` 在处理程序 [crt0.s] 中启用 VCount，因此 `m4aSoundVSync` 运行，并且钩子调用 `m4aSoundMain` （`0x081DF53D`、`gPcmDmaCounter` `0x03002F68` 来自 `gSoundInfo` `0x03005F80`）每个等待的 V 空白并将其清除在 `REG_IF` 中。状态为 36 个字节，位于 `0x0203FF80`。
 
 `ivs` (`asm/resident/ivs.s`) 在两行上显示先导的 IV（`OVERLAY_TWO_ROWS`，第二行）
 `gMain.oamBuffer[112..117]` at y 10)：生命值、攻击力、防御力、速度，然后是 Sp。阿特克，Sp。定义和
@@ -1030,7 +1031,7 @@ elevation << 12` [global.fieldmap.h:7]； `GetCollisionAtCoords` 在冲突位上
 
 下一个空闲帧将每个块放回原处，仅当 `gMapHeader.mapLayout` (`0x02036DF8`) 是它更改的布局并且该块仍然具有其元图 id（标高 15 和碰撞 0）：游戏重写的扭曲或元图保留新块时。等于 `MAPGRID_UNDEFINED` (`0x3FF`) 的方块会保留，否则玩家将离开地图。物体事件仍然会阻塞（`DoesObjectCollideWithObjectAt`），壁架仍然会跳跃，并且玩家旁边的徘徊物体事件可以踩到打开的块上。按住 R 将打开帮助系统，因此挂钩将每帧 1 存储到 `0x0203F171` 中（请参阅 `turbo`）。 `0x0203FF80` 处的状态为 24 个字节：布局、计数和四个 `{u16 index, u16 block}`。
 
-`tests/test_noclip.py`通过每个墨盒自己的客户端安装它，并用墨盒自己的`MapGridGetCollisionAt`和`MapGridGetElevationAt`读取结果。在 Pallet Town 中使用法国卡带在 mGBA 上进行测量：向南走，玩家在没有 R 的情况下停在栅栏处，并在持有 R 的情况下穿过六块瓷砖；对象事件仍然会阻止它。
+`tests/test_noclip.py`通过每个卡带自己的客户端安装它，并用卡带自己的`MapGridGetCollisionAt`和`MapGridGetElevationAt`读取结果。在 Pallet Town 中使用法语版卡带在 mGBA 上进行测量：向南走，玩家在没有 R 的情况下停在栅栏处，并在持有 R 的情况下穿过六块瓷砖；对象事件仍然会阻止它。
 #### `follower`
 
 `asm/resident/follower.s` 作为一个真实的物体事件，带领宝可梦在玩家身后走一格，由游戏自己的移动动作移动，因此游戏绘制其脚步、奔跑、壁架跳跃（弧线、阴影、落地灰尘）、门淡入淡出和精灵优先。该设计遵循 GB-Link 的 `cards/follow.s` (GPL-3.0)。它是 984 字节，经过一个 `install-resident` 会话，因此它是从保存中安装的（[保存在保存中的常驻挂钩](#a-resident-hook-kept-in-the-save)）。
@@ -1045,22 +1046,22 @@ elevation << 12` [global.fieldmap.h:7]； `GetCollisionAtCoords` 在冲突位上
 |每一帧 |它当前的高度设置为 14，没有任何图块具有该高度：玩家通过它往回走，没有任何东西与它对话 [event_object_movement.c:4899]； `fixedPriority` 在字段锁定时设置，因此负载保持该高度 |
 |玩家一步|玩家留下的方块成为其目标；一个格子之外，它会获得玩家自己的动作系列（运行变成`WALK_FAST`），离线时它会被直接移动到那里，`MoveObjectEventToMapCoords` |
 |壁架|玩家的 `JUMP_2` 移动其坐标两次：第一次将跟随者带到边缘，第二次将其留在那里；在玩家的下一步中，它会执行 `JUMP_2` 本身，两个图块；两块瓷砖排成一行，没有壁架挂起，它以 `WALK_FASTER` (0x35) 关闭，一次一块瓷砖 |
-|菜单| `sLockFieldControls` (`0x0300109C`) 与 `sGlobalScriptContextStatus` (`0x03000FA8`) 一起设置在 `CONTEXT_SHUTDOWN`: `RemoveObjectEvent`，因此保存永远不会保留它； | 之后它再次生成
+| 菜单 | `sLockFieldControls`（`0x0300109C`）与 `sGlobalScriptContextStatus`（`0x03000FA8`）在 `CONTEXT_SHUTDOWN` 时设置：执行 `RemoveObjectEvent`，因此存档中不会保留该对象；之后会再次生成 |
 |自行车、冲浪、潜水 |隐藏在玩家的图块上 |
 |新的线索|删除并再次生成|
 |一个肿块|玩家在海拔 0 的图块上撞到它会将其放在玩家的图块上 |
 
 |铅 |对象|
 | --- | --- |
-|拥有主世界精灵的 42 个物种之一（`OBJ_EVENT_GFX_SNORLAX` 109 至 `DEOXYS_N`；代欧奇希斯的版本形式为建造者的 `deoxys=`） |它自己的图形ID |
-|任何其他物种，一个鸡蛋，字母未知图腾 | 卡比兽的32x32帧(109, `sAnimTable_Standard`);其精灵的 `images` 指向 OBJ 调色板 15 上 `0x0203FBB4` 处的 9 个 `SpriteFrameImage`（站立 0..2：图标帧 0，行走 3..8：帧 1，每个 0x200 字节，来自 `GetMonIconPtr`）|
+|拥有主世界精灵的 42 个种类之一（`OBJ_EVENT_GFX_SNORLAX` 109 至 `DEOXYS_N`；代欧奇希斯的版本形式为建造者的 `deoxys=`） |它自己的图形ID |
+|任何其他种类，一个蛋，字母未知图腾 | 卡比兽的32x32帧(109, `sAnimTable_Standard`);其精灵的 `images` 指向 OBJ 调色板 15 上 `0x0203FBB4` 处的 9 个 `SpriteFrameImage`（站立 0..2：图标帧 0，行走 3..8：帧 1，每个 0x200 字节，来自 `GetMonIconPtr`）|
 
 图标的调色板转到 `gPlttBufferUnfaded` OBJ 调色板 15 (`0x020375D4`) 每个空闲帧，并转到
 `gPlttBufferFaded` (`0x020379D4`) 仅当混合 `y`（`gPaletteFade + 4`，位 6..10）为 0 时。门淡出运行 `BeginNormalPaletteFade` 到 `y` 16，然后清除`active` 屏幕仍然黑屏
 [field_weather.c:740, palette.c];在 mGBA 上测量，走进一扇门，`active` 保持设定 21 帧，然后 `y` 16，`active` 清除 4 帧，然后 `callback2` 离开主世界。
 
 场中的 A，而玩家前面的图块是跟随者的且场未锁定（游戏自己的 A、脚本或菜单首先获取帧）：`gSelectedObjectEvent` 设置为它并且
-`ScriptContext_SetupScript` 运行，物种写成（`SPECIES_EGG` 没有，412，没有哭声）：
+`ScriptContext_SetupScript` 运行，种类写成（`SPECIES_EGG` 没有，412，没有哭声）：
 
     6A                lock
     A1 SPEC 0000      playmoncry SPECIES, CRY_MODE_NORMAL
@@ -1072,14 +1073,14 @@ elevation << 12` [global.fieldmap.h:7]； `GetCollisionAtCoords` 在冲突位上
     67 PTR            message: "{STR_VAR_1} saute\nde joie !" (French), "{STR_VAR_1} jumps\nfor joy!" (English)
     66 6D 6C 02       waitmessage, waitbuttonpress, release, end
  状态，`0x0203FFDC` (`state=`) 处的 17 个字节：`+0` 其对象事件或 `0xFF`、`+1` 待处理步骤，`+2` 显示图标， `+3` 运动系列，`+4` 玩家上次看到的坐标，`+8` 目标，
-`+12` 是领头的物种，`+14` 是它生成的物种，`+16` 是一个待定的壁架。图标的帧表为 72 字节，位于 `0x0203FBB4` (`images=`)，位于安装程序保存的处理程序 `0x0203FBFC` 下方。
+`+12` 是领头的种类，`+14` 是它生成的种类，`+16` 是一个待定的壁架。图标的帧表为 72 字节，位于 `0x0203FBB4` (`images=`)，位于安装程序保存的处理程序 `0x0203FBFC` 下方。
 
-|墨盒| `SpawnSpecialObjectEventParameterized` | `ObjectEventSetHeldMovement` | `ObjectEventClearHeldMovement` | `MoveObjectEventToMapCoords` | `RemoveObjectEvent` | `ScriptContext_SetupScript` | `gSelectedObjectEvent` |
+|卡带| `SpawnSpecialObjectEventParameterized` | `ObjectEventSetHeldMovement` | `ObjectEventClearHeldMovement` | `MoveObjectEventToMapCoords` | `RemoveObjectEvent` | `ScriptContext_SetupScript` | `gSelectedObjectEvent` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | BPRF、BPGF | `0x08062130` | `0x080675A4` | `0x08067634` | `0x08063024` | `0x08061DB4` | `0x0806D3D4` | `0x03004294` |
 | BPRE、BPGE | `0x08061FD4` | `0x08067448` | `0x080674D8` | `0x08062EC8` | `0x08061C58` | `0x0806D270` | `0x03004344` |
 
-|墨盒| `gMonIconPaletteIndices` | `gMonIconPalettes` | `GetMonIconPtr` |
+|卡带| `gMonIconPaletteIndices` | `gMonIconPalettes` | `GetMonIconPtr` |
 | --- | --- | --- | --- |
 | BPRF | `0x083CBEE8` | `0x083CB7A8` | `0x0809AA74` |
 | BPGF | `0x083CBD24` | `0x083CB5E4` | `0x0809AA48` |
@@ -1093,10 +1094,10 @@ elevation << 12` [global.fieldmap.h:7]； `GetCollisionAtCoords` 在冲突位上
 [sprite.c:487]，`ResetSpriteData` 将其设置为 64 [sprite.c:297]，并在主世界中读取 64 (`0x02021B44`)：由钩子写入的高于 64 的条目将保留在屏幕上，直到屏幕重置其精灵。
 #### 已验证
 
-|钩子|零售法国火红，ESP32 收音机（每个安装答案 `0x0800071D`）|模拟器|
+|钩子|零售法语版《火红》，ESP32 收音机（每个安装答案 `0x0800071D`）|模拟器|
 | --- | --- | --- |
 | `turbo` `extra=4 field=3 battle=3 hold=0x100 budget=228` |按住 R 快进 | |
-| `overlay` |绘制的八位数字，每一帧都在变化|在 CONTINUER | 之后的回顾中绘制
+| `overlay` | 显示八位数字，每帧变化 | 在 CONTINUER 之后的回顾中显示 |
 | `shiny` |在草地上倒计时； R 减慢速度 |以下种子匹配 `gRngValue`； Python 模型同意异色 |
 | `ivs` |线索的 IV 字和 `personality % 25` 匹配 `SaveBlock1 + 0x34` 的 `save-dump` |匹配 `gPlayerParty` (`0x02024280`) |
 | `noencounter` |草丛中行走，不遇狂野|没有任何;遇到软重置后返回|
@@ -1126,7 +1127,7 @@ turbo-lite+noclip+noencounter` 将钩子从 `0x0203FC00` 背靠背放置，写�
 `VBlankIntr` 一次（`tests/test_resident_chain.py`）。
 ### `install-kept`
 
-`asm/install-kept.s`，192字节，安装`filler_B20`中保留的钩子，就像`install-resident`安装自己的钩子一样：它读取`gSaveBlock2Ptr`（块在每次加载时移动），检查魔术，将校验和留在`filler_B20`内的长度以及总和，然后清除REG_IME，将游戏处理程序保留在 `0x0203FBFC`，复制钩子，写入 `p_original` 并将 `gIntrTable[4]` 指向它。答案是表中找到的处理程序，或者在未安装任何内容时为 `0xBAD0BAD0`。 +0 处的 ARM 条目是缓冲区脚本的； MOM 的 RAM 脚本在 +8 处运行 THUMB 条目，该条目将答案指向图像中的某个单词。每个墨盒的最后两个字已修补：`&gSaveBlock2Ptr` 和
+`asm/install-kept.s`，192字节，安装`filler_B20`中保留的钩子，就像`install-resident`安装自己的钩子一样：它读取`gSaveBlock2Ptr`（块在每次加载时移动），检查魔术，将校验和留在`filler_B20`内的长度以及总和，然后清除REG_IME，将游戏处理程序保留在 `0x0203FBFC`，复制钩子，写入 `p_original` 并将 `gIntrTable[4]` 指向它。答案是表中找到的处理程序，或者在未安装任何内容时为 `0xBAD0BAD0`。 +0 处的 ARM 条目是缓冲区脚本的； MOM 的 RAM 脚本在 +8 处运行 THUMB 条目，该条目将答案指向图像中的某个单词。每个卡带的最后两个字已修补：`&gSaveBlock2Ptr` 和
 `&gIntrTable[4]`。
 
     IP_HOST --buffer-script install-kept --version firered
@@ -1156,12 +1157,12 @@ turbo-lite+noclip+noencounter` 将钩子从 `0x0203FC00` 背靠背放置，写�
 
 |钩子|斑点| `save-write` 有效负载 |
 | --- | --- | --- |
-| `noencounter` | 48 | 48 1 |
-| `ivs` | 520 | 520 1 |
-| `turbo-lite` | 376 | 376 1 |
-| `turbo` | 716 | 716 1 |
+| `noencounter` | 48 | 1 |
+| `ivs` | 520 | 1 |
+| `turbo-lite` | 376 | 1 |
+| `turbo` | 716 | 1 |
 | `shiny` | 888 | 1 |
-| `follower` | 1004 | 1004 2 |
+| `follower` | 1004 | 2 |
 
 `tests/test_resident_save.py` 在主机和模拟客户端之间运行整个会话，以及启动游戏机上 MOM 的正文脚本：翻转字节、丢失第二次写入、过去的长度
 `filler_B20` 什么也不安装。零售火红从其 `PKR2` blob 安装追随者。
@@ -1217,13 +1218,13 @@ gSaveBlock2Ptr->encryptionKey` [money.c:14]：
 ### 校验和覆盖了 id 的块
 
 `CalculateChecksum(data, size)` 将 `size` 字节求和为小端 u32 字并折叠
-`(sum >> 16) + sum` 到 u16 [decomp:src/save.c]。 `size` 是来自 `sSaveSlotLayout` 的 id 自己的块，法国磁带上的 `0x083F58C4` 处有 14 个 {u16 偏移量，u16 大小}条目：
+`(sum >> 16) + sum` 到 u16 [decomp:src/save.c]。 `size` 是来自 `sSaveSlotLayout` 的 id 自己的块，法语版卡带上的 `0x083F58C4` 处有 14 个 {u16 偏移量，u16 大小}条目：
 
 |编号 |尺寸|编号 |尺寸|
 | --- | --- | --- | --- |
-| 0 | 3876 | 3876 4 | 3816 |
-| 1-3 | 1-3 3968 | 5-12 | 5-12 3968 |
-| 13 | 2000 | 2000 | |
+| 0 | 3876 | 4 | 3816 |
+| 1-3 | 3968 | 5-12 | 3968 |
+| 13 | 2000 |  |  |
 
 `HandleWriteSector` 在复制块 [save.c:181-183] 之前将整个扇区缓冲区清零，因此游戏写入的扇区在其块之后为零，并且将所有 3968 字节相加得到相同的校验和；数据超过其块的组合扇区将被拒绝。仅填充该块。当游戏机决定id时，最多填充2000字节，最小的块：一个校验和对任何id都有效。
 ### id 所在的位置以及槽计数器所在的扇区
@@ -1246,13 +1247,13 @@ gSaveBlock2Ptr->encryptionKey` [money.c:14]：
 
 |地址 |符号|宽度|
 | --- | --- | --- |
-| `0x030045A0` | `gLastWrittenSector` | u16 | 16
+| `0x030045A0` | `gLastWrittenSector` | u16 |
 | `0x030045A4` | `gLastSaveCounter` | u32 |
-| `0x030045A8` | `gLastKnownGoodSector` | u16 | 16
+| `0x030045A8` | `gLastKnownGoodSector` | u16 |
 | `0x030045AC` | `gDamagedSaveSectors` | u32 |
 | `0x030045B0` | `gSaveCounter` | u32 |
 
-IWRAM，法国建造。加载后`gLastWrittenSector`描述了所采用的槽位。
+IWRAM，法语版构建。加载后`gLastWrittenSector`描述了所采用的槽位。
 ### 会话自己保存的乐队不会写入
 
 完整保存会分配前一对，前进 `gLastWrittenSector` 和 `gSaveCounter`，然后将递增计数器选择的带写入 [save.c:144-153]。以成功消息结束的礼物会话可保存 [mystery_gift_menu.c:1379]；以任何其他结果结尾的结果将返回到菜单而不保存。当会话成功结束时，写入 `gSaveCounter % 2` 现在选择的频段：会话的保存写入另一个频段。待采纳的板块位于波段位置 13，柜台为 `gSaveCounter + 2`，比交易日的
@@ -1302,10 +1303,10 @@ IWRAM，法国建造。加载后`gLastWrittenSector`描述了所采用的槽位�
 `gDamagedSaveSectors` 干净。交付的模式（与加载程序的预测试模式不同，后者在任何地方都没有出现）在 EWRAM 中读回，在两个站点中的每一个站点上读回 500 个连续字。
 # 读取保存的内容
 
-神秘礼物会话读取实时保存：里 ID，以及每个队伍宝可梦的 PID、IV 和性质。没有写任何东西，也没有卡易手。主机日志解码`save-dump`SaveBlock2 从偏移量 0 开始（名称、性别、TID、SID、播放时间）或 SaveBlock1 覆盖0x38（每支队伍宝可梦的性质，IVs和EVs）通过`pokeldn.frlg.save.readout`，和一个`trainer-id-probe`回答为 TID 和 SID。
+神秘礼物会话读取实时保存：里 ID，以及每个队伍宝可梦的 PID、IV 和性格。没有写任何东西，也没有卡易手。主机日志解码`save-dump`SaveBlock2 从偏移量 0 开始（名称、性别、TID、SID、播放时间）或 SaveBlock1 覆盖0x38（每支队伍宝可梦的性格，IVs和EVs）通过`pokeldn.frlg.save.readout`，和一个`trainer-id-probe`回答为 TID 和 SID。
 ## 训练家ID和里ID
 
-SaveBlock2 偏移量 0 保存玩家姓名、性别、32 位训练家 ID 和游戏时间 [global.h:327]。下半部分是教练卡上的TID；高半部分是里 ID，没有显示并且没有链接消息发送。
+SaveBlock2 偏移量 0 保存玩家姓名、性别、32 位训练家 ID 和游戏时间 [global.h:327]。下半部分是训练家卡上的TID；高半部分是里 ID，没有显示并且没有链接消息发送。
 
     POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/frlg_mg_host.py --live --keys PROD_KEYS \
         --buffer-script save-dump --dump-block sav2 --dump-size 64 --dump-file dump.bin
@@ -1317,7 +1318,7 @@ SaveBlock2 偏移量 0 保存玩家姓名、性别、32 位训练家 ID 和游�
       gender        boy
       trainerId     0x12345678  TID 22136  SID 4660
       playTime      12h 34m 56s
- 与教练卡不一致的 TID 意味着读取错误。
+ 与训练家卡不一致的 TID 意味着读取错误。
 ## 队伍
 
 SaveBlock1 0x34 是 `playerPartyCount`，然后 `playerParty[6]` 位于 0x38，每个 100 字节 [global.h:772]：6 个 604 字节。

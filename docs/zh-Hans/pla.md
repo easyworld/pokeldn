@@ -13,7 +13,7 @@ has_children: true
 
 | |价值|
 |---|---|
-| Pia 头版本 | 11、wiki 的 Pia 6.16 至 6.23 频段（Sword 4、BDSP 9、GBA app 15/16）|
+| Pia 头版本 | 11、wiki 的 Pia 6.16 至 6.23 频段（剑 4、BDSP 9、GBA app 15/16）|
 |标题大小 | 0x1C |
 |电线上的 GCM 标签 | 8 个字节，从 16 个字节截断 |
 | LDN 密码 | 剑／盾的，`HGhG` 拼写（wiki 的 `HGHG` 行是错误的）|
@@ -128,10 +128,10 @@ Pia 6.16 至 6.30 将 5.29 至 5.45 id 保留在会话层以下，并用一种�
 |实时传输时间 | 0x58 | 0x58 | 3 |
 |不可靠 | 0x68 | 0x68 | 5 |
 |克隆，从原子到时钟| 0x74-0x77 | 0x74-0x77 | 6-9 |
-|可靠| 0x7C | 0x7C | 10 | 10
-|广播可靠 | 0x80 | 0x80 | 11 | 11
+| 可靠传输 | 0x7C | 0x7C | 10 |
+| 可靠广播 | 0x80 | 0x80 | 11 |
 |会议| 0x94 | 0x98 | 13 |
-|监测数据| 0xA4 | 0xA4 | 15 | 15
+| 监测数据 | 0xA4 | 0xA4 | 15 |
 |站、网状网络、同步时钟、本地 | 0x14、0x18、0x1C、0x24 |缺席|缺席|
 
 `pia_connect.py`（网络、会话、RTT 为 6.32）适合此频段，其 ID 已重新编号；
@@ -219,62 +219,24 @@ ack 是会话类型 1，25 个字节：类型字节、主机位置 id、游戏�
 `0x738bc0` 通过常量 id 更新或创建每个站，然后设置 `JoinMeshJob+0x7c` 并发送类型 6。然后加入的游戏机运行 RTT、克隆时钟和流广播可靠流。
 ## 维持网格
 
-> 本节已随上游更新，以下内容暂保留英文。
+除非先完成 0x81 数据交换，否则加入的主机会在游戏的 DataExchangeStart 步骤超时后离开，实测为加入请求后 10.2 秒（[游戏读取器与处理函数注册前的阶段](#the-games-reader-and-the-pre-handler-phase)）。RTT（0x58）共 11 字节：类型、八字节时间戳、两字节目标；目标为 0 的类型 1 回显会被接受。
 
-A joined console leaves when the game's DataExchangeStart step times out, 10.2 s after its join request,
-unless the 0x81 data exchange completes first ([The game's reader and the pre-handler
-phase](#the-games-reader-and-the-pre-handler-phase)). RTT (0x58) is 11 bytes: kind, eight-byte timestamp,
-two-byte target; a kind-1 echo with target 0 is accepted.
+Stream Broadcast Reliable（0x81，可靠流广播）承载 `pokeldn/ldn/reliable5.py` 滑动窗口：先是 9 或 13 字节头部，再接应用数据；应用数据标志未置位时，则接 `2 + 21 * count` 字节的批量确认。确认消息开头的类型字节只读取第 0 位；每个 21 字节条目由站点字节、大端 u16 确认 ID、大端 u16 字段和 16 字节掩码组成。消费方（`BroadcastReliableSlidingWindow` vf13 `0x742730`）读取自身站点索引对应的条目，并要求其中的站点字节等于发送方索引：主机确认索引 1 的加入方时，至少发送两个条目，所有站点字节都为 0。ID 和掩码遵循[确认机制](#acknowledgement)。
 
-Stream Broadcast Reliable (0x81) carries the `pokeldn/ldn/reliable5.py` sliding window: the
-9-or-13-byte header, then application data or, with the application-data flag clear, a bulk ack of
-`2 + 21 * count` bytes. The ack's leading type byte has only bit 0 read; each 21-byte entry is a
-station byte, a big-endian u16 acknowledgement id, a big-endian u16 and a 16-byte mask. The consumer
-(`BroadcastReliableSlidingWindow` vf13 `0x742730`) reads the entry at its own station index and
-requires its station byte to equal the sender's index: a host acking a joiner at index 1 sends at
-least two entries with every station byte 0. The id and mask follow [Acknowledgement](#acknowledgement).
+消费方将每项的第二个半字存入 `[window + 0x528 + 2 * station]`（`0x742828..0x742830`），根据类型第 0 位设置 `[window+0x4b8]`，并通过 0x7c 窗口的 `0x74f0ec`（`0x742880`）应用 ID。发送路径 vf11 `0x742304` 从目标位图中移除半字为 `0xffff`、不低于窗口基值或槽位为空的所有站点（`0x74238c..0x74242c`），再将位图交给确认发送函数 `0x74ea00`：`[window+0x4b8]` 未置位时不执行；位图为空时清除它并写入时间戳 `[window+0x4c0]`；否则发送 AckMessage，序号 `0xffff`、长度 `2 + 21 * count`（`0x74eb64..0x74eb94`），每个占用站点一项（`0x74eba0..0x74ec2c`，由 `0x74ec80`、`0x743160` 序列化）。该半字仅门控确认，不影响重传。捕获的全部 30 次加入中，主机 0x81 应用消息的序号均为 1，因此主机端的确认使用 `ack_id 2`；主机仍确认到最高已收序号加一。
 
-The consumer stores each entry's second halfword at `[window + 0x528 + 2 * station]`
-(`0x742828..0x742830`), sets `[window+0x4b8]` on type bit 0, and applies the id through the 0x7c
-window's `0x74f0ec` (`0x742880`). The send path vf11 `0x742304` drops from its destination bitmap
-every station whose halfword is `0xffff` or at or above the window base, or whose slot is empty
-(`0x74238c..0x74242c`), and hands it to the ack sender `0x74ea00`: nothing unless `[window+0x4b8]`
-is set; an empty bitmap clears it and stamps `[window+0x4c0]`; otherwise an AckMessage, sequence
-`0xffff`, length `2 + 21 * count` (`0x74eb64..0x74eb94`), one entry per occupied station
-(`0x74eba0..0x74ec2c`, serialised by `0x74ec80`, `0x743160`). The halfword only gates
-acknowledgements, never retransmission. A console's 0x81 application message carried sequence 1 in
-every captured join (30), so a host acknowledgement names `ack_id 2`; a host still acknowledges one
-past the highest sequence received.
-
-The console opens its stream with an INITIALIZED data message (flags `0x0f`, seq 1) and a second
-one; its ack, about once a second, carries a host-stream id that climbs while the host is silent. Host data
-with the destination bitmap bit of the console's station index (bit 1, count 2) is applied; the
-wrong bit is dropped at the sender-station check.
+主机用 INITIALIZED 数据消息（标志 `0x0f`，序号 1）及第二条消息打开流；大约每秒发送一次确认，其中的主机端流 ID 会在主机端不发送数据时持续增长。主机端数据的目标位图若包含游戏主机站点索引对应的位（第 1 位，数量 2），就会被应用；位不正确时会在发送站点检查处丢弃。
 
 ### 静默站检查
 
 会话启动 `0x729d3c` 将启动设置的 `+0x28c` 复制到 `SessionProtocol+0xd8` (`0x72a098`)，没有下限（Z-A 的下限为 4000 毫秒），并将 `+0x290` 传递到发送静默限制（`0x746fe4`：负数失败，0x10407，0 变为 1000 ms）。每次更新 `0x73564c` 都会列出处于状态 2 的每个站，其最后一个数据包 (`ClusterStation+0x88`) 早于 `[SessionProtocol+0xd8]` 毫秒，在主机和加入方上都是如此。一旦第一个条目已存在 3000 毫秒 (`0x735364`)，`0x7359ac` 就会在列表上起作用：主机将每个电台交给 `KickoutManageJob` (`0x73cad4`)；列表中命名为主机的方加入将主机视为已消失 (`0x735b28`)。设置的 `+0x28c` 读取 10000 毫秒（托管搜索的模拟游戏机上的 `0x72a09c` 处的 `w9 = 0x2710`），如 Z-A 中所示。盒子屏幕上的无声主机在大约 13 秒内绘制伙伴留下的消息：10000 毫秒和 3000 毫秒宽限期。
 ## 游戏的读取器和预处理程序阶段
 
-> 本节已随上游更新，以下内容暂保留英文。
+游戏在 `main+0x2ca4f30`（`0x741494`）轮询读取器（一个实测时间窗口中调用了 365 次）：0x7C 和 0x80 两个循环共用同一处理函数表。0x81 上的主机端数据不会到达此表。消息前八字节是由两个 u32 组成的处理键；匹配的处理函数接收剩余内容，不匹配的键则被丢弃。
 
-The game polls its reader at `main+0x2ca4f30` (`0x741494`) (365 calls in one measured window): two
-loops, 0x7C and 0x80, share one handler table. Host data on 0x81 never reaches it. A message's first eight bytes are a two-u32 handler key; the
-matched handler receives the rest, and an unmatched key is discarded.
+在交换搜索界面，处理函数表为空（读取后的 `ldr x8, [x19+0xd0]; cbz x8`），因此所有消息都会被取出而不处理。`0x2ca5264` 在流程步骤 0x1e 注册处理函数，超时的会话从未到达这一步；离开菜单时处理函数数组指针被清空。实测空闲时读取循环每秒约执行 2.5 次。游戏的九个 Pia 调用点仅涉及 0x68、0x7C、0x80（三条读取循环、四条发送路径）；0x77 时钟流量来自 Pia 自身。
 
-At the trade search screen the handler table is empty (`ldr x8, [x19+0xd0]; cbz x8` after the read),
-so every message is drained unread. `0x2ca5264` registers handlers at flow step 0x1e, never reached
-in a session that times out; the handler-array pointer is nulled on leaving the menu. The reader
-loops ticked about 2.5 times a second while idle, measured. The game's nine Pia call sites resolve only 0x68,
-0x7C and 0x80 (three read loops, four send paths); the 0x77 clock traffic is Pia's own.
-
-The ten-second leave is the failure branch of the game's matching sequence, above the Pia mesh join;
-the trade scene is its success branch. The trade flow is `0x13d5bfc`, step at `[flow+0xa4]`,
-jump table `0x397c118` for steps 0x15 to 0x22. Step 0x17 calls `0x26bdcac`, which builds the sequence
-at `[manager+0x70]`; step 0x18 polls it through vtable slot 9 (`0x12b3290`), true when the
-outstanding-child counter `[request+0x70]` is zero. The flow reads no network, session or mesh field.
-Step 0x1e registers the handlers (`0x13d5f94 -> 0x26d8c2c -> 0x2bcb8c8 -> 0x2ca5264`). The sequence's
-steps, by the name strings `0x26bdcac` pairs with their functors:
+十秒后离开属于游戏匹配流程的失败分支，位于 Pia 网状网络加入流程之上；成功分支进入交换场景。交换流程为 `0x13d5bfc`，步骤位于 `[flow+0xa4]`，跳转表 `0x397c118` 对应步骤 0x15 至 0x22。步骤 0x17 调用 `0x26bdcac`，在 `[manager+0x70]` 构造序列；步骤 0x18 通过虚函数表槽位 9（`0x12b3290`）轮询它，未完成子任务计数器 `[request+0x70]` 为零时返回真。该流程不读取任何网络、会话或网状网络字段。步骤 0x1e 注册处理函数（`0x13d5f94 -> 0x26d8c2c -> 0x2bcb8c8 -> 0x2ca5264`）。以下按 `0x26bdcac` 与函数对象配对的名称字符串列出序列步骤：
 
     LoginRelayServer     looked up before the sequence is built; a missing one returns false
     Matching             the matchmaking, from the TradeMatchmakingConfig record
@@ -285,59 +247,20 @@ steps, by the name strings `0x26bdcac` pairs with their functors:
     OnCancel
     Cleanup
 
-Step 0x18's second gate is `0x13de870`, `[obj+0x7c] == 1` on the persistent network-menu object,
-set by the case-0 update `0x13de888` when the current page (`[obj+0x88]`; ViewTop `[obj+0x90]`
-`0x13de950`, ViewAlert `[obj+0x98]` `0x13de9d8`, ViewInMatching `[obj+0xa0]` `0x13dea28`, built by
-`0x13de3cc` from the `netm` layouts) reports result 1 in its `+0x5bc`. Only player input writes it: 1
-from InputDecide and InputBack (`0x13dc7b4`, `0x13dc7ec`, `0x13dd3ec`, installed at `0x13dc0a4`,
-`0x13dc1a0`, `0x13dc9a0`), 2 and 3 for `button_00` and `button_01` (`0x13ddcb4`), which set
-`[obj+0x7c] = 2` and `[obj+0x84]`. The first gate, the child counter, reads 0 at `0x13d6130`.
+步骤 0x18 的第二个门控条件为 `0x13de870`，位于持久网络菜单对象的 `[obj+0x7c] == 1`。当当前页面（`[obj+0x88]`；ViewTop `[obj+0x90]` `0x13de950`、ViewAlert `[obj+0x98]` `0x13de9d8`、ViewInMatching `[obj+0xa0]` `0x13dea28`，由 `0x13de3cc` 根据 `netm` 布局构造）在其 `+0x5bc` 中返回结果 1 时，分支 0 的更新函数 `0x13de888` 会设置它。只有玩家输入会写入它：InputDecide 和 InputBack 写入 1（`0x13dc7b4`、`0x13dc7ec`、`0x13dd3ec`，在 `0x13dc0a4`、`0x13dc1a0`、`0x13dc9a0` 安装）；`button_00`、`button_01` 对应 2、3（`0x13ddcb4`），并设置 `[obj+0x7c] = 2`、`[obj+0x84]`。第一个门控条件，即子任务计数器，在 `0x13d6130` 读到 0。
 
-The DataExchangeStart step's start `0x26c5288` (built by `0x26be3f0`, called at `0x26bde74` after
-the step's name; Matching is `0x26be354`) stores the data-exchange object at `[step+0x118]` and
-starts a stopwatch at `[step+0x120]` on the OS tick (`0x26c539c`). Its update `0x26c6988`
-completes once at least two stations' records have arrived and every occupied slot has one
-(`0x26c6b70`, `0x26c6c04`); otherwise it compares the elapsed seconds with the literal 10.0
-(`fmov d1, #10.0` at `0x26c6a94`, measured 10.2 s after the join request) and fails the request with
-`net_contents::p2p::ErrorLeaveAnyone` (vtable `0x416c628`, built by `0x26c6d30`). The failure runs
-`0x13d654c -> 0x13d6384 -> 0x2c43d78 -> 0x2ca0a10 -> Session::LeaveAsync (0x72a6dc)`, then the
-Error 7 dialog. `0x26d4ae8` is in the result callback `0x26d4aa0`, which tests the error against
-`gflnet::request::Error::Timeout`, then `ErrorLeaveAnyone` (`0x26d4e04`), then
-`gflnet::npln::NplnResult`; every error passes it. The step starts only on an established session:
-`0x26c564c` returns false unless the station object at `[exchange+0x80]` reports one and an own
-station index other than 0xfd. The only `Error::Timeout` producer is the watcher `0x2bdb754`, armed
-by `0x2bda8cc` in two WaitMember steps of the matchmaking: 25000 ms (`0x2bda24c`, request
-`0x2bcd394`, target 2) and `3000 + rand % 1000` ms (`0x2c491b8`, `0x2c4874c`, the target from the
-matchmaking record). A WaitMember step completes once the session's member count (vfunc `+0xd8`)
-reaches its target byte `+0x88` (`0x2c1a8f0..0x2c1a920`), and nothing extends its timer. A seated
-hosting slot therefore ends on the 10.0 s deadline: the stopwatch starts after matchmaking returns,
-and its failure leaves the session with host migration. The completion callback is `[request+0x90] -> 0x26d69e8 -> 0x26d6a88`.
+DataExchangeStart 步骤的启动函数 `0x26c5288`（由 `0x26be3f0` 构造，在步骤名称之后的 `0x26bde74` 调用；Matching 为 `0x26be354`）将数据交换对象存于 `[step+0x118]`，并在 `[step+0x120]` 以操作系统计时值启动秒表（`0x26c539c`）。更新函数 `0x26c6988` 在至少收到两个站点的记录、且每个占用槽位都有记录时完成（`0x26c6b70`、`0x26c6c04`）；否则将经过秒数与字面量 10.0 比较（`0x26c6a94` 处的 `fmov d1, #10.0`，实测为加入请求后 10.2 秒），并以 `net_contents::p2p::ErrorLeaveAnyone` 使请求失败（虚函数表 `0x416c628`，由 `0x26c6d30` 构造）。失败时执行 `0x13d654c -> 0x13d6384 -> 0x2c43d78 -> 0x2ca0a10 -> Session::LeaveAsync (0x72a6dc)`，然后显示错误 7 对话框。`0x26d4ae8` 位于结果回调 `0x26d4aa0`，依次对错误检查 `gflnet::request::Error::Timeout`、`ErrorLeaveAnyone`（`0x26d4e04`）、`gflnet::npln::NplnResult`；任何错误都能通过。该步骤仅在会话已建立时启动：除非 `[exchange+0x80]` 的站点对象报告会话存在且自身站点索引不为 0xfd，否则 `0x26c564c` 返回假。只有监视器 `0x2bdb754` 会产生 `Error::Timeout`；匹配流程的两个 WaitMember 步骤通过 `0x2bda8cc` 启动它：25000 毫秒（`0x2bda24c`，请求 `0x2bcd394`，目标 2）及 `3000 + rand % 1000` 毫秒（`0x2c491b8`、`0x2c4874c`，目标来自匹配记录）。会话成员数（虚函数 `+0xd8`）达到目标字节 `+0x88` 时，WaitMember 完成（`0x2c1a8f0..0x2c1a920`），没有机制延长计时器。因此已就座的主机槽位会在 10.0 秒期限结束：匹配返回后才启动秒表，失败时以主机迁移方式退出会话。完成回调为 `[request+0x90] -> 0x26d69e8 -> 0x26d6a88`。
 
-The DataExchangeStart step waits for a two-round data exchange on Stream Broadcast Reliable (0x81), ports 0
-and 1, after the mesh join: each station opens the stream with a type-0x0f message, acknowledges with the 44-byte
-`0000002c ffff` message under flags 0xa0 ([Joining a console's network](#joining-a-consoles-network))
-and sends one 74-byte type-0x1f content record carrying a 64-byte payload beginning `484b6264`. The step completes on the
-peer's second-round record (17 ms after it, measured), enqueuing `OnSuccess` (`0x26d5f64`); a host
-that only acknowledges the stream gets the timeout. A joining console opens its stream unprompted and
-sends its content record after the host's (86 ms after it, measured); a hosting console sends its
-record first, on the joiner's stream open. The trade box (a 399-byte type-7 record) crosses later on
-0x7c.
+加入网状网络后，DataExchangeStart 在 Stream Broadcast Reliable（0x81）的端口 0、1 等待两轮数据交换：每个站点用类型 0x0f 消息打开流，在标志 0xa0 下用 44 字节 `0000002c ffff` 消息确认（[加入游戏主机的网络](#joining-a-consoles-network)），并发送一条 74 字节的类型 0x1f 内容记录，其中携带以 `484b6264` 开头的 64 字节载荷。收到对方第二轮记录后步骤完成（实测间隔 17 毫秒），并将 `OnSuccess` 入队（`0x26d5f64`）；主机端若只确认流就会超时。加入的游戏主机会主动打开流，在主机端记录之后发送自己的内容记录（实测晚 86 毫秒）；主持会话的游戏主机则在加入方打开流时先发自己的记录。交换盒子数据（399 字节类型 7 记录）稍后通过 0x7c 传输。
 
-A message ends where its payload ends; this band does not align messages to four bytes (5.27-5.45
-does), and only the packet pads ([Reading and writing a packet](#reading-and-writing-a-packet)). A
-host answering the console's stream open bundles two messages in one packet: the record on port 0,
-then its own stream open on port 1 under a header naming size, protocol and port and inheriting the
-message flags. `bin/pla_host.py` sends that bundle once per join; lost on the air, the console shows
-Error 7 at the 10.2 s timeout.
+消息在载荷末尾结束；此版本范围不将消息对齐到四字节（5.27 至 5.45 会对齐），只有数据包补齐（[读写数据包](#reading-and-writing-a-packet)）。主机端回应游戏主机打开流时，在一个数据包中合并两条消息：先是端口 0 的记录，再是端口 1 上自身的流打开消息；后者使用标明大小、协议、端口的头部，并继承消息标志。`bin/pla_host.py` 每次加入只发送该组合包一次；无线传输丢失时，游戏主机会在 10.2 秒超时后显示错误 7。
 
-| protocols | header destination | footer |
+| 协议 | 头部目标 | 尾部 |
 |---|---|---|
-| Session, Clone Clock, Reliable | the peer's variable id | none |
-| RTT, Stream Broadcast Reliable | mesh destination 0x0001 | the recipient's variable id, plaintext |
+| Session（会话）、Clone Clock（克隆时钟）、Reliable（可靠传输） | 对方的可变 ID | 无 |
+| RTT（往返时延）、Stream Broadcast Reliable（可靠流广播） | 网状网络目标 0x0001 | 接收方的可变 ID，明文 |
 
-A 0x81 message addressed to the peer's variable id in the header never reaches the game. The 64-byte
-content payload is identical in both directions of a same-save pair except for the sender's station
-index; which bytes are per-player is unknown.
+如果 0x81 消息头部的目标为对方可变 ID，消息就不会到达游戏。同一存档配对时，双向 64 字节内容载荷除发送方站点索引外完全相同；哪些字节因玩家而异尚不清楚。
 
 ## 游戏可靠渠道
 
@@ -402,7 +325,7 @@ id 是累积的：确认 n+2 会释放 n，无论它是否到达。游戏机确�
 
 |同行表|打开|关闭 |
 |---|---|---|
-|掌握关键|站点的位与掩码进行“或”运算 (`0x2ca9a6c`)；重复打开没有任何改变|位与运算 (`0x2ca9ae4`)；没有留下任何一个站位，通过向下移动尾部和 `[obj+0xe0] -= 0x18` (`0x2ca9b14`) | 删除该条目。
+| 持有该键 | 将站点对应位按位或入掩码（`0x2ca9a6c`）；重复打开不会改变任何内容 | 通过按位与清除该位（`0x2ca9ae4`）；若两个站点的位均已清除，则下移尾部并执行 `[obj+0xe0] -= 0x18`（`0x2ca9b14`），删除该条目 |
 |缺少钥匙 |附有电台位的条目 |附加零掩码的条目 |
 
 没有手臂调用游戏或在对等表之外写入。收藏家`0x2ca8f58`（每次投票，
@@ -485,7 +408,7 @@ id 是累积的：确认 n+2 会释放 n，无论它是否到达。游戏机确�
 
 该消息仅取决于保存（在主机和会话密钥之间相同）：捕获重播。
 
-该记录是 Gen-8 实体（`pokeldn.gen8` 标头、LCG、块排列和 16 位校验和），具有 0x58 字节块：0x168 存储，0x178 在队列中。 `gen8.BLOCK_ORDER[(ec >> 13) & 31]` 在解密时按原样应用，在加密时反转。校验和无法区分两者；名字可以：直接读，昵称在0x60（第二块），教练名字在
+该记录是 Gen-8 实体（`pokeldn.gen8` 标头、LCG、块排列和 16 位校验和），具有 0x58 字节块：0x168 存储，0x178 在队列中。 `gen8.BLOCK_ORDER[(ec >> 13) & 31]` 在解密时按原样应用，在加密时反转。校验和无法区分两者；名字可以：直接读，昵称在0x60（第二块），训练家名字在
 0x110（第四）。倒读，两者都提前一个街区落地。 0x0c的训练家ID和训练家姓名是数据交换携带的玩家id和姓名。
 ## 确认交易
 
@@ -515,7 +438,7 @@ id 是累积的：确认 n+2 会释放 n，无论它是否到达。游戏机确�
 
 |状态|手臂|确实 |
 |---|---|---|
-| 1 | `0x26dc774` |执行者 vf `+0x40` `0x26dd488`（针对八个 ID `0x1e3..0x1ed` 的两个记录的物种），其结果为 `[job+0x1d]`，然后是 `0x26d7d8c(obj, 3)` (`0x26dc97c`)；仅当发送返回 true 时才处于状态 2 |
+| 1 | `0x26dc774` |执行者 vf `+0x40` `0x26dd488`（针对八个 ID `0x1e3..0x1ed` 的两个记录的种类），其结果为 `[job+0x1d]`，然后是 `0x26d7d8c(obj, 3)` (`0x26dc97c`)；仅当发送返回 true 时才处于状态 2 |
 | 2 | `0x26dc798` | `0x26d7e5c(obj, 3)`: 主机的 `02 03` |
 | 3 | `0x26dc7b4` |执行器 vf `+0x50` `0x26dd910` 直到返回 false：交换限制设置并保存 ([交换限制](#the-trade-restriction)) |
 | 4 | `0x26dc7e4` |发送阶段 6 |
@@ -524,9 +447,9 @@ id 是累积的：确认 n+2 会释放 n，无论它是否到达。游戏机确�
 | 7 | `0x26dc82c` |等待执行器阶段 3 (`0x26dba0c`)，然后发送 `0x0b`（状态 8），或状态 9 并清除 `[job+0x1d]` |
 | 9 | `0x26dc85c` |向下计数 `[job+0x20]`，然后发送 `0x0b` |
 | 8, 10 | `0x26dc758` |等待`02 0b` |
-| 11, 12 | 11, 12 `0x26dc888`，`0x26dc898` |执行器阶段4，然后等待阶段5并发送`0x0e`；第 4 阶段运行 `0x1048690` -> `0x298f2f4`，调用 `nn::fs::Commit` (`0x298f318`) |
+| 11, 12 | `0x26dc888`, `0x26dc898` | 执行器阶段4，然后等待阶段5并发送`0x0e`；第 4 阶段运行 `0x1048690` -> `0x298f2f4`，调用 `nn::fs::Commit` (`0x298f318`) |
 | 13 | `0x26dc8c0` |等待`02 0e` |
-| 14 | 14 `0x26dc8e0` |成功函子 `[job+0x30]`，或用 `[job+0x18]` 设置失败函子 `[job+0xb0]`；状态 0xf |
+| 14 | `0x26dc8e0` | 成功函子 `[job+0x30]`，或用 `[job+0x18]` 设置失败函子 `[job+0xb0]`；状态 0xf |
 
 状态 9 的计数在作业初始化 `0x26dc2c8` 中设置一次：xoroshiro128+ 绘制 0 到 300（`0x26dc400`，全局状态 `[[0x4279680]+0xd8]`）加上 2（`0x26dc340`），2 到 302 帧。成功调用者`0x26db864`写入交换对象`[+0xb8] = 6`；失败调用者 `0x26db8ec` 写入 7。
 
@@ -535,7 +458,7 @@ n`。发送方 `0x26d7e84` 仅在成功发送后才写入两者：它测试 `0x2
 [obj+0x88])`，通过 `[obj+0x70]` 的 vtable +0x40 发送到 `[obj+0x88]`，在 `+0x92` 记录相位并设置`+0x90`。
 
 失败的门在下一次更新时重试（`bl 0x26d7d8c; tbz w0,#0,0x26dc908`；`0x26dc908` 返回，`[job+0x10]` 不变）：通道表拒绝的发送将作业保持在发送状态（在状态 1 处拒绝 `01 03`，在状态 2 处丢失 `02 03`）。处于状态 1 或 2 的作业本身没有超时：唯一的倒计时是状态 9 的 `[job+0x20]` (`0x26dc85c`)；下没有读取时钟
-`0x26d7d8c`、`0x26d7e5c`、`0x26d7f4c`、`0x26dd488` 或 `0x26dc6b0`；执行器tick `0x26dba38`在阶段0不执行任何操作（`0x26dba68..0x26dba80`）；唯一读取的刻度 `0x265d420`（`nn::os::GetSystemTick` at `0x265d440`）来自状态 3。
+`0x26d7d8c`、`0x26d7e5c`、`0x26d7f4c`、`0x26dd488` 或 `0x26dc6b0`；执行器tick `0x26dba38`在阶段0不执行任何操作（`0x26dba68..0x26dba80`）；唯一读取的刻度 `0x265d420`（`nn::os::GetSystemTick` 位于 `0x265d440`）来自状态 3。
 
 另一个出口是取消请求 `0x26dc640` (`[job+0x14]`, `[job+0x18]` := 1)，仅通过场景监视器 (`0x1109ef4`) 中的 `0x26d9e90` 到达并离开模式 9 (`0x110b7ac`，秒表在`[scene+0x278]`、`0x110b794..0x110b79c`）。场景位于作业生命周期的模式 5、步骤 9（从 `0x110ad34` 开始，步骤 9 设置为 `0x110ad3c`）；步骤9臂`0x110abb8`等待
 `0x26d9354`（`[+0xb8]`到`0x397e380`，6到5，7到0）读取5.预切换调用
@@ -630,7 +553,9 @@ PKHeX 的 `BlankBlocks8a.cs` 同意尺寸。在保存`0x96993D83`中是类型11�
 
 游戏机依次公布3、6、0xb、0xe；主机用选择器 2 和相同的相位回答每个问题，这将继续工作：
 
-一旦第一个 `02 03` 到达（240 毫秒后，测量），    <-  0x7c p0  01 03      ->  01 03   the mirror     ->  02 03   the host's
+一旦第一个 `02 03` 到达（实测为 240 毫秒后）：
+
+    <-  0x7c p0  01 03      ->  01 03   the mirror     ->  02 03   the host's
     <-  0x7c p0  01 06      ->  02 06
     <-  0x7c p0  01 0b      ->  02 0b
     <-  0x7c p0  01 0e      ->  02 0e
@@ -676,7 +601,7 @@ PKHeX 的 `BlankBlocks8a.cs` 同意尺寸。在保存`0x96993D83`中是类型11�
  步骤 11 至 13 中没有被叫方到达会话、频道表或发送：场景返回到会话已启动的框。步骤5的手臂`0x110ac9c`将尾部共享到`0x110b9f0`。 `0x10fb178` 清除盒子控制器的有效标志 `+0x164`、`+0x16c`、`+0x174` 和尾部调用 `0x26d93c4`，这用新的 `0x151dc70` 对象替换 `[net+0x98]` 并不发送任何内容。
 
 模式0每帧读取光标（`0xc5294c`盒子、`0xc4bf2c`槽、`0x11207f8`记录）并调用
-`0x10fb198` at `0x110a010`，仅当光标元组与`+0x168/+0x170/+0x178`中缓存的元组不同或有效标志被清除（`0x10fb1a8..0x10fb1f0`）时才通过`0x26d9458`发送显示，发送后缓存元组（`0x10fb208..0x10fb220`）；交换后，清除的标志会导致新的选择器 2。光标移动只能通过`0x10fb198`到达网络。提供（菜单结果 0x19、`0x110a098`）通过 `0x26d95ac`（`0x110a24c`）运行 `0x10fb25c`、选择器 4，成功后 `0x110a260 mov w8,#5; b 0x110a148` 在步骤 0 进入模式 5。
+`0x10fb198` 位于 `0x110a010`，仅当光标元组与`+0x168/+0x170/+0x178`中缓存的元组不同或有效标志被清除（`0x10fb1a8..0x10fb1f0`）时才通过`0x26d9458`发送显示，发送后缓存元组（`0x10fb208..0x10fb220`）；交换后，清除的标志会导致新的选择器 2。光标移动只能通过`0x10fb198`到达网络。提供（菜单结果 0x19、`0x110a098`）通过 `0x26d95ac`（`0x110a24c`）运行 `0x10fb25c`、选择器 4，成功后 `0x110a260 mov w8,#5; b 0x110a148` 在步骤 0 进入模式 5。
 
 每个模式均在步骤 0 处进入（`str x8,[x19,#0xb0]` 位于 `0x1109abc`、`0x1109ac8`、`0x1109bac`、
 `0x110a148`、`0x110a314`、`0x110ae14`、`0x110b408`、`0x110b508`、`0x110b9dc`、`0x110ba44`、
@@ -690,7 +615,7 @@ PKHeX 的 `BlankBlocks8a.cs` 同意尺寸。在保存`0x96993D83`中是类型11�
 如果主机应答了游戏机关闭阶段键，则第二个`01 03`在门内等待，直到主机再次宣布键打开：作业处于状态1，场景处于步骤9，无超时，无限制。
 
 处于状态 1 或 2 的作业显示 `common/box` `msg_ui_box_p2ptrd_09`，“正在通信。请待命...”（“Communication en cours...Veuillez Patienter。”），由“交换它”回调发出
-`0x110c3d8` 通过消息助手（`[scene+0xc0]`，`bl 0x26bcc14` at `0x110c424`，标签哈希在
+`0x110c3d8` 通过消息助手（`[scene+0xc0]`，`bl 0x26bcc14` 位于 `0x110c424`，标签哈希在
 `0x110c408..0x110c418`)，设置步骤6；助手的关闭 `0x26bcfc0` 仅在以下位置调用
 `0x110a84c`、`0x110ac5c`、`0x110ace4`。 `0x1128184(ui, 1)` 打开取消提示（`InputCancel`，
 `0x11281bc`），只读步骤 2 和 7（`0x110ac00`、`0x110ad4c`）。
@@ -705,10 +630,10 @@ PKHeX 的 `BlankBlocks8a.cs` 同意尺寸。在保存`0x96993D83`中是类型11�
     0x0d4  1   the current handler, set to 1
     0x0d8  1   the handling trainer's friendship
     0x16a  12  the six party stats, recomputed
- 其他所有内容均按到达时存储；保持高于该水平的满足水平。所写的友谊是个人条目中该物种的基础友谊（耿鬼和烈咬陆鲨为50）。
+ 其他所有内容均按到达时存储；保持高于该水平的满足水平。所写的亲密度是个人条目中该种类的基础亲密度（耿鬼和烈咬陆鲨为50）。
 
 每个块的开头是 `pokeldn.gen8` 加上每个前一个块的八个字节：昵称 0x60（第 8 代）
-0x58），操控训练器名称0xb8（0xa8），训练器名称0x110（0xf8），训练器名称0x168（0x148）。在块内，偏移量跟随块：第一个是 Gen 8，除了移动（0x54 和 PP 0x5c，其中 Gen 8 在第二个块中有 0x72 和 0x7a），第二个 Gen 8 加 8，第三个加 0x10，第四个加 0x18，球移至见面日期之后。
+0x58），最近持有人名称0xb8（0xa8），训练家名称0x110（0xf8），训练家名称0x168（0x148）。在块内，偏移量跟随块：第一个是 Gen 8，除了移动（0x54 和 PP 0x5c，其中 Gen 8 在第二个块中有 0x72 和 0x7a），第二个 Gen 8 加 8，第三个加 0x10，第四个加 0x18，球移至见面日期之后。
 
 `pokeldn/pla/trade_box.py` 和 `pokemon.py` 再现游戏机的字节。
 ## 选择提供什么
@@ -717,41 +642,41 @@ PKHeX 的 `BlankBlocks8a.cs` 同意尺寸。在保存`0x96993D83`中是类型11�
 
 |偏移|领域 |偏移|领域 |
 |---|---|---|---|
-| 0x08 |物种 | 0x92 |当前HP |
-| 0x0a |持有物品 | 0x94 |包装个人价值|
+| 0x08 |种类 | 0x92 |当前HP |
+| 0x0a |持有物 | 0x94 |包装个人价值|
 | 0x0c | 训练家ID，32位（面板显示模1000000）| 0xa4 |成长价值|
 | 0x10 |经验| 0xac，0xb0 |绝对身高、体重（浮动）|
-| 0x14 |能力| 0xb8 |操控训练器|
+| 0x14 |特性| 0xb8 |最近持有人|
 | 0x16 |阿尔法位| 0xee |版本 |
 | 0x1c |人格价值| 0xf2 |语言 |
-| 0x20 |性质（Gen-3 表：9 是宽松的）| 0x110 |教练姓名|
+| 0x20 |性格（第三世代表：9 为乐天）| 0x110 |训练家姓名|
 | 0x24 |表格| 0x134 |见面日期|
 | 0x26 |努力值| 0x137 |球 |
-| 0x3e |阿尔法移动| 0x138，0x13a |鸡蛋和遇见地点|
-| 0x50、0x51、0x52 |身高标量、体重标量、比例| 0x13d |达到水平和培训师性别|
+| 0x3e |阿尔法移动| 0x138，0x13a |蛋和遇见地点|
+| 0x50、0x51、0x52 |身高标量、体重标量、比例| 0x13d |达到水平和训练家性别|
 | 0x54，0x5c |移动，PP | 0x159 |购买搬家记录|
 | 0x60 |昵称| 0x15d |掌握位图动作|
 | 0x8a |重新学习动作| 0x168，0x16a |等级，六项统计数据 |
 
 `pokeldn/pla/pokemon.py` 将地图保存为四个表。在 47 个捕获的记录中，alpha 位和 alpha move 设置在相同的三个记录上，其中 0x50、0x51 和 0x52 中携带 0xff；比例等于所有 47 中的高度标量； 0x94 有蛋和昵称位清晰；每条记录都带有版本 47、语言 2、健全性 0 和附加功能区 0xff。
 
-`pokemon.build` 从 376 个零字节组装一条记录，将给定字段写入每个捕获记录都同意的默认值，并写入校验和；未映射的字段保持为零。与游戏机自己的68级耿鬼相比，它的不同之处仅在于选择的领域。组合记录（第 6 代异色值为 0 的异色、alpha、昵称、保存从未保存过的物种、游戏表格中的每个值）交换并显示为已发送。存储后，它们与仅在字段[交换重写内容](#what-a-trade-rewrites)列表中发送的内容不同；携带游戏计算统计数据的尾部留下 14 个字节的变化（校验和和处理程序字段）。
+`pokemon.build` 从 376 个零字节组装一条记录，将给定字段写入每个捕获记录都同意的默认值，并写入校验和；未映射的字段保持为零。与游戏机自己的68级耿鬼相比，它的不同之处仅在于选择的领域。组合记录（第 6 代异色值为 0 的异色、alpha、昵称、保存从未保存过的种类、游戏表格中的每个值）交换并显示为已发送。存储后，它们与仅在字段[交换重写内容](#what-a-trade-rewrites)列表中发送的内容不同；携带游戏计算统计数据的尾部留下 14 个字节的变化（校验和和处理程序字段）。
 
-存储已保存的已接收的记录（其加密常数和个性值）（盒块 `0x47E1CEAB`）。
+存储已保存的已接收的记录（其加密常量和PID）（盒块 `0x47E1CEAB`）。
 
 `bin/pla_host.py` 按顺序处理每个 `(port, sequence id)` 一次，并重新发送未确认的答案。每次光标移动都会显示一次，取消的提议将重新提议为 `04 01`。第二个交换会重复消息正文，因此按正文进行重复数据删除会丢失其答案。
 ### 掌握动作
 
-0x15d 处的 8 个字节是游戏掌握列表中 61 个动作的位图（按顺序排列）；一个物种只能掌握其个人进入许可证（u64 at 0xa8）。在牧场变化招式屏幕上，当招式的掌握等级（`mastery_la`，按物种和形式，学习集格式）等于或低于当前等级或设置其位时，招式就会绘制卷轴：在13级小模板猴上，Swift（20，索引10）仅在其位设置时绘制它。
+0x15d 处的 8 个字节是游戏掌握列表中 61 个动作的位图（按顺序排列）；一个种类只能掌握其个人进入许可证（u64 at 0xa8）。在牧场变化招式屏幕上，当招式的掌握等级（`mastery_la`，按种类和形式，学习集格式）等于或低于当前等级或设置其位时，招式就会绘制卷轴：在13级小火焰猴上，高速星星（20，索引10）仅在其位设置时绘制它。
 ### 游戏计算的统计数据
 
-`pokeldn/pla/stats.py` 重现了交换写入尾部的统计数据。每个统计数据都是一个增长项，四舍五入为 `(sqrt(base) * multiplier + level) / 2.5`，加上一个基本项：`((level / 100 + 1) * base)` 截断加上 HP 水平，`((level / 50 + 1) * base / 1.5)` 截断，其余部分的性质为 110% 或 90%。乘数是通过增长值加上个人价值偏差（3 为 31 及以上、2 为 26、1 为 20）从表格中读取的，总和固定在
+`pokeldn/pla/stats.py` 重现了交换写入尾部的统计数据。每个统计数据都是一个增长项，四舍五入为 `(sqrt(base) * multiplier + level) / 2.5`，加上一个基本项：`((level / 100 + 1) * base)` 截断加上 HP 水平，`((level / 50 + 1) * base / 1.5)` 截断，其余部分的性格为 110% 或 90%。乘数是通过增长值加上个人价值偏差（3 为 31 及以上、2 为 26、1 为 20）从表格中读取的，总和固定在
 10.经过68级14级游戏机计算的12个数字验证，耿鬼的基本属性：完美个人价值和成长10的273/210/199/322/345/220，捐赠者的239/136/121/322/304/133（个人价值22和成长9也钳位到10，所以它的速度不变）。
 
-0xac和0xb0的绝对身高和体重是物种平均时间
+0xac和0xb0的绝对身高和体重是种类平均时间
 `(scalar / 255) * 0.40000004 + 0.8` 每个标量，高度单独为高度，两者相乘为重量，采用 32 位浮点数。标量 111 和 221 相对于平均值 150 和 405 给出 146.11766052246094 和 452.38031005859375，这是游戏机耿鬼携带的浮点数。
 
-基础统计数据、性别比例、能力、经验曲线、平均大小、升级学习集和 PP 来自 PKHeX 的游戏表副本：`personal_la`（0xB0 字节一个条目；0x21 位 6 标记游戏中的一个物种，其中 264 个），`lvlmove_la.pkl`（一个16 位 BinLinker 存档，先移动半字，然后再移动级别字节），`MoveInfo8a`、`Experience`。
+种族值、性别比例、特性、经验曲线、平均大小、升级学习集和 PP 来自 PKHeX 的游戏表副本：`personal_la`（0xB0 字节一个条目；0x21 位 6 标记游戏中的一个种类，其中 264 个），`lvlmove_la.pkl`（一个16 位 BinLinker 存档，先移动半字，然后再移动级别字节），`MoveInfo8a`、`Experience`。
 ## 克隆时钟和原子协议
 
 该频段将 Clone 系列分成独立的协议，与 6.32 克隆协议无关：Clone Clock 0x77 和 Clone Atomic 0x74。
@@ -835,7 +760,7 @@ elapsed)` (`0x265d180` -> `nn::time::StandardNetworkSystemClock::GetCurrentTime`
 |场景 ID | 1 |
 |广告框版| 4（GBA 应用程序 3、剑 2）|
 |接受政策 |全部 |
-|参与者| 1 / 2 | 1 / 2
+| 参与者 | 2 个中的 1 个 |
 | SSID | 16字节，会话密钥的输入|
 |应用数据| 112 字节 |
 
@@ -891,8 +816,5 @@ Pia 内部没有计时器先于第一个类型 3（[pia.md](pia.md)，离开会�
 `--leave-after SECONDS`使`bin/pla_host.py`将带有自己id的请假发送到每个加入的站点并结束运行； `--stay-after-leave` 保持网络正常运行、安静，并在游戏机在交换后离开后继续运行。叶子的形状固定在捕获的四片游戏机叶子上。
 ## 未解决
 
-> 本节已随上游更新，以下内容暂保留英文。
-
-- What the matchmaking WaitMember counts as a member (session vfunc `+0xd8`): a first migrating
-  0x11 8.3 s after the seat puts the 10.0 s stopwatch start before the seat.
-- What the console does in the 3.6 s between leaving the network and showing the field.
+- 匹配流程的 WaitMember 如何统计成员（会话虚函数 `+0xd8`）：就座后 8.3 秒出现的首条迁移 0x11，表明 10.0 秒秒表在就座前就已启动。
+- 主机离开网络到显示游戏场景之间的 3.6 秒内执行了什么。

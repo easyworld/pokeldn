@@ -9,7 +9,7 @@ Linux 主机可以作为 root 直接驱动支持 AP 的 Wi-Fi 卡，代替 [ESP3
 
 |症状 |原因 |
 |---|---|
-| AP 启动时管理程序式 USB 断开连接USB 模式开关（下） |
+| 启动 AP 时出现类似虚拟机管理程序造成的 USB 断连 | USB 模式开关（见下文） |
 |沉默的主机| `accept_decrypted_ccmp` 未设置 |
 | `failed to get tx report from firmware` 在 `dmesg` |主机自行拆解|
 ## 测试卡

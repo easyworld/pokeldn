@@ -9,7 +9,7 @@ has_children: false
 宝可梦传奇：Z-A（游戏 ID `0100f43008c44000`）是一款原生 Switch 游戏，Pia 静态链接到 `main`。其数据包头是版本 16，即 `pokeldn.ldn.crypto` 为 GBA 应用程序编写的数据包头。
 ## 转储
 
-基础应用程序 `v0` (4.3 GB)，更新 `0100f43008c44800` `v393216` (2.1 GB)，Mega Dimension DLC
+基础应用程序 `v0` (4.3 GB)，更新 `0100f43008c44800` `v393216` (2.1 GB)，超次元爆涌 DLC
 `0100f43008c45002`。
 
 | NCA |编号 |集装箱偏移|部分键 |
@@ -50,7 +50,7 @@ has_children: false
 |应用版本| 6 |
 |安全模式| 1 |
 |接受政策 |全部 |
-|参与者| 1/2 | 1/2
+| 参与者 | 1/2 |
 |系统/应用通讯版| 22 / 6 |
 |玩家姓名 |一个字节，一个空格，UTF-8 |
 
@@ -125,87 +125,48 @@ SSID 和通道针对每个会话。游戏字节是 ASCII 格式的链接代码�
 `0xc4b31c`，`0xc4b420` 处的标准 CRC-32）；对于身份，该值是 `bc5d` 之后的 0x5d 字节。仅当每个电台都匹配时（`0xb8c724`、`0xb8c660`），接收器才会重新计算它并继续前进。记录的 `Player` 标识给出了 `1403b9018269fb308f`，即记录的消息。使用过时的 1403 发送的重命名身份会在其搜索屏幕上留下一个实机：它发送其 1400 和 1403，但不会发送 0100。`pokeldn.za.reference.sync_message` 为发送的身份构建 1403。
 ### 交换命令
 
-> 本节已随上游更新，以下内容暂保留英文。
+交换会话初始化 `0xca2928` 在会话命令通道（session+0xc8）上订阅五种命令类型（由 ctti 字符串命名）。ID 为 `0x100 | index`，即该类型在通道 +0x60 列表中的位置（`0x96129c`，遍历 `strcmp`）。每份载荷是以 u16 轮次开头的 `b9` 结构。
 
-The trade session setup `0xca2928` subscribes five command types (named by ctti strings) on the
-session's command channel (session+0xc8). The id is `0x100 | index`, the type's position in the
-channel's list at +0x60 (`0x96129c`, a `strcmp` walk). Each payload is a `b9` struct opening with a
-u16 round.
-
-| id | command | handler | payload as the handler reads it | what the handler does |
+| ID | 命令 | 处理函数 | 处理函数读取的载荷 | 处理行为 |
 |---|---|---|---|---|
-| `0100` | CommandReady | `0x2dc4c7c` | round, 1200 bytes | copies the 1200 bytes to session+0x604, sets session+0xf0 |
-| `0101` | CommandSelectPokemon | `0xb2a44c` | round, 344-byte record, one byte | loads the record (The offered Pokemon); bit 0 of the byte clear makes it a pick |
-| `0102` | CommandConfirmTrade | `0xc8dda0` | round | ignored when session+0x152 is above the round; else partner state +0x134 = 4 |
-| `0103` | CommandCancelTrade | `0x2dc51ac` | round, u32 reason | +0xab4 = reason with 1 and 2 swapped, else 0; +0x152 = round; +0x150 += 1; then `0x2dc41f8` |
-| `0104` | CommandFinalAgreement | `0x2dc52b4` | round | ignored when +0x152 is above the round or own state +0x130 is not 4 or 5; else partner state 5 |
+| `0100` | CommandReady | `0x2dc4c7c` | 轮次、1200 字节 | 将 1200 字节复制到 session+0x604，设置 session+0xf0 |
+| `0101` | CommandSelectPokemon | `0xb2a44c` | 轮次、344 字节记录、一个字节 | 载入记录（见“待交换的宝可梦”）；该字节第 0 位未置位时表示选择 |
+| `0102` | CommandConfirmTrade | `0xc8dda0` | 轮次 | session+0x152 大于轮次时忽略；否则对方状态 +0x134 = 4 |
+| `0103` | CommandCancelTrade | `0x2dc51ac` | 轮次、u32 原因 | +0xab4 = 原因，交换 1、2，其他值为 0；+0x152 = 轮次；+0x150 += 1；然后执行 `0x2dc41f8` |
+| `0104` | CommandFinalAgreement | `0x2dc52b4` | 轮次 | +0x152 大于轮次或自身状态 +0x130 不是 4、5 时忽略；否则对方状态为 5 |
 
-The cancel sender `0x964a60` sends nothing while own state +0x130 is 2 or 5; otherwise it sends
-round +0x150 + 1, sets +0x130 = 2, advances +0x150 and +0x152, and drops the partner's state from
-3..5 to 2 (3 when the reason is 0). The handlers reject only a round strictly below +0x152, so a
-stale ConfirmTrade or FinalAgreement is ignored after a cancel and a higher round is accepted.
-SelectPokemon reads no round.
+自身状态 +0x130 为 2 或 5 时，取消发送函数 `0x964a60` 不发送任何内容；否则发送轮次 +0x150 + 1，设置 +0x130 = 2，推进 +0x150、+0x152，并将对方状态从 3..5 降为 2（原因为 0 时降为 3）。处理函数仅拒绝严格低于 +0x152 的轮次，因此取消后会忽略过期 ConfirmTrade 或 FinalAgreement，接受更高轮次。SelectPokemon 不读取轮次。
 
-The session object (0xab8 bytes; `0xca2658`, built by `0xca2704`, vtable `0x3e3a6e8`) holds a
-configuration at +0x40 (u16 0x201, low byte the channel), callables at +0x48 and +0x88, and a zeroed
-+0x150..+0xab7, so both rounds start at 0 and a session's first `0102` and `0104` are `b90100`.
-`0x964568` (own state 6; caller `0x9601dc` in the live trade path `0x95f8f4`) clears the own offer
-+0x120 and partner PokemonParam +0x128, sets both states to 2, clears +0x118, +0x11a, +0xd0 and zeroes
-+0x150/+0x152: the next trade on the seat starts at round 0, and an answer still at round 1 is
-accepted. `pokeldn.za.host` resets its round with each trade.
+会话对象（0xab8 字节；`0xca2658`，由 `0xca2704` 构造，虚函数表 `0x3e3a6e8`）在 +0x40 持有配置（u16 0x201，低字节为通道），在 +0x48、+0x88 持有可调用对象，并将 +0x150..+0xab7 清零，因此两个轮次初始为 0，会话首次 `0102`、`0104` 均为 `b90100`。`0x964568`（自身状态 6；调用方为实际交换路径 `0x95f8f4` 中的 `0x9601dc`）清除自身提议 +0x120 和对方 PokemonParam +0x128，将双方状态设为 2，清除 +0x118、+0x11a、+0xd0，并将 +0x150/+0x152 清零：同一连接的下一次交换从轮次 0 开始，仍处于轮次 1 的回应也会被接受。`pokeldn.za.host` 每次交换都重置轮次。
 
-| own state | written by | when |
+| 自身状态 | 写入方 | 触发条件 |
 |---|---|---|
-| 5 | session update `0x95f600` (`0x95f680`) | own state 3 or 4, byte +0x148 set, timer +0x138 at least 1.5 s, partner state 4 or 5, `0x963710` true |
-| 6 | delegate invoke `0xdfda8c`, filled at `0x964e78` | the exchange worker's state-6 delegate |
-| 7 | `0x2dc4b94`, installed by `0x964f0c` | the worker's state-7 delegate; unreachable in 2.0.2 |
+| 5 | 会话更新 `0x95f600`（`0x95f680`） | 自身状态为 3 或 4，字节 +0x148 置位，计时器 +0x138 至少 1.5 秒，对方状态为 4 或 5，`0x963710` 为真 |
+| 6 | 委托调用 `0xdfda8c`，在 `0x964e78` 填充 | 交换工作对象的状态 6 委托 |
+| 7 | `0x2dc4b94`，由 `0x964f0c` 安装 | 工作对象的状态 7 委托；2.0.2 中不可到达 |
 
-`0x9610a4` (caller `0x95fdbc`) runs at own state 5 or more when the worker at +0xd0 is absent or its
-+9 is 0 or 0x10: it calls the callable at session+0x48 with (+0x118, +0x120, +0x128), builds the
-exchange worker (`0x966af0`, 0xb0 bytes) into +0xd0 and gives it the state-6 and state-7 delegates
-(`0x9649e0`, `0x964a20`), stored by `0x9655a4` at worker+0x20 and +0x60. The trade object is built by
-`0xc8ad1c` (`adr` at `0xca2578`; constructor `0xc8ae70`, vtable `0x3d8a0d0`: +0x68 `0xdd07cc`, +0x78
-`0x2a67168`, +0x80 `0xcbc68c`); the store making it the callable at session+0x48 is untraced.
+自身状态至少为 5，且 +0xd0 的工作对象不存在或其 +9 为 0、0x10 时，`0x9610a4`（调用方 `0x95fdbc`）执行：用参数（+0x118、+0x120、+0x128）调用 session+0x48 的可调用对象，将交换工作对象（`0x966af0`，0xb0 字节）构造到 +0xd0，并提供状态 6、7 委托（`0x9649e0`、`0x964a20`），由 `0x9655a4` 存入 worker+0x20、+0x60。交换对象由 `0xc8ad1c` 构造（`0xca2578` 处的 `adr`；构造函数 `0xc8ae70`，虚函数表 `0x3d8a0d0`：+0x68 为 `0xdd07cc`、+0x78 为 `0x2a67168`、+0x80 为 `0xcbc68c`）；尚未追踪到将其存为 session+0x48 可调用对象的写入点。
 
-The worker's start `0x965660` stores the host test `0x9157d0` at +0x14, clears +0x15, stores
-`0x34f2b0(rng, 0x12c) + 2` (2..302) at +0x18, zeroes +0xc and +0x10, sets +9 to 1. Its update
-`0x960c20` (one caller, `0x95f750`) switches on +9 through the table `0x33a360d`.
-`0x962ac0(peer, step)` stores `0x100 | step` at peer+0x48 and sends it; a wait compares the
-partner's step at +0x70, valid when +0x71 is set.
+工作对象启动函数 `0x965660` 将主机判断 `0x9157d0` 存入 +0x14，清除 +0x15，将 `0x34f2b0(rng, 0x12c) + 2`（2..302）存入 +0x18，清零 +0xc、+0x10，将 +9 设为 1。更新函数 `0x960c20`（唯一调用方 `0x95f750`）根据 +9 经表 `0x33a360d` 分支。`0x962ac0(peer, step)` 将 `0x100 | step` 存入 peer+0x48 并发送；等待过程比较 +0x70 的对方步骤，+0x71 置位时该值有效。
 
-| +9 | handler | what it does | next |
+| +9 | 处理函数 | 行为 | 下一状态 |
 |---|---|---|---|
-| 1 | `0x960d20` | trade object vfunc +0x68; result 1: +0x15 = (+0x14 != 0), result 0: +0x15 = 1 (`0x960e50`, `0x960e90`), else +0x15 = 0; send step 3 | 2 |
-| 2 | `0x960cc0` | wait for the partner's 3 | 3 |
-| 3 | `0x960d64` | trade object vfunc +0x78; false: state 4, send step 6 | 5 |
-| 5 | `0x960ce0` | wait for the partner's 6 | 6 |
-| 6 | `0x960da0` | `0x9628e8`: trade object +0x40 = 1, then vfunc +0x80 (`0xcbc68c`, the handler update in What the trade writes into a received record) | 7 |
-| 7 | `0x960c84` | wait for trade object +0x40 == 3; +0x15 set: send 0xb | 8, else 9 |
-| 9 | `0x960c40` | count +0x18 down once per update, then send 0xb | 10 |
-| 8, 10 | `0x960ca0` | wait for the partner's 0xb | 11 |
-| 11 | `0x960db0` | trade object +0x40 = 4 (`0x961098`) | 12 |
-| 12 | `0x960dc0` | wait for trade object +0x40 == 5 (`0x9626e4`), send 0xe | 13 |
-| 13 | `0x960d00` | wait for the partner's 0xe | 14 |
-| 14 | `0x960de8` | +0x10 == 0: the state-6 delegate (`0x963810`); else the state-7 delegate (`0x9a0b00`); then `0x9637b8` | 0x10 |
+| 1 | `0x960d20` | 交换对象虚函数 +0x68；结果 1：+0x15 = (+0x14 != 0)，结果 0：+0x15 = 1（`0x960e50`、`0x960e90`），其他结果：+0x15 = 0；发送步骤 3 | 2 |
+| 2 | `0x960cc0` | 等待对方的 3 | 3 |
+| 3 | `0x960d64` | 交换对象虚函数 +0x78；为假：状态 4，发送步骤 6 | 5 |
+| 5 | `0x960ce0` | 等待对方的 6 | 6 |
+| 6 | `0x960da0` | `0x9628e8`：交换对象 +0x40 = 1，然后调用虚函数 +0x80（`0xcbc68c`，见“交换对收到记录的修改”中的处理函数更新） | 7 |
+| 7 | `0x960c84` | 等待交换对象 +0x40 == 3；+0x15 置位时发送 0xb | 8，否则 9 |
+| 9 | `0x960c40` | 每次更新将 +0x18 减一，结束后发送 0xb | 10 |
+| 8, 10 | `0x960ca0` | 等待对方的 0xb | 11 |
+| 11 | `0x960db0` | 交换对象 +0x40 = 4（`0x961098`） | 12 |
+| 12 | `0x960dc0` | 等待交换对象 +0x40 == 5（`0x9626e4`），发送 0xe | 13 |
+| 13 | `0x960d00` | 等待对方的 0xe | 14 |
+| 14 | `0x960de8` | +0x10 == 0 时调用状态 6 委托（`0x963810`），否则调用状态 7 委托（`0x9a0b00`）；随后执行 `0x9637b8` | 0x10 |
 
-Own state 6 is the exchange completed, after both stations passed the `0200b901XX` steps 3, 6, 0x0b
-and 0x0e. Handler 14 picks the state-7 delegate when the worker's error word +0x10 is non-zero, and
-nothing in 2.0.2 writes a non-zero value there: its only stores zero it, in the constructor
-`0x966ba4` (`0x966bcc`) and the start `0x965660` (`0x9656a0`). The worker's abort phase +0xc is read
-by the session tick `0x95f6e4` (`0x95f738`): 1 asks the trade object to cancel (`0x9636f8` sets trade
-object +0x44 = 1) and parks the worker at step 0xf; 2 waits for trade object +0x44 == 3, then sets
-step 14 and phase 3 (`0x95f7e0`). No code stores 1, so the abort phase never starts and no path
-through the worker reaches own state 7. A store through a computed address is not excluded; a write
-breakpoint on worker+0x10 would settle it. A station whose +0x15 is clear waits the random 2..302
-updates before its 0x0b. What `0xdd07cc` returns and how the stored halfword maps onto the `b901XX`
-bytes are untraced.
+自身状态 6 表示交换完成，此时双方均已通过 `0200b901XX` 步骤 3、6、0x0b、0x0e。工作对象错误字 +0x10 非零时，处理函数 14 选择状态 7 委托；但 2.0.2 中没有代码向此处写入非零值：仅有的写入分别在构造函数 `0x966ba4`（`0x966bcc`）和启动函数 `0x965660`（`0x9656a0`）中将其清零。工作对象中止阶段 +0xc 由会话更新 `0x95f6e4`（`0x95f738`）读取：值 1 请求交换对象取消（`0x9636f8` 设置交换对象 +0x44 = 1），并将工作对象停在步骤 0xf；值 2 等待交换对象 +0x44 == 3，再设置步骤 14 和阶段 3（`0x95f7e0`）。没有代码写入 1，因此中止阶段从不开始，也没有经过工作对象到达自身状态 7 的路径。不能排除经计算地址写入的情况；在 worker+0x10 设置写入断点可验证。+0x15 未置位的站点会随机等待 2..302 次更新再发送 0x0b。尚未追踪 `0xdd07cc` 的返回值，以及保存的半字如何映射到 `b901XX` 字节。
 
-A Z-A choosing Cancel on the trade prompt sends `0103b9020100` (round 1, reason 0) and, once its
-player picks again, redraws the prompt with the host's earlier offer without a resend. Its next
-confirmation is `0102b90101` and `0104b90101`. A host answering under round 0 is ignored (the
-handlers reject a round below +0x152) and the console waits on "Communicating"; round 1 completes the
-trade. `pokeldn.za.host`
-takes the round from the console's own `0102`, `0103` and `0104`.
+《Z-A》在交换提示中选择取消时发送 `0103b9020100`（轮次 1，原因 0）；玩家再次选择后，用主机端先前的提议重新显示提示，无需重发。下一次确认是 `0102b90101`、`0104b90101`。主机端以轮次 0 回应会被忽略（处理函数拒绝低于 +0x152 的轮次），主机停在“Communicating”（通信中）；轮次 1 可完成交换。`pokeldn.za.host` 从主机自身的 `0102`、`0103`、`0104` 获取轮次。
 
 ### 加入方对这些流的欠债
 
@@ -274,7 +235,7 @@ LDN NodeInfo本地通信版本（0x40字节的+0x2E）在参考站上为6； 0 �
 `bin/za_join.py --trade-offer` 运行加入方。
 ## 提供的宝可梦
 
-该提议的记录是第 8 代和第 9 代实体：四个 0x50 字节块按加密常量打乱，0x148 字节存储，0x158 带有队列尾部，校验和存储在主体上。 `pokeldn.gen9.decrypt`和`read`处理不变；样本提议为异色嗡蝠，等级44，完美IV，球22，能力151，动作542、103、403和162。来自三个参考会话的9条记录均读取版本52，语言10，见面地点200至212，见面日期在2025年10月，训练家ID 5071，秘密ID 14217，初训家“XS”，零身高和体重标量；仅当设置了当前处理程序时，处理程序的名称才显示为“Player”。
+该提议的记录是第 8 代和第 9 代实体：四个 0x50 字节块按加密常量打乱，0x148 字节存储，0x158 带有队列尾部，校验和存储在主体上。 `pokeldn.gen9.decrypt`和`read`处理不变；样本提议为异色嗡蝠，等级44，完美IV，球22，特性151，动作542、103、403和162。来自三个参考会话的9条记录均读取版本52，语言10，见面地点200至212，见面日期在2025年10月，训练家ID 5071，秘密ID 14217，初训家“XS”，零身高和体重标量；仅当设置了当前持有人时，最近持有人的名称才显示为“Player”。
 
 由 `pokeldn.gen9.build` 组成的由 344 个零字节组成的记录（或用
 `pokeldn.za.pokemon.build_offer`)交易并保存：
@@ -285,13 +246,13 @@ LDN NodeInfo本地通信版本（0x40字节的+0x2E）在参考站上为6； 0 �
 |品种 0x08 |全国917以下，来自917第9代内部索引（`pokeldn.gen9.internal_index`、`national`）|
 |移动 0x72，四个 u16 |保持发送状态（446、328、103、784 作为隐形岩石、沙墓、尖啸、破坏猛击到达）|
 |水平|根据0x10的经验：1,000,000个大岩蛇，队伍等级字节为44到达100级|
-|统计数据，当前 HP |根据物种重新计算；保留为零，则它们被填充 |
-|自然、球、持有物品、光泽|保留 |
+|统计数据，当前 HP |根据种类重新计算；保留为零，则它们被填充 |
+|性格、球、持有物、异色状态|保留 |
 | 训练家 ID 12345，秘密 ID 54321 |显示为 993401，即 `54321 << 16 \| 12345` 的六位数字形式 |
 |遇见地点 202 |狂野地带 18 |
-|能力|未显示在摘要中 |
+|特性|未显示在摘要中 |
 
-组成的冰伊布（经验125,000，语言3，遇见2025-10-16，规模128）显示等级50，起源法国，尺寸等级M。保存的记录已经在新的加密常量和PID下再次使用相同的`hi ^ lo`（`--fresh-pid`）进行交易。
+组成的冰伊布（经验125,000，语言3，遇见2025-10-16，规模128）显示等级50，起源法语版，尺寸等级M。保存的记录已经在新的加密常量和PID下再次使用相同的`hi ^ lo`（`--fresh-pid`）进行交易。
 ### 内存中的记录
 
 每个字段访问器都采用 `x0` 中记录的访问器对象：
@@ -311,7 +272,7 @@ LDN NodeInfo本地通信版本（0x40字节的+0x2E）在参考站上为6； 0 �
                          encryption constant at core+0 over core+8..+0x147, re-seeded over the tail
     0x3303ab0            block order: 32 rows of four bytes indexed by (EC >> 13) & 31, byte k for
                          block k; rows 0..23 are PKHeX's BlockPosition, rows 24..31 repeat 0..7
- 访问器（141 个表引用位于 `0xe48000..0xe5d000` 中）锁定，当设置 +0x18 时解密，重新计算校验和，并在不匹配时将 4 放入 core+4 处的半字中；除非启用快速模式，否则将重写校验和并重新加密。 core+4 的位 2 是 Bad Egg 位，位于加密范围之外（`0xe485f0` 对其进行了测试）。发现它设置的吸气剂，A块中23个中的物种吸气剂`0xe49940`，从.bss中`0x3f7eda0`处的默认记录中读取，由`0xe5cdb4`在`0x3f7ed98`+2处用1初始化为零，语言（0xd5） `[0x3f0784()+0x378]` 和球 (0x124) 4. 串行器
+ 访问器（141 个表引用位于 `0xe48000..0xe5d000` 中）锁定，当设置 +0x18 时解密，重新计算校验和，并在不匹配时将 4 放入 core+4 处的半字中；除非启用快速模式，否则将重写校验和并重新加密。 core+4 的位 2 是 Bad 蛋 位，位于加密范围之外（`0xe485f0` 对其进行了测试）。发现它设置的吸气剂，A块中23个中的种类吸气剂`0xe49940`，从.bss中`0x3f7eda0`处的默认记录中读取，由`0xe5cdb4`在`0x3f7ed98`+2处用1初始化为零，语言（0xd5） `[0x3f0784()+0x378]` 和球 (0x124) 4. 串行器
 `0xe47a20`（0x158字节）和`0xe47c60`（0x148）写入加密的、打乱的形式。
 ### main 2.0.2 读取和写入的字段
 
@@ -319,55 +280,55 @@ LDN NodeInfo本地通信版本（0x40字节的+0x2E）在参考站上为6； 0 �
 
 |偏移|尺寸|吸气剂|二传手 |领域 |
 |---|---|---|---|---|
-| 0x00 | 4 |每个访问者 | `0xe514d0` |加密常数|
+| 0x00 | 4 |每个访问者 | `0xe514d0` |加密常量|
 | 0x04 | 2 | `0xe485f0` | `0xe51698` |旗帜；位 2 坏蛋 |
 | 0x06 | 2 |加载路径| `0xe48250` |校验和|
 | 0x08 | 2 | `0xe49940` | `0xe52aa0` |品种：国行917以下，9代内部指数917以上|
-| 0x0a | 2 | `0xe49b40` | `0xe52cc0` |持有物品 |
-| 0x0c | 4 | `0xe49d50` | `0xe52ee0` | u32 | 训练家ID和秘密ID合一
+| 0x0a | 2 | `0xe49b40` | `0xe52cc0` |持有物 |
+| 0x0c | 4 | `0xe49d50` | `0xe52ee0` | 训练家 ID 与秘密 ID 合并为一个 u32 |
 | 0x10 | 4 | `0xe49f60` | `0xe53100` |经验;级别 = `0xe5ce70(species, form, exp)` |
-| 0x14 | 2 | `0xe4a3c0` | `0xe535b0` |能力|
-| 0x16 | 2 | `0xe4d7c0` 位 1，`0xe4d9d0` 位 2 | `0xe56ad0..0xe57130` |能力槽：位2隐藏，位1秒|
+| 0x14 | 2 | `0xe4a3c0` | `0xe535b0` |特性|
+| 0x16 | 2 | `0xe4d7c0` 位 1，`0xe4d9d0` 位 2 | `0xe56ad0..0xe57130` | 特性槽：位 2 表示隐藏特性，位 1 表示第二特性 |
 | 0x18 | 2 | `0xe4a5d0` | `0xe537d0` |标记|
 | 0x1c | 4 | `0xe4dbe0` | `0xe57350` | PID|
-| 0x20 | 1 | `0xe4d3a0` | `0xe56690` |自然 |
-| 0x21 | 1 | `0xe4d5b0` | `0xe568b0` | stat 性质，stat 例程读取的内容 |
+| 0x20 | 1 | `0xe4d3a0` | `0xe56690` |性格 |
+| 0x21 | 1 | `0xe4d5b0` | `0xe568b0` | 能力值修正所用性格，能力值计算例程读取的字段 |
 | 0x22 | 1 | `0xe4cd70` 位 0、`0xe4cf80` 位 1-2 | `0xe56030`，`0xe56250` |命运的邂逅，性别|
 | 0x23 | 1 | `0xe5bcf0` | `0xe5bf00` | PKHeX 中的 IsAlpha（下）|
 | 0x24 | 2 | `0xe4d190` | `0xe56470` |表格|
-| 0x26..0x2b | 6 | `0xe4aa30..0xe4b480` | `0xe53c10..0xe546b0` |电动汽车 |
+| 0x26..0x2b | 6 | `0xe4aa30..0xe4b480` | `0xe53c10..0xe546b0` |努力值 |
 | 0x48，0x49 | 2 |无 | `0xe5a7e0`，`0xe5aa00` |身高和体重标量，仅书面 |
 | 0x4a | 1 | `0xe512c0` | `0xe5ac20` |规模|
 | 0x4b | 1 | `0xe5c120` | `0xe5c330` |等级奖励，PKHeX 中的 LevelBoost（下）|
-| 0x58..0x71 | 26 | 26 `0xe4ddf0` | `0xe57570` |昵称，13 个 UTF-16 单位 |
+| 0x58..0x71 | 26 | `0xe4ddf0` | `0xe57570` | 昵称，13 个 UTF-16 单位 |
 | 0x72..0x79 | 8 | `0xe4b690(i)` | `0xe548d0(i)` |四步|
 | 0x7a..0x7d | 4 | `0xe4b8b0(i)` | `0xe54b10(i)` |聚丙烯|
 | 0x7e..0x81 | 4 | `0xe4bad0(i)` | `0xe54d50(i)` | PP UPS |
 | 0x8a | 2 | `0xe48820` | `0xe51ec0` |当前HP |
 | 0x8c | 4 | `0xe4bcf0..0xe4cb60` | `0xe54f90..0xe55e10` |六个 5 位 IV，从位 0、蛋位 30 开始，昵称为位 31 |
 | 0x90 | 4 | `0xe48600` | `0xe516c0` |状态条件|
-| 0x94..0x9f | 12 | 12 `0xe5cb00(i)` | `0xe5c550(i)` |每次移动标志 264..359 |
-| 0xa8..0xc1 | 26 | 26 `0xe50840`，`0xe50a70` | `0xe5a190` |处理者姓名 |
+| 0x94..0x9f | 12 | `0xe5cb00(i)` | `0xe5c550(i)` | 每次移动标志 264..359 |
+| 0xa8..0xc1 | 26 | `0xe50840`, `0xe50a70` | `0xe5a190` | 处理者姓名 |
 | 0xc2 | 1 | `0xe50ca0` | `0xe5a3a0` |处理者的性别 |
 | 0xc3 | 1 | `0xe50eb0` | `0xe5a5c0` |处理程序的语言 |
 | 0xc4 | 1 | `0xe4f780`，如 `!= 0` | `0xe58a70` |当前处理程序 |
 | 0xc6 | 2 | `0xe4f990` |无 |处理程序的 id（PKHeX 中的“未使用？”）|
-| 0xc8 | 1 | `0xe4fdb0` | `0xe58eb0` |处理者的友谊；当 0xc4 为 1 时，`0xe4a170` 返回它，否则 0x112 |
+| 0xc8 | 1 | `0xe4fdb0` | `0xe58eb0` |处理者的亲密度；当 0xc4 为 1 时，`0xe4a170` 返回它，否则 0x112 |
 | 0xc9..0xcd | 5 |无 | `0xe59910`、`0xe59b30`、`0xe59f70`、`0xe59d50`（u16 在 0xcc）|处理程序的内存，只写 |
 | 0xce | 1 | `0xe4e2a0` | `0xe57780` |版本 |
 | 0xd0 | 4 | `0xe5b280` | `0xe5b060` |形式论证 |
-| 0xd4 | 1 |无 | `0xe5ae40` |附有丝带，仅写字|
+| 0xd4 | 1 |无 | `0xe5ae40` |附有奖章，仅写字|
 | 0xd5 | 1 | `0xe4a7e0` | `0xe539f0` |语言 |
-| 0xd6..0xf6 | 33 | 33 `0xe5cb00(i)` | `0xe5c550(i)` |每次移动标志 0..263 |
-| 0xf8..0x111 | 26 | 26 `0xe4e4b0` | `0xe579a0` | 初训家姓名 |
-| 0x112 | 1 | `0xe4fba0` | `0xe58c90` | 初训家的友谊 |
-| 0x113..0x118 | 6 | `0xe590d0`、`0xe592e0`、`0xe594f0`、`0xe59700` | `0xe4ffc0`、`0xe501e0`、`0xe50400`、`0xe50620` | 初训家记忆：0x113、0x114、u16 at 0x116、0x118 |
+| 0xd6..0xf6 | 33 | `0xe5cb00(i)` | `0xe5c550(i)` | 每次移动标志 0..263 |
+| 0xf8..0x111 | 26 | `0xe4e4b0` | `0xe579a0` | 初训家姓名 |
+| 0x112 | 1 | `0xe4fba0` | `0xe58c90` | 初训家的亲密度 |
+| 0x113..0x118 | 6 | `0xe590d0`、`0xe592e0`、`0xe594f0`、`0xe59700` | `0xe4ffc0`、`0xe501e0`、`0xe50400`、`0xe50620` | 与初训家的记忆：0x113、0x114、u16 at 0x116、0x118 |
 | 0x11c..0x11e | 3 | `0xe4e910`、`0xe4eb20`、`0xe4ed30` | `0xe57bb0..0xe57ff0` |见面日期|
 | 0x11f | 1 | `0xe5bae0` | `0xe5b8c0` |服从水平|
 | 0x122 | 2 | `0xe4ef40` | `0xe58210` |见面地点 |
 | 0x124 | 1 | `0xe4f150` | `0xe58430` |球 |
 | 0x125 | 1 | `0xe4f360` 位 0-6、`0xe4f570` 位 7 | `0xe58650`，`0xe58860` |达到等级、初训家性别|
-| 0x126 | 1 | `0xe5b6b0` | `0xe5b490` |超级训练位|
+| 0x126 | 1 | `0xe5b6b0` | `0xe5b490` |极限训练位|
 | 0x148 | 1 | `0xe49760` | `0xe518f0` |水平，躯干尾部|
 | 0x14a..0x155 | 12 | 12 `0xe48a40` 和另外五个 | `0xe51ae0..0xe528b0` |最大生命值和五项统计数据 |
 | 0x156 | 2 | `0xe48c20` | `0xe51cd0` |有符号的最大 HP 偏移量 |
@@ -376,13 +337,13 @@ LDN NodeInfo本地通信版本（0x40字节的+0x2E）在参考站上为6； 0 �
 
     0x1a..0x1b  0x2c..0x47  0x4c..0x57  0x82..0x89  0xa0..0xa7  0xc5  0xcf  0xf7
     0x115  0x119..0x11b  0x120..0x121  0x127..0x147
- 在朱的布局（由PA9.cs保存）中，他们保存了比赛统计数据，扑克牌，丝带和标记（0x2c..0x47），重新学习动作（0x82），战斗版本（0xcf），彩蛋日期和位置， HOME 追踪器 (0x127) 和 TM 记录 (0x12f)。 PA9.cs 将 0x4b..0x57 映射为 DLC TM 记录； main 只读 0x4b。
+ 在朱的布局（由PA9.cs保存）中，他们保存了比赛统计数据，扑克牌，奖章和标记（0x2c..0x47），重新学习动作（0x82），战斗版本（0xcf），彩蛋日期和位置， HOME 追踪器 (0x127) 和 TM 记录 (0x12f)。 PA9.cs 将 0x4b..0x57 映射为 DLC TM 记录； main 只读 0x4b。
 
 |字节|使用 |
 |---|---|
 | 0x4b |统计等级 = `level + [0x4b]`，上限为 200 (`0x10f558`) |
 | 0x156（s16，在 PA9.cs 中未映射）| `0xe4163c`使用`max(1, maxhp + (s16)[0x156])`；加载路径永远不会写入它，因此组合值仍然存在 |
-| 0x23 |模型描述符 `0x106a48` 在 +0x13 存储 `[0x23] != 0` (`0x106ba0`)，在 +0x12 旁边存储鸡蛋或坏蛋，并且缩放为 `(scale / 255) * 2 - 1`；唯一的二传手从 `0xe3f140` 调用。恰好在两个游戏机录制的 255 记录上排名第一 (罗丝雷朵 407, 冰伊布 471) |
+| 0x23 |模型描述符 `0x106a48` 在 +0x13 存储 `[0x23] != 0` (`0x106ba0`)，在 +0x12 旁边存储蛋或坏蛋，并且缩放为 `(scale / 255) * 2 - 1`；唯一的二传手从 `0xe3f140` 调用。恰好在两个游戏机录制的 255 记录上排名第一 (罗丝雷朵 407, 冰伊布 471) |
 
 0x4b 和 0x156 在每条游戏机制作的记录中均为零。
 #### 每次移动标志
@@ -394,8 +355,8 @@ PA9.cs的加移动记录：360位，位k在0xd6 + k/8，k低于264，在0x94 + (
 
 |学习水平|解锁关卡|
 |---|---|
-| 1（4,803 条）| 10 | 10
-| 3..100 (14,717) | 3..100 (14,717) |学习等级+3；例外情况 99 给出 100（六）和 102（一），33 给出 37（二）|
+| 1（4,803 项） | 10 |
+| 3..100 (14,717) | 学习等级 + 3；例外：99 对应 100（六项）或 102（一项），33 对应 37（两项） |
 | 254、现种| 10 于 274 中的 266；其余的 19、20 或 22 |
 | 253 | 253 192 年第 48 期第 10 期； 39、15、12、33、38 等其余 |
 
@@ -403,14 +364,14 @@ PA9.cs的加移动记录：360位，位k在0xd6 + k/8，k低于264，在0x94 + (
 
 |槽 |功能|它是做什么的 |
 |---|---|---|
-| 135 | 135 `0x6a30b0` |列出解锁级别非零且等于其级别参数的移动 |
-| 145 | 145 `0x631834` |设置移动标志，跳过移动 `0xe669e0` 未找到 |
-| 150 | 150 `0x699308` |当解锁级别非零且级别（`0xe49760` 或来自存储记录的经验的 `0xe5ce70`）达到该级别时，true；否则标志|
+| 135 | `0x6a30b0` | 列出解锁级别非零且等于其级别参数的移动 |
+| 145 | `0x631834` | 设置移动标志，跳过移动 `0xe669e0` 未找到 |
+| 150 | `0x699308` | 当解锁级别非零且级别（`0xe49760` 或来自存储记录的经验的 `0xe5ce70`）达到该级别时，true；否则标志 |
 
 旗帜可以解锁关卡规则无法解锁的动作；所有标志为零的记录仍然会解锁处于或低于其级别的每个学习集移动。 `0xe669e0` 的主叫方为 `0x631848`（置位）、`0x67345c`（清除）、`0x6993c8`（时隙 150）、`0xe4307c`（读）。位写入器 `0xe5c550` 仅由 `b` 从 `0x631864`（置位）和 `0x673478`（清零）输入；插槽 145（两个包装器 vtable 的 `0x63182c`、+0x488）有四个调用站点，因此游戏机以两种方式设置标志：
 
 - `0x52fff0`、`0x824eb0` 和 `0x28eec70` 调用槽 135 并标记其列出的该级别的每个动作。
-- `0x6568c4`，在构造例程`0x656060`（五个调用者）中，仅当包装槽+0x8b8（`0xdf5488`，`0x106ba0`，字节0x23 getter）为真时运行：它看起来按物种向上移动（插槽+0x1b0）和形式（插槽+0x1b8）在`0x657ae0`（来自GOT `0x3eca658` = `0x6137848`的地图，通过`0x511f90`;未找到源文件），检查它`0x41ea50`，通过槽+0x110（`0x6568a4`）写入移动槽0并标记它。
+- `0x6568c4`，在构造例程`0x656060`（五个调用者）中，仅当包装槽+0x8b8（`0xdf5488`，`0x106ba0`，字节0x23 getter）为真时运行：它看起来按种类向上移动（插槽+0x1b0）和形式（插槽+0x1b8）在`0x657ae0`（来自GOT `0x3eca658` = `0x6137848`的地图，通过`0x511f90`;未找到源文件），检查它`0x41ea50`，通过槽+0x110（`0x6568a4`）写入移动槽0并标记它。
 
 接收或加载的记录将其标志完整；接收路径上没有任何内容读取该数组。
 
@@ -421,7 +382,7 @@ PA9.cs的加移动记录：360位，位k在0xd6 + k/8，k低于264，在0x94 + (
 
 |记录|水平|旗帜|额外的标志 |未标记 |
 |---|---|---|---|---|
-| 嗡嗡714| 44 | 44等于| |举行542（解锁47级）|
+| 嗡蝠 714| 44 | 44等于| |举行542（解锁47级）|
 | 青绵鸟 333 | 44 | 44等于| |举行297（解锁47级）|
 | 哲尔尼亚斯 716 | 100 | 100等于| |持有 583（索引 214，不在其学习集中）|
 | 大岩蛇 95 | 72 | 72 350 人失踪（254 级）| | |
@@ -429,13 +390,13 @@ PA9.cs的加移动记录：360位，位k在0xd6 + k/8，k低于264，在0x94 + (
 | 冰伊布 471 | 63 | 63等于| 247（索引 112），字节 0x23 移动到插槽 0 | |
 
 冰伊布还携带伊布的 36、38、129、204 和 273（其自己的学习集中有 254 个条目）； 罗丝雷朵携带40，毒蔷薇（315）的253条目。
-#### 能力
+#### 特性
 
-朱的u16位于0x14，槽位位于0x16。 GetAbility `0xe43bec` 返回低于 299 (0x12b) 的存储值，否则来自个人表的 `0xe5d368(species, form, bit 2 ? 2 : bit 1)`。 0x14的其他读取器只有类型获取器`0x99c84`和`0xa4354`（能力为121的物种493和能力为225的物种773从持有的物品`0xe5d528`、`0xe5d5a0`中获取类型）。创建例程
+朱的u16位于0x14，槽位位于0x16。 GetAbility `0xe43bec` 返回低于 299 (0x12b) 的存储值，否则来自个人表的 `0xe5d368(species, form, bit 2 ? 2 : bit 1)`。 0x14的其他读取器只有类型获取器`0x99c84`和`0xa4354`（特性为121的种类493和特性为225的种类773从持有物`0xe5d528`、`0xe5d5a0`中获取类型）。创建例程
 `0xe3eb34` 和 `0xbb8f04` 从 `0xe5d368` 写入。控制台制作的记录存储 5、30、38、81、151、187。
 
-没有屏幕显示存储的能力。 `0xe43bec`仅由`b`从`0x288d894`输入，引擎组件的插槽42（`0x3d1a918`）（vtable地址点`0x3d1a7c8`，类型id `0xfb63b93a`，构造函数`0x2890cb8`);到原始吸气剂 `0xe4a3c0` 的所有其他路径都是类型吸气剂。七个 321 槽 PokemonParam 包装器 vtable（`0x3e28e58`、`0x3e29950`、`0x3e2a438`、`0x3e2af50`、
-`0x3e2ba38`、`0x3e2c520`、`0x3e2d360`）制作插槽 42 `mov w0,wzr; ret`（`0x2d6fd88` 和三个副本）。战斗能力窗口`0x2d52468`（“BTL_STRID_STD_TokWin”，“tokusei”`0x31e3d5f`）读取槽42（`0x2d524f4`）。在模拟的 2.0.2 上，摘要页面没有命中 `0x288d894`、`0x2d52468`、
+没有屏幕显示存储的特性。 `0xe43bec`仅由`b`从`0x288d894`输入，引擎组件的插槽42（`0x3d1a918`）（vtable地址点`0x3d1a7c8`，类型id `0xfb63b93a`，构造函数`0x2890cb8`);到原始读取函数 `0xe4a3c0` 的所有其他路径都是属性读取函数。七个 321 槽 PokemonParam 包装器 vtable（`0x3e28e58`、`0x3e29950`、`0x3e2a438`、`0x3e2af50`、
+`0x3e2ba38`、`0x3e2c520`、`0x3e2d360`）制作插槽 42 `mov w0,wzr; ret`（`0x2d6fd88` 和三个副本）。战斗特性窗口`0x2d52468`（“BTL_STRID_STD_TokWin”，“tokusei”`0x31e3d5f`）读取槽42（`0x2d524f4`）。在模拟的 2.0.2 上，摘要页面没有命中 `0x288d894`、`0x2d52468`、
 `0x2d6fd88`;狂野区战斗仅命中 `0x2d6fd88`，来自 `0xdc68c`。组件注册表
 `0xd8a04`在handler+0x4c处缓存slot 42（`0x2ae8f4`，handler vtable `0x3d1b0a0`）；它的读者下落不明。
 ### 加载接收到的记录会检查什么
@@ -444,12 +405,12 @@ PA9.cs的加移动记录：360位，位k在0xd6 + k/8，k低于264，在0x94 + (
 `0x270994`：
 
 1. `0xe47e94` 将 0x148 字节复制到核心，将 16 个字节复制到尾部，解密两者并比较校验和；不匹配会导致坏蛋位。它清除快速模式，因此通过重写校验和并重新加密来结束加载：错误的校验和会被纠正，并设置坏蛋位。
-2. `0xe3f18c`：对于非零物种，`0x2901a4(species, form)` 在个人表（`0xe366b0`，键控 `species * 10000 + form` 的映射）中查找该对，并读取 FlatBuffers 字段 1 的字节（vtable +6，`0xe3bbfc`），不存在时为 0。零设置坏蛋位 (`0xe51698(acc, 1)`)。丢失的键会回退到map+0x80，即species-0条目，它没有字段1。
-3. `0xe41750(pp, 1)` 将经验中的级别写入尾部，并重新计算最大 HP 和来自物种、形态、统计级别、IV、超级训练位、EV 和统计性质的五个统计数据。    当为 0 时，当前 HP 保持为 0，否则按最大 HP 增益增加。
-4. `0xe42584` 用 PP ups 将从槽 0 开始计数的非零动作的 PP 钳位到最大值（`0xe6646c`）；除非设置了 `[0x3f0784()+0x380]` 或 `0xe483b4` 为真，否则将跳过鸡蛋或坏蛋（`0xe4c950`、`0xe485f0`）。
+2. `0xe3f18c`：对于非零种类，`0x2901a4(species, form)` 在个人表（`0xe366b0`，键控 `species * 10000 + form` 的映射）中查找该对，并读取 FlatBuffers 字段 1 的字节（vtable +6，`0xe3bbfc`），不存在时为 0。零设置坏蛋位 (`0xe51698(acc, 1)`)。丢失的键会回退到map+0x80，即species-0条目，它没有字段1。
+3. `0xe41750(pp, 1)` 将经验中的级别写入尾部，并重新计算最大 HP 和来自种类、形态、统计级别、IV、极限训练位、EV 和统计性格的五个统计数据。    当为 0 时，当前 HP 保持为 0，否则按最大 HP 增益增加。
+4. `0xe42584` 用 PP ups 将从槽 0 开始计数的非零动作的 PP 钳位到最大值（`0xe6646c`）；除非设置了 `[0x3f0784()+0x380]` 或 `0xe483b4` 为真，否则将跳过蛋或坏蛋（`0xe4c950`、`0xe485f0`）。
 5. `0xb2a4a4` 使用 PokemonParam 调用 session+0x88 处的可调用对象，忽略其结果，将其移至 session+0x128 中，并在第三个成员的位 0 清零时将伙伴状态 +0x134 设置为 3（选择）。可调用始终为 `0xad2c68`，名称检查如下（`0xca20a4` 在 `0xca2520`、`0xca25d8` 处使用它构建配置；没有其他引用它）。
 
-没有任何东西可以根据学习集、球、气象数据、教练 ID、能力或尾部水平来检查动作。组合记录仅因错误的校验和或个人表字段 1 为零而失败，两者都会造成坏蛋，而不是拒绝；被拒绝的名字被重写。校验和错误的记录被绘制为鸡蛋图标，级别 0，男性符号，在提议的昵称下，提供“交换它”；交易后，它以“蛋”的形式落入盒子中，摘要为空，游戏继续运行。
+没有任何东西可以根据学习集、球、气象数据、训练家 ID、特性或尾部水平来检查动作。组合记录仅因错误的校验和或个人表字段 1 为零而失败，两者都会造成坏蛋，而不是拒绝；被拒绝的名字被重写。校验和错误的记录被绘制为蛋图标，级别 0，男性符号，在提议的昵称下，提供“交换它”；交易后，它以“蛋”的形式落入盒子中，摘要为空，游戏继续运行。
 ### 收到的宝可梦名称检查
 
 `0xad2c68` 返回空记录（IsEmpty `0x13778`），否则运行 `0x89f250`（其他调用者
@@ -457,11 +418,11 @@ PA9.cs的加移动记录：360位，位k在0xd6 + k/8，k低于264，在0x94 + (
 
 |名称 |语言通过|失败时|
 |---|---|---|
-|昵称，0x58 |记录的，0xd5 | `0x8a0370` 以该语言写入物种名称 (`0xe33ca0`) 并清除昵称位 (0x8c 位 31) |
+|昵称，0x58 |记录的，0xd5 | `0x8a0370` 以该语言写入种类名称 (`0xe33ca0`) 并清除昵称位 (0x8c 位 31) |
 | 初训家，0xf8 |记录的，0xd5 | `0x3d8a248[language]`，用 `0xe579a0` 编写 |
 |处理程序的，0xa8 |处理程序的，0xc3 | `0x3d8a248[language]`，用 `0xe5a190` 编写 |
 
-12 或更多的语言将表索引为 0。当 `[0x3f0784()]+0x380` 和 accessor+0x1a 均为 0 时，`0x8a0370` 不会为 Egg 或 Bad Egg（`0xe4c950`、`0xe485f0`）写入任何内容。替换表`0x3d8a248` 保存 12 个 UTF-16 字符串：0、1、6 `ゼット.`； 2 `Z`； 3 `Zed`； 4、7、11 `Zeta`； 5
+12 或更多的语言将表索引为 0。当 `[0x3f0784()]+0x380` 和 accessor+0x1a 均为 0 时，`0x8a0370` 不会为 蛋 或 Bad 蛋（`0xe4c950`、`0xe485f0`）写入任何内容。替换表`0x3d8a248` 保存 12 个 UTF-16 字符串：0、1、6 `ゼット.`； 2 `Z`； 3 `Zed`； 4、7、11 `Zeta`； 5
 `Zett`； 8 `제트.`; 9、10 `Z.`。
 
 `0x9138d4` 在以下情况下名称失败：
@@ -472,12 +433,12 @@ PA9.cs的加移动记录：360位，位k在0xd6 + k/8，k低于264，在0x94 + (
 - L（来自`0x444330`）为0、6或11以上；
 - 过滤器的 vfunc +0x28，由 `0x913ad0` 调用为 `(&result, pattern, &str, 1)`，模式为 `0x339f650[L - 1]`，留下非零结果。
 
-长度扫描 `0x913a80`（跳过 0x10 标记的运行）测量为 0 的字符串在没有过滤器的情况下通过，过滤器调用返回错误 (`0x913b08`) 也是如此。处理程序语言为 0 的空处理程序名称变为 `ゼット.`，空的初训家名称为记录语言的字符串；完成的交换会覆盖处理程序的名称。 PKLDN 和参考名称通过。
+长度扫描 `0x913a80`（跳过 0x10 标记的运行）测量为 0 的字符串在没有过滤器的情况下通过，过滤器调用返回错误 (`0x913b08`) 也是如此。处理程序语言为 0 的空最近持有人名称变为 `ゼット.`，空的初训家名称为记录语言的字符串；完成的交换会覆盖最近持有人的名称。 PKLDN 和参考名称通过。
 
 L，游戏的文本语言，是单例`0x6131800`的字节+0x14（GOT `0x3ec7800`；读取
 `0x444330` 到 `0x410a20` 一次 +0x80 标记其已构建）。它被编号为记录的语言字节，并索引消息目录表`0x3e278b8`（步长0x18，`0x940dd8`）：0,1,6“jpn”，2“英语”，3“法语”，4“意大利语”，5“德语”，7“西班牙语”，8 “韩国”、9“Simp_Chinese”、10“Trad_Chinese”、11“拉丁美洲”、12“项目”。当加载程序 `0x410a30` 的语言参数为 0 (`0x410a68`) 时，它使用 L。
 
-启动时 `0xaa1340` 在 +0x10 处存储由 `nn::oe::GetDesiredLanguage()` 组成的索引 `0x17d6368` (ja, en-US, fr, de, it, es, zh-Hans, ko, nl, pt, ru, zh-Hant, en-GB, fr-CA, es-419如0..14，否则15），而`0x741760`通过`0x330f728`，`1 2 3 5 4 7 9 8 2 2 2 10 2 3 11`（14以上的2）将其映射到L，因此引导值为1..5或7..11。设置者`0x17d62ec`是+0x14的编写者之一；它的其他调用者是语言选择视图（`0x2c204ac`）、带有培训师记录的+0x47的`0xbb9d30`，以及存储任何整数的脚本绑定`0x1673170`（`0x16734c0`）。
+启动时 `0xaa1340` 在 +0x10 处存储由 `nn::oe::GetDesiredLanguage()` 组成的索引 `0x17d6368` (ja, en-US, fr, de, it, es, zh-Hans, ko, nl, pt, ru, zh-Hant, en-GB, fr-CA, es-419如0..14，否则15），而`0x741760`通过`0x330f728`，`1 2 3 5 4 7 9 8 2 2 2 10 2 3 11`（14以上的2）将其映射到L，因此引导值为1..5或7..11。设置者`0x17d62ec`是+0x14的编写者之一；它的其他调用者是语言选择视图（`0x2c204ac`）、带有训练家记录的+0x47的`0xbb9d30`，以及存储任何整数的脚本绑定`0x1673170`（`0x16734c0`）。
 
 模式 `0x339f650[L - 1]` 是一组 `nn::ngc` 单词列表，因此接收游戏机的语言会选择它们，无论记录的语言是什么：
 
@@ -515,10 +476,10 @@ L，游戏的文本语言，是单例`0x6131800`的字节+0x14（GOT `0x3ec7800`
 |它的包装| 169、`arc/avalondatatokusei_array.bin.trpak`、trpfs `+0x4bc1840`、131,488 字节、4 个文件 |
 |它的条目 |压缩类型3，110,132字节，`OodleLZ_Decompress`解压384,260 `0x1a9c9e0` |
 
-包含 1445 个表、1445 个不同键的 FlatBuffers 向量。字段 0 以物种开头并形成半字，由地图生成器 `0xe36170` 键入为 `species * 10000 + form`（地图+0x80 处的键 0）。物种运行 0..1010，全部存在，434 个条目的形式高于 0； 917 中的键是第 9 代内部索引。字段 1 是超过 364 个物种的 594 个（物种、形态）对中的 1，其他 851 个物种中不存在。这 594 个等于 PKHeX 的 `personal_za` 存在列表，最多 1010 个； PKHeX 的 1011..1016（14 对）没有条目，以坏蛋的形式到达。 Mega Dimension DLC 不附带个人表（其一个 PublicData NCA，101,376 字节，包含 692 字节 RomFS）。物种 95、333、407、471、707、714 和 716 以 0 型存在。
+包含 1445 个表、1445 个不同键的 FlatBuffers 向量。字段 0 以种类开头并形成半字，由地图生成器 `0xe36170` 键入为 `species * 10000 + form`（地图+0x80 处的键 0）。种类运行 0..1010，全部存在，434 个条目的形式高于 0； 917 中的键是第 9 代内部索引。字段 1 是超过 364 个种类的 594 个（种类、形态）对中的 1，其他 851 个种类中不存在。这 594 个等于 PKHeX 的 `personal_za` 存在列表，最多 1010 个； PKHeX 的 1011..1016（14 对）没有条目，以坏蛋的形式到达。 超次元爆涌 DLC 不附带个人表（其一个 PublicData NCA，101,376 字节，包含 692 字节 RomFS）。种类 95、333、407、471、707、714 和 716 以 0 型存在。
 
-在拳击或交换路径上没有发现拒绝坏蛋的情况。 `0x962388` 盒子里只有一个宝可梦，既不是空的（IsEmpty `0x13778`）也不是鸡蛋或坏的（IsEgg `0x18e4c`），而是实时交换路径
-`0x95f8f4` 直接通过 `0x961964` (`0x960000`) 装箱。在交易所上，egg 和 Bad Egg 测试仅跳过工作：PP 钳位 `0xe42584` 和统计重新计算 `0xe41750`（由
+在拳击或交换路径上没有发现拒绝坏蛋的情况。 `0x962388` 盒子里只有一个宝可梦，既不是空的（IsEmpty `0x13778`）也不是蛋或坏的（IsEgg `0x18e4c`），而是实时交换路径
+`0x95f8f4` 直接通过 `0x961964` (`0x960000`) 装箱。在交易所上，egg 和 Bad 蛋 测试仅跳过工作：PP 钳位 `0xe42584` 和统计重新计算 `0xe41750`（由
 `0xc34b5c`）。
 ## 与实机的交换
 
@@ -620,7 +581,7 @@ LDN 会话属性将 +0xa6 设置为 `stationAcceptPolicy == 0`（NetworkInfo +0x
 | 3 | 22 | 22 a 方加入 离开 |离开请求：类型，随机 u32，其常量 id（8，大端），其变量 id（2），地址类型 0，其 IPv4，端口 |
 | 4 | 15 | 15主机 |离开响应：类型，随机 u32，从请求复制的离开者常量和变量 ID |
 | 9 | 30|主机离开|开始主机迁移：类型、主机常量和变量 ID、0、主机 IPv4 和端口、下一个主机的常量和变量 ID、`00 01` |
-| 10 | 10 21 | 21站名类型9 |它的确认：类型，它自己的常量和变量 ID，然后是主机的 |
+| 10 | 21 | 21站名类型9 | 它的确认：类型，它自己的常量和变量 ID，然后是主机的 |
 
 `pokeldn.za` 构建全部四个（`build_leave_request`、`build_leave_response`、`build_migration_ack`）。
 ### A 加入方离开
@@ -631,74 +592,29 @@ LDN 会话属性将 +0xa6 设置为 `stationAcceptPolicy == 0`（NetworkInfo +0x
 `bin/za_host.py` 用类型 4 回答每个类型 3； `bin/za_join.py` 在离开 `--hold` 或 `--hold-after-trade` 时发送自己的类型 3，并继续类型 4 或在第四次发送后。
 ### A 主机离开
 
-> 本节已随上游更新，以下内容暂保留英文。
+`LeaveMeshWithHostMigrationJob` 指定下一主机（`CalcNextHost` `0x255a6fc`），随后 `SendStartHostMigrationMessage`（`0x255a91c`）每秒发送一次类型 9，直到 5000 毫秒期限（`0x255a8c8`）；超时后任务以 `0x6c0e` 失败。字节 +0xe0 置位后，`WaitStartHostMigrationAck`（`0x255abb4`）立即完成。类型 10 读取函数 `0x2550a64` 仅在主机端接受 21 字节消息，且要求字节 11 至 20 是主机自身 ID；字节 1 至 10 为指定下一主机的 ID 时，通过 `0x255a630` 设置 +0xe0。
 
-`LeaveMeshWithHostMigrationJob` names the next host (`CalcNextHost` `0x255a6fc`), then
-`SendStartHostMigrationMessage` (`0x255a91c`) sends the type 9 once a second until a 5000 ms
-deadline (`0x255a8c8`), after which the job fails with `0x6c0e`. `WaitStartHostMigrationAck`
-(`0x255abb4`) completes as soon as byte +0xe0 is set. The type-10 reader `0x2550a64` takes a 21-byte
-message only on the host, only when bytes 11 to 20 are the host's own ids, and sets +0xe0 through
-`0x255a630` when bytes 1 to 10 are the named next host's.
+类型 9 未获回应时，主持交换的零售版《Z-A》在玩家返回后，以一秒间隔发送五条类型 9；随后约四秒内每隔 0.5 秒从来源 0 发送序号 3 的 Net 0x11，再发送约两秒 Net 0x40，在第一条类型 9 后 10.82 至 10.86 秒停止发送（四次离开）；唯一在开发板上追踪的实例中，网络在 11.26 秒后关闭。模拟器配对时，加入方在 48 毫秒后用类型 10 回应类型 9，主机发送序号 3 的 Net 0x11，加入方回应 `0112000000000003`；主机网络在类型 9 后 0.25 秒关闭。加入方类型 10 和 0x12 使用头部标志 2、目标 0、包 ID 0，无尾部。
 
-With the type 9 unanswered, a retail Z-A hosting a trade whose player backed out sent five type 9 one
-second apart, then Net 0x11 sequence 3 from source 0 every 0.5 s for about 4 s, then Net 0x40 for
-about 2 s, and went silent 10.82 to 10.86 s after its first type 9 (four departures); its network
-went down 11.26 s after it in the one traced on the board. In an emulated pair the joiner answered
-the type 9 with a type 10 48 ms later, the host sent Net 0x11 sequence 3 and the joiner answered
-`0112000000000003`; the host's network was gone 0.25 s after its type 9. The joiner's type 10 and
-0x12 went out with header flags 2, destination 0, packet id 0 and no footer.
+同时发送类型 10 和 0x12 时，零售版主机在类型 9 后 0.04 秒发送 0x11；加入方仍留在网络期间，随后以 0.3 秒间隔发送 Net 0x40（`01 40 00 00`，来源 0），持续 4.06 秒；没有第二条类型 9。
 
-With the type 10 and the 0x12 sent at once, a retail host sent the 0x11 0.04 s after its type 9
-and then Net 0x40 (`01 40 00 00`, source 0) every 0.3 s for 4.06 s while the joiner stayed on its
-network; no second type 9 came.
+Net 0x11 是退出主机在 `NetDestroyNetworkJob` 迁移形式下的连接状态（`0x2516444`，标志位于 job+0xd8，断开站点为主机时设置，`0x2503c44`）：`0x2501930` 增加序号（NetProtocol+0x15c）；NetHostMigration 状态 NetProtocol+0x12d0 为 1 时，第 29 字节，即迁移标志，为 1（`0x250f084`）。它要求每个客户端发送同序号的 Net 0x12；客户端保存序号、设置 NetProtocol+0x308 并回应（`0x2503164`、`0x25035c0`）。主机最多等待 4000 毫秒收齐所有 0x12，然后每隔 300 毫秒发送 0x40，持续 4000 毫秒；前面的等待超时时改为 2000 毫秒，或在只剩自身时提前结束，随后销毁网络（`0x251693c`、`0x25169f8`）。
 
-The Net 0x11 is the leaving host's connection status in the migration form of
-`NetDestroyNetworkJob` (`0x2516444`, flag at job+0xd8, set when the disconnecting station is host,
-`0x2503c44`): `0x2501930` bumps the sequence (NetProtocol+0x15c) and byte 29, the is-migrating byte,
-is 1 while the NetHostMigration state NetProtocol+0x12d0 is 1 (`0x250f084`). It asks every client
-for a Net 0x12 of that sequence; a client stores the sequence, sets NetProtocol+0x308 and answers
-(`0x2503164`, `0x25035c0`). The host waits up to 4000 ms for every 0x12, then sends the 0x40 every
-300 ms for 4000 ms, or 2000 ms when the wait expired, until it is alone, and destroys its network
-(`0x251693c`, `0x25169f8`).
+0x40 启动下一主机的工作：非主机站点上的 `0x2503d44` 调用 NetHostMigration 启动函数 `0x25099a4`，选择下一主机（`0x2505d10`）并执行 `NetHostMigrationJob`（`0x2509da0`）。LDN 下先离开旧网络（`0x2503b14`）；下一主机开启网络（`0x2507050`），等待其余客户端 6000 毫秒，移除未返回的客户端（`0x250acf0`）；客户端等待 1000 毫秒后重连。成功时清除 NetProtocol+0x12d0，并在 NetProtocol+0x12d4 保存结果 1 或 2（主机）、3（客户端）；失败时保存 4 和错误 `0xc406`。
 
-The 0x40 starts the next host's work: `0x2503d44`, on a station that is not host, calls
-NetHostMigration start `0x25099a4`, which picks the next host (`0x2505d10`) and runs
-`NetHostMigrationJob` (`0x2509da0`). On LDN it leaves the old network (`0x2503b14`); the next host
-opens a network (`0x2507050`) and waits 6000 ms for the remaining clients, dropping any that do not
-come back (`0x250acf0`); a client waits 1000 ms and reconnects. Success clears NetProtocol+0x12d0
-and stores result 1 or 2 (host) or 3 (client) at NetProtocol+0x12d4; failure stores 4 with error
-`0xc406`.
+连接交换在交接时结束。类型 9 处理函数 `0x2550684` 在启动 `ProcessHostMigrationJob` 前移除退出主机的站点（`0x2548500`），降低会话站点数（session+0x110）。交换场景更新 `0x95f398` 仅在站点数大于 1 时继续交换（`0x95f45c`），否则以原因 3 结束（`0x95f508`）；对方离开请求也会到达同一结束路径。双站点交换中，退出方就是唯一对方，因此无论迁移如何进行，交换都会结束，退出的游戏主机也会销毁自身网络。
 
-A Link Trade ends at the handover. The type-9 handler `0x2550684` removes the leaving host's station
-(`0x2548500`) before starting `ProcessHostMigrationJob`, which drops the session's station count
-(session+0x110). The trade scene update `0x95f398` runs the trade only while that count is above 1
-(`0x95f45c`) and otherwise ends it with reason 3 (`0x95f508`), the ending a partner's leave request
-also reaches. In a two-station trade the leaver is the only partner, so the trade ends whatever the
-migration does, and the leaving console destroys its network.
+在首条 0x40 时退出，加入方于类型 9 后 0.09 秒离开网络（未交换，玩家从盒子界面返回）。
 
-Leaving on that first 0x40, the joiner was off the network 0.09 s after the type 9 (no trade, the
-player backing out of the box).
-
-`bin/za_join.py` answers a type 9 naming it with the type 10, and the Net 0x11 after it with the
-0x12, and leaves the network on the first Net 0x40 (or once the console has been silent for a
-second).
+`bin/za_join.py` 用类型 10 回应指定自身的类型 9，用 0x12 回应随后的 Net 0x11，并在首条 Net 0x40 时离开网络（或主机沉默一秒后离开）。
 
 ## 神秘礼物
 
 2.0.2版神秘礼物提供网络获取、密码获取、查看神秘礼物；没有本地无线路径。
 ## 未解决
 
-> 本节已随上游更新，以下内容暂保留英文。
-
-- Whether game code reaches facade index 19 other than through CloseParticipation. A hosted Link
-  Trade search with one joiner reached it from CloseParticipation.
-- Whether a shipped script calls the binding `0x1673170` that stores any integer into L, and what the
-  language-select table `[x0+0x50]` holds (breakpoint `0x16734c0`, read at `0x2c204ac`).
-- Whether an optional timed close (`--hold-after-trade`) can leave the console without an error
-  while it is still seated. The default host waits for the console's departure ([Hosting](#hosting)).
-  A leaving retail host sends the type 9 first ([A host leaving](#a-host-leaving)); the timed close
-  in `bin/za_host.py` sends none.
-- What a retail Z-A shows and keeps after its trade ends at a handover it receives: the partner-left
-  message, and whether the network it recreates stays open for a new joiner (`0x961a40` onward).
-- What a station does with a protocol-0 message, and the keepalive's header bytes (`04 00` by the
-  header diff). A capture of a seated station the console has nothing else to send to.
+- 游戏代码是否会通过 CloseParticipation 以外的路径到达外观接口索引 19。一次主机端连接交换搜索中，有一个加入方时，经 CloseParticipation 到达该索引。
+- 发布脚本是否调用可将任意整数存入 L 的绑定 `0x1673170`，以及语言选择表 `[x0+0x50]` 的内容（断点 `0x16734c0`，在 `0x2c204ac` 读取）。
+- 可选定时关闭（`--hold-after-trade`）能否在主机仍已就座时使其无错误离开。默认主机端等待游戏主机退出（[主持会话](#hosting)）。退出的零售版主机先发送类型 9（[主机退出](#a-host-leaving)）；`bin/za_host.py` 中的定时关闭不发送它。
+- 零售版《Z-A》收到交接并结束交换后会显示什么、保留什么：对方离开的消息，以及重建网络是否保持开放以接受新加入方（从 `0x961a40` 开始）。
+- 站点如何处理协议 0 消息，以及保活消息的头部字节（根据头部差异为 `04 00`）。需要捕获已就座、且游戏主机没有其他内容要发送的站点流量。

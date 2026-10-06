@@ -122,7 +122,7 @@ has_children: false
 
 RttProtocol（vtable `0x43e5a28`）在`[proto+0x60] + index*0x40`处为每个站保留0x40字节记录：样本计数`+0`，环头`+4`，容量9在`+0x10`后面，环内联在其后面，中值缓存在 `+0x3c`，用于 `+0x38` 的计数。现在样本时钟减去回显时钟（`0x6f34b4`）；零或更少的样本被丢弃（`0x6f34e0`）。请求以 `[0x46d1528]` 的间隔进行，直到每个环都已满，然后在 `[0x46d1520]` = 500 处（在 `0x6f2fcc` 处写入，并由 `0x1e7c2bc` 处的游戏写入）。站事件 0 或 1 清除该站的记录 (vfunc11 `0x6f3bd8`)：新座位没有样本。
 
-GetRtt (`0x6f4498`; `0x6f44bc` with a count *n*) 在没有样本的情况下返回 -1，否则为最后 min(count, *n*) 个样本的中位数；最小值 `0x6f44e4`、最大值 `0x6f4508` 和样本计数 `0x6f452c` 位于其旁边。唯一的调用者是 SessionTransportAnalyzer 的监控副本 (`0x6f9ab0`..`0x6f9ad4`) 和 `ReliableSlidingWindow` 重传截止时间 `0x6f0d14`，从 `0x6f073c` 的发送循环调用：
+GetRtt (`0x6f4498`; `0x6f44bc` 样本数为 *n*) 在没有样本的情况下返回 -1，否则为最后 min(count, *n*) 个样本的中位数；最小值 `0x6f44e4`、最大值 `0x6f4508` 和样本计数 `0x6f452c` 位于其旁边。唯一的调用者是 SessionTransportAnalyzer 的监控副本 (`0x6f9ab0`..`0x6f9ad4`) 和 `ReliableSlidingWindow` 重传截止时间 `0x6f0d14`，从 `0x6f073c` 的发送循环调用：
 
     deadline = now + [window+0x80] + 1.4 * (max over the destinations of GetRtt(count))
  在没有样本的情况下，`0x6f0d14` 返回未计划的标记 `[window+0x5c]`：排队时发送一次消息 (`0x6f1bbc`..`0x6f1bd4`)，并在 `0x6f0a18` 处跳过，直到样本重新准备它（`0x6f09f4`..`0x6f0a08`）。没有 RTT 样本的窗口永远不会重传。
@@ -201,7 +201,7 @@ RTTI 名称来自二进制文件的 type_info 记录（`tools/switch/rtti_names.
 
 |地址 |什么|
 |---|---|
-| `0x697134` | Pia 标头初始值设定项：magic `0x32AB9864` at `+8`，版本 `0x0b` at `+0xc`，标头大小 0x1c at `+0x5f8` |
+| `0x697134` | Pia 标头初始值设定项：magic `0x32AB9864` 位于 `+8`，版本 `0x0b` 位于 `+0xc`，标头大小 0x1c 位于 `+0x5f8` |
 | `0x696f10` |标头解析器，版本 11 顺序的字段 |
 | `0x697034` |轮椅界限：高于 0x5a3 的长度返回 null |
 | `0x3c0c8c0`，`0x44dfcfe` |密码 (rodata) 和游戏密钥 (data) |
@@ -354,139 +354,72 @@ Reliable 0x7C（一个站）和BroadcastReliable 0x80（每个站）的端口2�
 --announce` 在座席后发送类型 7，并用类型 9 应答类型 3。
 ### 发送公告的交换作业
 
-> 本节已随上游更新，以下内容暂保留英文。
+连接交换在 `0x1e2ea54` 创建任务：配置 `BoxTrade`（`0x3aefac8`），工厂 `0x1e2f3d4`，模式 4，所需数量 2。两个脚本绑定可到达这里：`0x1e2e9bc`（GOT `0x46d6608`，由 `0x1b9c8c4` 存入 `0x4717068`，尾调用）与 `0x1e2ec84`（GOT `0x46d6610`，`0x1e2ee40` 处的 `bl`）。任务（构造函数 `0x1e3bd10`，虚函数表 `0x44568a8`，更新函数 `0x1e51a04`）包含：结果 `+0x40`、状态 `+0xb8`、会话句柄 `+0xc0`、位于 `+0xc8` 和 `+0xca` 的 u16 模式与所需数量、槽位对象 `+0xd0`、请求句柄 `+0xf8`。
 
-Link Trade creates the job at `0x1e2ea54`: config `BoxTrade` (`0x3aefac8`), factory `0x1e2f3d4`,
-mode 4, need 2. Two script bindings reach it: `0x1e2e9bc` (GOT
-`0x46d6608`, stored by `0x1b9c8c4` into `0x4717068`, tail call) and `0x1e2ec84` (GOT `0x46d6610`,
-`bl` at `0x1e2ee40`). The job (constructor `0x1e3bd10`, vtable `0x44568a8`, Update `0x1e51a04`):
-result `+0x40`, state `+0xb8`, session handle `+0xc0`, mode and need as u16 at `+0xc8` and `+0xca`,
-slot object `+0xd0`, request handle `+0xf8`.
-
-| state | address | what it does |
+| 状态 | 地址 | 行为 |
 |---|---|---|
-| 1 | `0x1e51a84` | result 3 if the station count `[[0x46d0a08]]+0xe0` is below need, result 1 if `0x18ab520` rejects the mode (0, 5, above 8); else waits, no timeout, for `need` finished identity blocks (`0x1e52004` over `[[job+0xd0]+0x10] - 0x28`), then state 2 on the master (`0x1639910`: own id `+0xb8` equals master id `+0xc0`), 4 on a client |
-| 2, master | `0x1e51b2c` | kind `0x18ab550(mode)` (modes 1 to 8 give 2, 3, 4, 1, 0, 5, 5, 8), then request `0x18ab658`; null ends with result 8 |
-| 3, master | `0x1e51ca8` | waits on the request, no timeout; result 0 goes to state 6, else the job ends via `0x1e5086c` |
-| 4, 5, client | `0x1e51b8c`, `0x1e51c74` | the same wait, 15 s limit |
+| 1 | `0x1e51a84` | 站点数 `[[0x46d0a08]]+0xe0` 小于所需数量时结果为 3；`0x18ab520` 拒绝模式（0、5、大于 8）时结果为 1；否则无超时地等待 `need` 个身份数据块完成（`0x1e52004` 遍历 `[[job+0xd0]+0x10] - 0x28`），然后主端进入状态 2（`0x1639910`：自身 ID `+0xb8` 等于主端 ID `+0xc0`），客户端进入状态 4 |
+| 2，主端 | `0x1e51b2c` | 类型 `0x18ab550(mode)`（模式 1 至 8 分别为 2、3、4、1、0、5、5、8），随后请求 `0x18ab658`；为空时以结果 8 结束 |
+| 3，主端 | `0x1e51ca8` | 无超时地等待请求；结果 0 进入状态 6，否则经 `0x1e5086c` 结束任务 |
+| 4、5，客户端 | `0x1e51b8c`, `0x1e51c74` | 同样等待，但限时 15 秒 |
 
-| result | meaning |
+| 结果 | 含义 |
 |---|---|
-| 1 | success, or the mode rejected |
-| 2 | the session in state 3 |
-| 3 | fewer stations than need |
-| 4 | a client's 15 s timeout |
-| 8 | no session, or the request refused |
+| 1 | 成功，或模式被拒绝 |
+| 2 | 会话处于状态 3 |
+| 3 | 站点数少于所需数量 |
+| 4 | 客户端的 15 秒超时 |
+| 8 | 没有会话，或请求被拒绝 |
 
-The request `0x18ab658` builds the type-1 body and sends it through `0x18ab83c`, which returns null
-while the relay's pending request `[relay+0xb8]` has done byte `+0x42` still 0 (`0x18ab860`,
-`0x18ab8e8`) or the send fails. Otherwise it clears `+0xb8` (`0x18ab894`), stores a new request
-(`0x18ab8a8`; `0x18abec0`: `+0x40` type, 0 for the announcement, `+0x42` done, `+0x43` result) and
-sends the type 1 to the master id (`0x18d58b8`), itself on the master; a failed send clears `+0xb8`
-(`0x18ab900`).
+请求 `0x18ab658` 构造类型 1 消息体并通过 `0x18ab83c` 发送；当中继器待处理请求 `[relay+0xb8]` 的完成字节 `+0x42` 仍为 0（`0x18ab860`、`0x18ab8e8`）或发送失败时，该函数返回空。否则清除 `+0xb8`（`0x18ab894`）、保存新请求（`0x18ab8a8`；`0x18abec0`：`+0x40` 为类型，通告为 0，`+0x42` 为完成标志，`+0x43` 为结果），并将类型 1 发送给主端 ID（`0x18d58b8`），主端上则发给自身；发送失败会清除 `+0xb8`（`0x18ab900`）。
 
-`0x18ab658` has four callers: `0x1e51b68` (BoxTrade state 2), `0x18ab34c` (the same in a sibling job,
-vtable `0x4456490`), `0xa188f0` (vtable `0x4452e68`) and `0x1d99568` (vtable `0x44536d8`). Only the
-four request creators write `+0xb8`; `0x18ab83c` and `0x2799b10` refuse while a request is pending:
+`0x18ab658` 有四个调用方：`0x1e51b68`（BoxTrade 状态 2）、`0x18ab34c`（同类任务中的对应状态，虚函数表 `0x4456490`）、`0xa188f0`（虚函数表 `0x4452e68`）、`0x1d99568`（虚函数表 `0x44536d8`）。只有四个请求创建函数写入 `+0xb8`；请求待处理时，`0x18ab83c` 和 `0x2799b10` 会拒绝：
 
-| creator | request type | store | sole caller |
+| 创建函数 | 请求类型 | 存储位置 | 唯一调用方 |
 |---|---|---|---|
-| `0x18ab83c` | 0, the announcement | `0x18ab8a8` | `0x18ab6bc`, in `0x18ab658` |
-| `0x2799b10` | 2, a client's join | `0x2799bd8` (guard `0x2799b2c`..`0x2799b40`) | `0x1e635fc` |
+| `0x18ab83c` | 0，通告 | `0x18ab8a8` | `0x18ab658` 中的 `0x18ab6bc` |
+| `0x2799b10` | 2，客户端加入 | `0x2799bd8`（保护条件 `0x2799b2c`..`0x2799b40`） | `0x1e635fc` |
 | `0x2799c44` | | `0x2799cfc` | `0x1e639ec` |
 | `0x2799d6c` | | `0x2799e30` | `0x1e63c88` |
 
-The last three callers each sit in a function whose sole caller is in `0x1d98xxx` (`0x1d986d8`,
-`0x1d98990`, `0x1d98c20`).
+最后三个调用方各自位于一个函数中，这些函数的唯一调用方均在 `0x1d98xxx`（`0x1d986d8`、`0x1d98990`、`0x1d98c20`）。
 
-In a Link Trade, the type-2 creator is reached from BoxTrade state 4 at `0x1e51c40`, through
-`0x1d986d8` and `0x1e635fc`. It runs only on the client after the master's slot is present
-(`0x1d999f4`, `0x18c7a40`), retains the request at job `+0xf8`, and enters state 5. The other
-callers of `0x1d98698` belong to other job classes.
+连接交换中，BoxTrade 状态 4 从 `0x1e51c40` 经 `0x1d986d8`、`0x1e635fc` 到达类型 2 创建函数。只有客户端且主端槽位已存在时才执行（`0x1d999f4`、`0x18c7a40`），将请求保留在任务的 `+0xf8`，并进入状态 5。`0x1d98698` 的其他调用方属于其他任务类。
 
-The drain `0xe44cf0` walks queues `+0x1c8`, `+0x200`, `+0x238`, `+0x270`, `+0x2a8`, `+0x2e0`,
-`+0x318`, `+0x350` in order; a composer returning false ends the drain for the frame, so a stuck
-type 7 holds the type 9 and 0x0D behind it. The
-type-7 composer `0xe45740` dispatches locally alone when the station count is 1; otherwise it asks
-`BroadcastReliableProtocol::vfunc20` (`0x6e6638`) whether 0x80 port 2 can send, sends with
-`0x107e060`, and dispatches locally only when both succeed. vfunc20 refuses with 0x2c27 when no
-entry of the destination list `[window+0x40]` is set (`0x6efb98`), 0x4c0d when the window lacks room
-for the fragments (`0x6f1ef8`), 0x10408 with no session or window. Pia fills the destination list on
-the station-join event ([Who a window sends to](pia.md#who-a-window-sends-to-pia-6)).
+队列清空函数 `0xe44cf0` 依次遍历 `+0x1c8`、`+0x200`、`+0x238`、`+0x270`、`+0x2a8`、`+0x2e0`、`+0x318`、`+0x350`；组装函数返回假时，本帧停止处理，因此卡住的类型 7 会阻塞其后的类型 9 和 0x0D。类型 7 组装函数 `0xe45740` 在站点数为 1 时仅本地分发；否则用 `BroadcastReliableProtocol::vfunc20`（`0x6e6638`）检查 0x80 端口 2 能否发送，再用 `0x107e060` 发送，两者均成功后才本地分发。目标列表 `[window+0x40]` 中无已设置项时（`0x6efb98`），虚函数 20 以 0x2c27 拒绝；窗口没有容纳分片的空间时（`0x6f1ef8`）返回 0x4c0d；没有会话或窗口时返回 0x10408。Pia 在站点加入事件中填写目标列表（[窗口向谁发送](pia.md#who-a-window-sends-to-pia-6)）。
 
-The type-7 receiver `0x18b566c` creates and applies the slot and, for a pending type-0 request and
-the console's own station id (body `+0x90`), completes it with result 0: a master stays in state 3
-until its own type 7 has left on the wire. Nothing between relay and wire reads RTT or a timer.
+类型 7 接收函数 `0x18b566c` 创建并应用槽位；若存在待处理类型 0 请求且消息体 `+0x90` 为主机自身站点 ID，则以结果 0 完成请求：主端一直停在状态 3，直到自身类型 7 真正发到网络上。中继器与网络发送之间没有读取 RTT 或计时器的逻辑。
 
-The 0x81 identity is one block per station on the port of its index (handles `0x475ea48 + 4*index`),
-moved by the stream send API `0xe22188` and receive API `0xe22458` for three objects of one layout:
+0x81 身份数据为每个站点一个数据块，使用站点索引对应的端口（句柄 `0x475ea48 + 4*index`），经流发送 API `0xe22188` 和接收 API `0xe22458` 在三个同布局对象间传递：
 
-| object: Update, vtable | send | receive | block |
+| 对象：更新函数、虚函数表 | 发送 | 接收 | 数据块 |
 |---|---|---|---|
-| `0xe21104`, slot 13 of `0x4455ec0` | `0xe21a44`, `bl` at `0xe21dc4`, `w2 = 0xf388` at `0xe21db8` | `0xe2150c`, `0xe2170c`, `w3 = 0xf388` at `0xe21708` | 0xF388 = 62,344 |
+| `0xe21104`，`0x4455ec0` 的槽位 13 | `0xe21a44`，`0xe21dc4` 处的 `bl`，`0xe21db8` 处的 `w2 = 0xf388` | `0xe2150c`、`0xe2170c`，`0xe21708` 处的 `w3 = 0xf388` | 0xF388 = 62,344 |
 | | `0xa62c5c`, `w2 = 0xff008` | `0xa64ddc`, `w3 = 0xff008` | 0xFF008 = 1,044,488 |
-| `0x1e5f87c`, slot 13 of `0x4458698` | `0x1e617a8`, `0x1e61980`, `w2 = 0x97e08` | `0x1e61a74`, `0x1e61c0c`, `w3 = 0x97e08` | 0x97E08 = 622,088 |
+| `0x1e5f87c`，`0x4458698` 的槽位 13 | `0x1e617a8`, `0x1e61980`, `w2 = 0x97e08` | `0x1e61a74`, `0x1e61c0c`, `w3 = 0x97e08` | 0x97E08 = 622,088 |
 
-Only the 0xF388 block goes on the wire in a trade, so the job's `+0xd0` object is of that class
-(instance untraced; built through `0x1e34b6c` -> `0x1e35e88`).
+交换时只有 0xF388 数据块在网络上传输，因此任务的 `+0xd0` 对象属于该类（尚未追踪实例；经 `0x1e34b6c` → `0x1e35e88` 构造）。
 
-`0x1e52004` counts slots at `+0xd0 + 0x30*k` (four) holding a peer pointer with byte `+0xd8` set. The console's own slot gets it in `0xe21154` (`memcpy(slot, [+0x90], 0xf388)` at
-`0xe21248`, `+0xd8 = 1` at `0xe21258`; called from `0xa536e0`, `0xd6dc88`, `0xe21128`, `0x195160c`).
-A peer's slot gets it in `0xe212b8` (called from `0xa536f0`, `0xd6dc98`, `0xe21138`) only when the
-send to the peer (`+0xda`) and the receive from it (`+0xd9`) have started, the own 0x81 stream is in
-state 3 (`0xe2144c`, every own chunk acknowledged) and the peer's in state 6 (`0xe21404`, every peer
-chunk received); state 7 clears a flag
-([Protocol 0x81](pia.md#protocol-0x81-the-stream-broadcast-reliable-transfer-pia-6)). The 0x97E08
-class has the same pair, `0x1e60284` and `0x1e615e8`.
+`0x1e52004` 统计 `+0xd0 + 0x30*k` 处四个槽位中，持有对端指针且字节 `+0xd8` 置位的槽位。主机自身槽位在 `0xe21154` 中设置该字节（`0xe21248` 处的 `memcpy(slot, [+0x90], 0xf388)`，`0xe21258` 处的 `+0xd8 = 1`；由 `0xa536e0`、`0xd6dc88`、`0xe21128`、`0x195160c` 调用）。对端槽位在 `0xe212b8` 中设置（由 `0xa536f0`、`0xd6dc98`、`0xe21138` 调用），但要求向对端发送（`+0xda`）和从对端接收（`+0xd9`）都已启动，自身 0x81 流处于状态 3（`0xe2144c`，所有自身分块已获确认），对端流处于状态 6（`0xe21404`，所有对端分块已收到）；状态 7 会清除一个标志（[协议 0x81](pia.md#protocol-0x81-the-stream-broadcast-reliable-transfer-pia-6)）。0x97E08 类有同样的一对函数，即 `0x1e60284`、`0x1e615e8`。
 
-On the wire the type 7 follows the console's last record of its own set, usually within 0.11 s
-(0.020 to 0.106 s in 37 of 40 announced seats; 0.545, 0.864 and 3.902 s in the others).
+线上类型 7 紧随主机自身数据集的最后一条记录，通常在 0.11 秒内发送（40 次已通告就座中，37 次间隔为 0.020 至 0.106 秒，另外三次为 0.545、0.864、3.902 秒）。
 
-The relay is a 0x388-byte object (vtable `0x44e56f8`), singleton `[0x46da9c0]` = `0x4739430`,
-created by `0x165a200` from `0x1659b70` only when none exists (`0x1659b18`). Its station-event
-handler is `0x12fbb90`, via the thunk `0x2b71650`:
+中继器是 0x388 字节对象（虚函数表 `0x44e56f8`），单例 `[0x46da9c0]` = `0x4739430`；仅在不存在实例时（`0x1659b18`），由 `0x165a200` 根据 `0x1659b70` 创建。站点事件处理函数为 `0x12fbb90`，经跳板 `0x2b71650` 调用：
 
-| event | effect |
+| 事件 | 效果 |
 |---|---|
-| 0, a station joined, on the master | `0x12fbf8c` sends it the current slots unless it is the master |
-| 1, own id | a pending request not done completes with result 5 (`0x501` at `+0x42`), then `0x12fbef0` |
-| 1, the master's id | `0x12fbef0` |
-| 1, any station, on the master | then `0x12fcebc` drops the elements it relayed |
+| 0，站点加入，发生在主端 | `0x12fbf8c` 将当前槽位发给该站点，除非它是主端 |
+| 1，自身 ID | 未完成的待处理请求以结果 5 完成（`+0x42` 处的 `0x501`），随后执行 `0x12fbef0` |
+| 1，主端 ID | `0x12fbef0` |
+| 1，任意站点，发生在主端 | 随后 `0x12fcebc` 丢弃该站点中继的元素 |
 
-`0x12fbef0` removes every slot through `0x12fc644` (completing a pending type-1 request whose key
-matches), empties seven queues (all but `+0x1c8`) and zeroes `+0x1c0` and `+0x1c4`; it leaves the
-request at `+0xb8`. A type-0 request is completed only by the type-7 receiver, the type-0x0D
-receiver and the own-leave event; type 2 by the type-9 receiver `0x18b6710`, type 3 by the type-0xA
-receiver `0x1945404`, type 4 by the type-0xB receiver `0x279be18`.
+`0x12fbef0` 通过 `0x12fc644` 移除每个槽位（完成键匹配的待处理类型 1 请求），清空七个队列（除 `+0x1c8` 外全部），并将 `+0x1c0`、`+0x1c4` 清零；`+0xb8` 中的请求保持不变。类型 0 请求仅由类型 7 接收函数、类型 0x0D 接收函数以及自身离开事件完成；类型 2 由类型 9 接收函数 `0x18b6710` 完成，类型 3 由类型 0xA 接收函数 `0x1945404` 完成，类型 4 由类型 0xB 接收函数 `0x279be18` 完成。
 
-The own-leave path at `0x12fbc3c..0x12fbc4c` completes a client's pending type-2 request with
-result 5 (`+0x40..+0x43 = 02 00 01 05`). The next creator can replace that completed request
-without restarting the game, including after a disconnect before type-9 acceptance. A leave event
-for the master's id alone does not complete the request: `0x12fbc70..0x12fbc84` calls only
-`0x12fbef0`. The client's BoxTrade job still ends at 15 s with result 4, because state 5 tests the
-clock (`0x1e51c74..0x1e51ca4`, base `+0x108` set at `0x1e51c6c`) before it polls the request through
-its weak reference `+0xf8` (`0x18ab588`, `0x18ab614`). Neither the timeout path `0x1e51d50` nor the
-job destructor `0x1e51740`, which only releases the weak reference through `0x18ccdb4`, touches the
-relay's request. It stays pending at relay `+0xb8`, and `0x2799b10` and `0x18ab83c` refuse, until
-the type-9 or type-0x0D receiver or the client's own leave event completes it.
+`0x12fbc3c..0x12fbc4c` 的自身离开路径以结果 5 完成客户端待处理类型 2 请求（`+0x40..+0x43 = 02 00 01 05`）。下一次创建请求时可替换这个已完成请求，无需重启游戏，包括在类型 9 接受之前断开连接的情况。仅收到主端 ID 的离开事件不会完成请求：`0x12fbc70..0x12fbc84` 只调用 `0x12fbef0`。客户端 BoxTrade 任务仍会在 15 秒时以结果 4 结束，因为状态 5 先检查时钟（`0x1e51c74..0x1e51ca4`，基准 `+0x108` 在 `0x1e51c6c` 设置），再经弱引用 `+0xf8` 轮询请求（`0x18ab588`、`0x18ab614`）。超时路径 `0x1e51d50` 和任务析构函数 `0x1e51740` 都不会修改中继器请求；析构函数只通过 `0x18ccdb4` 释放弱引用。请求持续停留在中继器 `+0xb8`，`0x2799b10`、`0x18ab83c` 持续拒绝，直到类型 9、类型 0x0D 接收函数或客户端自身离开事件将其完成。
 
-The relay lives until the application exits, so a request pending at `+0xb8` survives every seat,
-search and menu until a completer runs. Its holder `0x4739430` (GOT `0x46da9c0`, guard `0x4739440`
-via GOT `0x46da9b8`) is written only by the assignment `0x165a2b4` (from the creator, `bl` at
-`0x165a230`), the reset `0x279d610` (`str xzr` at `0x279d62c`, then destructor and free), reached only
-from the relay's own destroy slots `0x279d5ac` (slot 3) and `0x2b71660` (`+0x20` interface slot 1),
-which have no direct callers, and the static destructor `0xa15f74` (`__cxa_atexit`). A generic
-virtual call on slot 3 cannot be excluded statically. Vtable `0x44e56f8`: slot 0 `0x279a7b0`
-(destructor), 1 `0x2b7164c`, 3 `0x279d5ac`, 4 `0x12fbb90`; interface `+0x20` slots `0x2b7165c`
-(`ret`) and `0x2b71660`; interface `+0x28` the listener thunk `0x2b71650`. The base constructor
-`0x165b0c8` (from `0x165a998`) installs a second vtable `0x44e5768` with the same destroy slots and
-sets `[holder+8] = 1`.
+中继器存活到应用退出，因此 `+0xb8` 处的待处理请求会跨越每次就座、搜索和菜单切换，直到有完成处理函数执行。持有者 `0x4739430`（GOT `0x46da9c0`，经 GOT `0x46da9b8` 的保护变量 `0x4739440`）只有以下写入点：赋值 `0x165a2b4`（来自创建函数，`0x165a230` 处的 `bl`）；重置 `0x279d610`（`0x279d62c` 处的 `str xzr`，随后析构并释放），仅由中继器自身销毁槽位 `0x279d5ac`（槽位 3）和 `0x2b71660`（`+0x20` 接口槽位 1）到达，这两个槽位均无直接调用方；静态析构函数 `0xa15f74`（`__cxa_atexit`）。静态分析无法排除对槽位 3 的通用虚函数调用。虚函数表 `0x44e56f8`：槽位 0 为 `0x279a7b0`（析构函数），1 为 `0x2b7164c`，3 为 `0x279d5ac`，4 为 `0x12fbb90`；接口 `+0x20` 的槽位为 `0x2b7165c`（`ret`）和 `0x2b71660`；接口 `+0x28` 为监听器跳板 `0x2b71650`。基类构造函数 `0x165b0c8`（来自 `0x165a998`）安装具有相同销毁槽位的第二张虚函数表 `0x44e5768`，并设置 `[holder+8] = 1`。
 
-The creator registers the `+0x20` interface with `0xf0ba9c` (`bl` at `0x165a244`) in a finalizer list
-(up to 0x400 entries at `0x4763a18`, count `0x4765a18`), walked in reverse only by `0x27aff48` (slot
-0) and `0x27b0054` (slot 1, then zeroes the count), both called only from `0x20e9c78`, slot 5 of
-vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that ends in
-`nn::account::CloseUser`: the application's finalize.
+创建函数通过 `0xf0ba9c` 将 `+0x20` 接口注册到终结处理列表（`0x165a244` 处的 `bl`；`0x4763a18` 处最多 0x400 项，计数为 `0x4765a18`）。仅 `0x27aff48`（槽位 0）和 `0x27b0054`（槽位 1，随后将计数清零）逆序遍历该列表；两者仅由虚函数表 `0x44e6be0` 的槽位 5，即 `0x20e9c78` 调用，位于从 `0x92d648`（`0x443ffd0` 的槽位 5）到 `nn::account::CloseUser` 的应用终结路径上。
 
 ### 打开频道
 
@@ -526,7 +459,7 @@ vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that end
 
 0x7C 上的主机 ack 的 `lowest_pending` 字段携带其自己的下一个序列，如 0x81 上一样。超过电台的最后一个序列后，电台会等待该号码并丢弃主机在 `0x6f03cc` 处的下一条较低消息（[接收器在静默中丢弃的内容](pia.md#what-the-receiver-discards-in-silence)）；编号在提交时有所不同，其中电台首先提交。 `8001`步骤成对运行，01和02在第四字节步进03、06、0B、0E下；交换适用于它们，并且两个屏幕都返回到交换菜单。
 
-针对 `bin/sv_host.py`，主机的交换流消息编号为 5（提议）、6（确认）、7（提交）、8 至 15（步骤）；游戏机的5、6、7和8至11，其密钥0x180打开和关闭其端口1消息3和4；其主机提议的确认为 `ack_id` 6、`lowest_pending` 5。两个相同的训练器可以交换。
+针对 `bin/sv_host.py`，主机的交换流消息编号为 5（提议）、6（确认）、7（提交）、8 至 15（步骤）；游戏机的5、6、7和8至11，其密钥0x180打开和关闭其端口1消息3和4；其主机提议的确认为 `ack_id` 6、`lowest_pending` 5。两个相同的训练家可以交换。
 ### 电台自己的提议之前发送的确认
 
 当提议 `80000200` 仍在排队时，切勿发送确认 `80000300`：按该顺序发送它们的实机崩溃（黑屏，系统错误），记录本身存储未经检查。两个启动器上的 `--offer-after-open` 都将要约挂在对等方的密钥 0x80 公告上，并且两个启动器都不会在已为同一站和端口排队的交换消息之前排队交换消息。
@@ -548,7 +481,7 @@ vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that end
 ### 交换消息携带的记录
 
 `80 00 02 00` 消息的 348 字节正文是常量 `bc 81 58 01` 和 Gen 8 加密 (`pokeldn/gen8.py`) 下的 344 字节 Gen-9 队列记录（PKHeX 的 PK9）：来自四个 0x50 字节块
-0x08 由 `(EC >> 13) & 31` 排列，16 位字上的 LCG `seed = seed * 0x41C64E6D + 0x6073`，以及解密主体的 16 位校验和，直至 0x148。 0x148 处的行尾位于排列和校验和之外，并根据加密常数重新播种 LCG。
+0x08 由 `(EC >> 13) & 31` 排列，16 位字上的 LCG `seed = seed * 0x41C64E6D + 0x6073`，以及解密主体的 16 位校验和，直至 0x148。 0x148 处的行尾位于排列和校验和之外，并根据加密常量重新播种 LCG。
 
     0x000  u32  encryption constant, in the clear
     0x004  u16  sanity, 0 on every record measured
@@ -559,23 +492,23 @@ vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that end
 
 |偏移|领域 | |偏移|领域 |
 |---|---|---|---|---|
-| 0x08 |物种，内部索引| | 0x8A |当前HP |
-| 0x0A |持有物品 | | 0x8C |六个 5 位 IV，然后是鸡蛋和绰号位 |
+| 0x08 |种类，内部索引| | 0x8A |当前HP |
+| 0x0A |持有物 | | 0x8C |六个 5 位 IV，然后是蛋和绰号位 |
 | 0x0C | 训练家ID，秘密ID | | 0x90 |状态条件|
 | 0x10 |经验| | 0x94 | tera 类型、原始和覆盖 |
-| 0x14 |能力，则其在 0x16 | 的位 0-2 中的编号| 0xA8 |处理程序名称，26 字节 |
+| 0x14 | 特性，以及 0x16 的位 0-2 中的特性编号 |  | 0xA8 | 最近持有人名称，26 字节 |
 | 0x18 |标记| | 0xC2 |处理员性别、语言、当前处理员 0xC4 |
-| 0x1C |人格价值| | 0xC6 |处理程序 ID、友谊、内存 |
-| 0x20 |自然，统计自然| | 0xCE |版本，战斗版本|
+| 0x1C |人格价值| | 0xC6 |处理程序 ID、亲密度、内存 |
+| 0x20 |性格、能力值修正所用性格| | 0xCE |版本，战斗版本|
 | 0x22 |命运在位 0，性别在位 1-2 | | 0xD0 |形式论证 |
-| 0x24 |表格| | 0xD4 |附丝带，语言为 0xD5 |
-| 0x26 |六辆电动汽车，hp atk def spe spa spd | | 0xF8 | 初训家名称，26字节|
-| 0x2C |六大竞赛价值观| | 0x112 |教练友谊与记忆|
-| 0x32 |扑克| | 0x119 |鸡蛋日期，见面日期为 0x11C，服从级别为 0x11F |
-| 0x34 |丝带和标记旗帜| | 0x120 |鸡蛋地点、见面地点|
+| 0x24 |表格| | 0xD4 |附奖章，语言为 0xD5 |
+| 0x26 |六项努力值，hp atk def spe spa spd | | 0xF8 | 初训家名称，26字节|
+| 0x2C |六大竞赛价值观| | 0x112 |训练家亲密度与记忆|
+| 0x32 |扑克| | 0x119 |蛋日期，见面日期为 0x11C，服从级别为 0x11F |
+| 0x34 |奖章和标记旗帜| | 0x120 |蛋地点、见面地点|
 | 0x48 |身高标量、体重标量、比例| | 0x124 |球 |
-| 0x4B | DLC 移动记录标志 | | 0x125 |位 0-6 中的达到水平，位 7 中的培训师性别 |
-| 0x58 |昵称，26字节UTF-16LE | | 0x126 |超级训练旗帜|
+| 0x4B | DLC 移动记录标志 | | 0x125 |位 0-6 中的达到水平，位 7 中的训练家性别 |
+| 0x58 |昵称，26字节UTF-16LE | | 0x126 |极限训练旗帜|
 | 0x72 |四个动作，他们的PP在0x7A，PP上涨在0x7E | | 0x127 | HOME 追踪器 |
 | 0x82 |四个重新学习动作| | 0x12F |基础游戏移动记录标志 |
 
@@ -583,15 +516,15 @@ vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that end
 `--offer-out FILE`写入游戏机（在第一个之后提供N到`FILE`，在扩展名之前使用`-N`），并且`--trade-offer`采用344字节记录（明文或加密），348字节主体或352字节消息。
 ### 合成记录
 
-由 `pokemon.build` 由零字节组成的记录，或用 `bin/sv_host.py --offer-set` 编辑的记录（昵称、昵称标志、个性值、IV），与组成的每个汇总字段一起交易到零售朱保存中。交换屏幕绘制了一个没有合法性检查的合成记录；主机写入校验和。摘要的训练家 ID 是
-`(TID16 | SID16 << 16) % 1000000`（12345和54321开奖为993401，8131和64817开奖为855043）；特征线来自加密常数和 IV。
+由 `pokemon.build` 由零字节组成的记录，或用 `bin/sv_host.py --offer-set` 编辑的记录（昵称、昵称标志、PID、IV），与组成的每个汇总字段一起交易到零售朱保存中。交换屏幕绘制了一个没有合法性检查的合成记录；主机写入校验和。摘要的训练家 ID 是
+`(TID16 | SID16 << 16) % 1000000`（12345和54321开奖为993401，8131和64817开奖为855043）；特征线来自加密常量和 IV。
 
-等级跟随经验：字节0x148在100级零经验到达1级，1,000,000经验为100级。六条增长曲线（`PKHeX.Core/PKM/Util/Experience.cs`）需要1,000,000、600,000、1,640,000、1,059,860， 100 级时为 800,000 和 1,250,000。物种表
-`personal_sv`（0x50每个物种和形式的字节，`PersonalInfo9SV.cs`）的基本统计数据为0x00，性别比例0x0C，生长曲线0x0F，三种能力0x12（物种132：曲线 0，能力 7、7、150)。接收方游戏重新计算队伍统计数据：
+等级跟随经验：字节0x148在100级零经验到达1级，1,000,000经验为100级。六条增长曲线（`PKHeX.Core/PKM/Util/Experience.cs`）需要1,000,000、600,000、1,640,000、1,059,860， 100 级时为 800,000 和 1,250,000。种类表
+`personal_sv`（0x50每个种类和形式的字节，`PersonalInfo9SV.cs`）的种族值为0x00，性别比例0x0C，生长曲线0x0F，三种特性0x12（种类132：曲线 0，特性 7、7、150)。接收方游戏重新计算队伍统计数据：
 
     HP    = (2 * base + IV + EV/4) * level / 100 + level + 10
     other = ((2 * base + IV + EV/4) * level / 100 + 5) * nature
- 一个百变怪，具有完美的 IV，没有 EV，中立性质，在 1 级显示 12 和 6 x5，在 100 级显示 237 和 132 x5，从零统计字段开始；在 1 级发送的 HP 99/99 到达时为 12。
+ 一个百变怪，具有完美的 IV，没有 EV，中立性格，在 1 级显示 12 和 6 x5，在 100 级显示 237 和 132 x5，从零统计字段开始；在 1 级发送的 HP 99/99 到达时为 12。
 ### 加入方按顺序发送的内容
 
 游戏第一条消息之前一对的加入方，一次捕获的次数：
@@ -599,8 +532,8 @@ vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that end
 |时间 |留言 |
 |---|---|
 | 0.04 | 0.04会话加入请求 |
-| 0.17 | 0.17 Net 0x12，与主机的 0x11 | 的序列相呼应
-| 0.38 | 0.38 Net 0x51，与主机的 0x50 | 的序列相呼应
+| 0.17 | Net 0x12，回送主机 0x11 的序列号 |
+| 0.38 | Net 0x51，回送主机 0x50 的序列号 |
 | 1.63 | 1.63会话类型6，确认站更新|
 | 1.68 | 1.68十一个批量确认和流在 0x81 端口 0 和 4 上打开 |
 | 1.68 | 1.68 0x7C 端口 1 上的通道表 |
@@ -642,12 +575,12 @@ vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that end
 | `current_handler` | 0 | 1 |
 | `ht_name` |空 |游戏机玩家的名字 |
 | `ht_language` | 0 |接收游戏机的语言（3，法语）|
-| `ht_friendship` | 0 | 50 | 50
-| `nickname` |空 |游戏机语言中的物种名称 |
+| `ht_friendship` | 0 | 50 |
+| `nickname` |空 |游戏机语言中的种类名称 |
 | `current_hp` | 0 |计算出的最大HP（237，100级百变怪）|
 | `stats` |零|游戏计算出的六个|
 
-其他所有内容均按发送状态保留。一个空名称作为物种名称返回，如《Sword 神秘礼物》记录（`docs/swsh_gift.md`）中那样。
+其他所有内容均按发送状态保留。一个空名称作为种类名称返回，如《剑 神秘礼物》记录（`docs/swsh_gift.md`）中那样。
 ### 加入搜索游戏机：一次交换，以及什么决定了座位
 
 `bin/sv_join.py` 通过其链接交换搜索与零售朱托管进行交易，编号为一对加入方。以站点更新为座席，以type-3 join应答游戏机的通告，游戏机打开密钥0x80后发送4个身份消息，并应用
@@ -691,10 +624,5 @@ vtable `0x44e6be0`, on the path from `0x92d648` (slot 5 of `0x443ffd0`) that end
 交换完成后，当游戏机离开时，两个启动器都会退出。未完成交换的座位让 `bin/sv_join.py` 恢复扫描（[结束运行](architecture.md#ending-a-run)）。
 ## 未解决
 
-> 本节已随上游更新，以下内容暂保留英文。
-
-- Why a console joined to `bin/sv_host.py` can acknowledge the host's announcement and never send its
-  port-2 join.
-- What a console does between its player backing out and its first departure message: none of the
-  captures marks the button press. In one joiner seat the cancel `8000040100` preceded the type 7
-  by 1.5 s.
+- 为何加入 `bin/sv_host.py` 的主机可以确认主机端通告，却始终不发送端口 2 加入消息。
+- 玩家返回到首次离开消息之间，主机执行了什么：所有抓包都没有标记按键时刻。一次加入方就座中，取消消息 `8000040100` 比类型 7 早 1.5 秒。

@@ -1,0 +1,47 @@
+{
+  "sources": [
+    "https://github.com/kwsch/PKHeX/blob/master/PKHeX.WinForms/Resources/text/lang_zh-Hans.txt",
+    "https://github.com/kwsch/PKHeX/tree/master/PKHeX.Core/Resources/text/other/zh-Hans",
+    "https://github.com/kwsch/PKHeX/blob/master/PKHeX.Core/Resources/text/items/text_Items_zh-Hans.txt"
+  ],
+  "terms": {
+    "Pokémon": "宝可梦",
+    "species": "种类",
+    "nature": "性格",
+    "ability": "特性",
+    "hidden ability": "隐藏特性",
+    "held item": "持有物",
+    "move": "招式",
+    "relearn move": "回忆招式",
+    "IV": "个体值",
+    "EV": "努力值",
+    "friendship": "亲密度",
+    "shiny": "异色",
+    "form": "形态",
+    "original trainer": "初训家",
+    "handling trainer": "最近持有人",
+    "hyper training": "极限训练",
+    "Tera Type": "太晶属性",
+    "Gigantamax": "超极巨化",
+    "Dynamax level": "极巨化等级",
+    "Hidden Power": "觉醒力量",
+    "Poke Ball": "精灵球",
+    "Great Ball": "超级球",
+    "Ultra Ball": "高级球",
+    "Master Ball": "大师球",
+    "Beast Ball": "究极球",
+    "Wonder Card": "神奇卡片",
+    "Wonder News": "神奇新闻",
+    "Mystery Gift": "神秘礼物"
+  },
+  "technical_terms": {
+    "cartridge": "卡带",
+    "cartridge image": "卡带镜像",
+    "board": "开发板",
+    "flash firmware": "烧录固件",
+    "French FireRed": "法语版《火红》",
+    "Spanish FireRed cartridge": "西班牙语版《火红》卡带",
+    "Unicorn": "Unicorn"
+  },
+  "preserve": "代码、协议标识符、命令、文件路径、链接目标和原始报错文本保留原文；原始报错应附中文释义。"
+}

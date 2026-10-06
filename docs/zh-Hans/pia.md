@@ -15,7 +15,7 @@ Pia 是任天堂的点对点会话中间件，在所检查的每个游戏中都�
 |电线上的 GCM 标签 | | 8，从 16 截断 |全部 16 |
 |模块| `pokeldn/ldn/pia_connect.py` | `pokeldn/ldn/pia5.py`（往返捕获字节到字节）| `pokeldn/ldn/pia4.py` |
 
-除非某个部分指定了另一个版本，否则 `0x01...` 地址是 Shield 1.3.2 的解压缩 `main`（如 `tools/switch/nso_read.py` 所示），而 `main.bin 0x01...` 地址是 BDSP 1.3.0。
+除非某个部分指定了另一个版本，否则 `0x01...` 地址是 盾 1.3.2 的解压缩 `main`（如 `tools/switch/nso_read.py` 所示），而 `main.bin 0x01...` 地址是 BDSP 1.3.0。
 ## 数据包头
 ### 版本 9（Pia 5.27-5.45）
 
@@ -153,11 +153,11 @@ BDSP 寄存器九个：0x14 v2、0x18 v3、0x1c v0、0x24 v0、0x58 v3、0x68 v1
 
 站点依次通过更新会话（0x24）、连接请求（0x14）和加入请求（0x18）加入；每个每 500 毫秒重传一次，直到得到确认。
 
-Mesh 协议没有 ack 类型（5.31-5.43 没有构建器）：确认 Mesh 消息的四个站点称为 `MeshStationProtocol`，因此 ack 是 0x14、`05 00 00 00` 上的 8 字节 type-5 ack 和 ack id big-endian。 ack id 是消息的最后四个字节，无论其长度如何（`size - 4` 带借位检查；四个字节以下为 0）。 `pokeldn/ldn/mesh_protocol.ack_for()`。主机在发送加入响应之前确认加入请求；接收方确认每个副本。
+Mesh 协议没有 ack 类型（5.31-5.43 没有构建器）：确认 Mesh 消息的四个站点称为 `MeshStationProtocol`，因此 ack 是 0x14、`05 00 00 00` 上的 8 字节类型 5 确认，确认 ID 使用大端字节序。 ack id 是消息的最后四个字节，无论其长度如何（`size - 4` 带借位检查；四个字节以下为 0）。 `pokeldn/ldn/mesh_protocol.ack_for()`。主机在发送加入响应之前确认加入请求；接收方确认每个副本。
 ### 离开会话 (Pia 6)
 
 `Session::LeaveAsync` 开始 `LeaveSessionJob`，其第一步 LeaveSessionJob::LeaveMesh 开始
-`LeaveMeshJob` 位于非主机站上（`LeaveMeshWithHostMigrationJob` on the Host）。
+`LeaveMeshJob` 位于非主机站上（`LeaveMeshWithHostMigrationJob` 在主机上）。
 `LeaveMeshJob` 的第一步 SendLeaveRequest，发送 Session type-3 离开请求，并等待 500 ms 主机的 type-4 响应，最多发送 4 次。在调用和第一个类型 3 之间，Pia 内部没有运行计时器；属于游戏之前的延迟。
 
 | | 传说阿尔宙斯 1.1.1 | GBA 应用程序 (Pia 6.39) |
@@ -242,7 +242,7 @@ id 永远不会被检查：九个 `(0xFF, 0)` 条目通过协商。
 当 [3] = 1 时，游戏机不应答（96 个请求）。当 [3] = 0 时，游戏机用它自己的请求进行应答：它的位置、常量 id、更新会话给出加入方的变量 id、服务变量 id、nat 四元组、然后是 ack id、每条消息计数器 `0x017d5750` 在消息大小减 4 时读取。
 
 首先运行平台检查（`0x017c62e8`）并回答不匹配：响应发送者
-`0x017c6c30`分配17个字节，`[0] = 2`、`[1] = result`、`[2] = 9`、`[3] = 0`。后续检查是静默的，因此错误的平台会告诉“从未到达处理程序”和“后续检查失败”。平台 4 取自零售 Sword `02 02 09 00 00 00 00 00 00 00 00 00 00 00 00 00 00`：结果 2。
+`0x017c6c30`分配17个字节，`[0] = 2`、`[1] = result`、`[2] = 9`、`[3] = 0`。后续检查是静默的，因此错误的平台会告诉“从未到达处理程序”和“后续检查失败”。平台 4 取自零售 剑 `02 02 09 00 00 00 00 00 00 00 00 00 00 00 00 00 00`：结果 2。
 
 握手，[3] 清除：
 
@@ -251,7 +251,7 @@ id 永远不会被检查：九个 `(0xFF, 0)` 条目通过协商。
     ->   `05 00 00 00 <ack id>`, a type-5 ack, eight bytes
     ->   its own connection response, result 0, ~600 bytes, carrying the joiner's constant id,
          variable id and the player's name in plain ASCII, repeated until acknowledged
- ack 中的 u32 是 acked 消息的尾随计数器。发送游戏机请求的 type-5 ack：Ryujinx 下的 Shield 1.3.2 会忽略没有 1 的响应，并每 10 秒重新请求一次（桥接驱动程序上的 `--ack-request` 发送它）。
+ ack 中的 u32 是 acked 消息的尾随计数器。发送游戏机请求的 type-5 ack：Ryujinx 下的 盾 1.3.2 会忽略没有 1 的响应，并每 10 秒重新请求一次（桥接驱动程序上的 `--ack-request` 发送它）。
 ### 连接响应必须满足什么条件才能被读取
 
 两种类型都会到达处理程序 `0x017c6e70`（`0x017c60c0` 为请求设置一个标志，类型 2 调度条目将其清除）。逐个字段检查结果不为 2 的响应，每次失败都会静默丢弃：
@@ -264,7 +264,7 @@ id 永远不会被检查：九个 `(0xFF, 0)` 条目通过协商。
 |发件人的电台位置|解析到一个它知道的电台 |下降，`0x017c6f04` |
 | `[0x37]` 一个字节，结果仅为 0 | 5 岁以下 |下降，`0x017c6ff0` |
 
-17 字节响应（`RESPONSE_SIZE`，`0x017c6c30` 处的短格式分配 `mov w3, #0x11`）使 `[0x37]` 在过时的缓冲区字节中超出其末尾 38 个字节，因此是否读取它取决于发送方无法控制的内存：模拟 Shield 接受 22 字节相同响应中的 3 个重新启动后，49 为 0；零售剑接受了它发送的那些。游戏机自己接受的响应是840字节，其中1位于`[0x37]`；
+17 字节响应（`RESPONSE_SIZE`，`0x017c6c30` 处的短格式分配 `mov w3, #0x11`）使 `[0x37]` 在过时的缓冲区字节中超出其末尾 38 个字节，因此是否读取它取决于发送方无法控制的内存：模拟 盾 接受 22 字节相同响应中的 3 个重新启动后，49 为 0；零售剑接受了它发送的那些。游戏机自己接受的响应是840字节，其中1位于`[0x37]`；
 `station4.build_connection_response(..., min_size=ACCEPTED_RESPONSE_SIZE)` 填充到 0x38 并写入 1。
 
 响应后：游戏机的连接响应为接受；它的请求每 500 毫秒重传一次，且具有相同的尾随计数器，则被拒绝（带有加入方自己的 id 的响应会重传 20 次，然后沉默）；单独的沉默也不是，大约 10 秒后它会重新请求。
@@ -400,7 +400,7 @@ BDSP窗口更新`0x159fea8`发送欠ACK时定时器（窗口`+0x740`加上周期
 
 成功后，它会重置该记录（vfunc `0x10`），将索引写入 `+0x24` 并从 `w3` 写入 u16
 `+0x26`，并设置`[w+0x74]`中的索引位。它的调用者是 slot-11 站事件方法：`0x6e6288`、BroadcastReliableProtocol (0x80)、
-`bl` at `0x6e630c`，首先由 StreamBroadcastReliableProtocol 的插槽 11 `0x6f51a8` (`0x6f51bc`) 调用；和 `0x6ee528`，ReliableProtocol (0x7C)，请致电站点 `0x6ee5d4`。 `0x6e6288` 通过事件 `+8` 的 id 查找事件的电台（`[[0x46d0860]]` -> `0x1e7c4e8` -> vfunc `+0x38`），并在协议自身电台索引为 0xfd 时返回（`0x6ec4f0`）或该站是它自己的（`0x6ec4a8`，针对`[station+0x30]`）。事件 0 在索引处寄存器 `[station+0x30]`
+`bl` 位于 `0x6e630c`，首先由 StreamBroadcastReliableProtocol 的插槽 11 `0x6f51a8` (`0x6f51bc`) 调用；和 `0x6ee528`，ReliableProtocol (0x7C)，请致电站点 `0x6ee5d4`。 `0x6e6288` 通过事件 `+8` 的 id 查找事件的电台（`[[0x46d0860]]` -> `0x1e7c4e8` -> vfunc `+0x38`），并在协议自身电台索引为 0xfd 时返回（`0x6ec4f0`）或该站是它自己的（`0x6ec4a8`，针对`[station+0x30]`）。事件 0 在索引处寄存器 `[station+0x30]`
 `[station+0x28]` 与 `[station+0x38]`；事件 1 删除索引 (`0x6ef75c`)。
 
 只有在其加入事件之前、离开之后，当协议具有站索引 0xfd 时，或者当 `0x6ef588` 拒绝它时，站才会从列表中丢失。批量确认编译器 `0x6f2138` 读取相同的列表：它会跳过空值 (`0x6f2324`..`0x6f232c`) 并在检查其 ack 状态后设置站的标头目标位 (`0x6f22f8`..`0x6f230c`)，回退到调用者的掩码（`0x6f2360`..`0x6f2370`）。 ack 中的一个位显示窗口注册了该站，但没有显示发送给它的消息。
@@ -449,7 +449,7 @@ ack 发票正好是 0x260 字节，即 wiki 的原始“Ack Data”，5.29 替�
 
 `StreamBroadcastReliableProtocol` 将一个固定大小的块从一个站点移动到每个需要它的站点，以块的形式（朱 4.0.0 `main`）。插槽10是其更新`0x6f5360`，插槽11
 `0x6f51a8`，插槽 17 `0x6e6818`，插槽 19 BroadcastReliableProtocol 的 `0x6e69a0`，它从 `[proto+0x70]` 加载窗口并运行 `ReliableSlidingWindow` 发送循环 `0x6f0638` （`bl` 在
-`0x6e69c0`)，带字节预算 `[proto+0x64]`；循环从重传截止时间 `0x6f0d14`（`bl` at `0x6f073c`）开始获取每个时隙的下一次。块通过 `0x6f1994` 入队（`0x6f5c2c`，
+`0x6e69c0`)，带字节预算 `[proto+0x64]`；循环从重传截止时间 `0x6f0d14`（`bl` 位于 `0x6f073c`）开始获取每个时隙的下一次。块通过 `0x6f1994` 入队（`0x6f5c2c`，
 `x0 = [proto+0x70]`)，现在在插槽上标记 (`0x6f1bd4`)。 0x81 传输会在与 0x7C 和 0x80 相同的截止日期重新传输，并且不会没有任何目的地的 RTT 样本。
 
 每条消息都携带一个 11 字节的 StreamData 标头，由 `0x6f60e8` 写入：
@@ -472,7 +472,7 @@ ack 发票正好是 0x260 字节，即 wiki 的原始“Ack Data”，5.29 替�
 | 2、块| `0x6f5eb4` |仅在状态 5 中，对于来自发送者 `+0xb0` 的 ID `+0xa5`：如果适合 `+0x90`，则将数据复制到 `[+0x88] + [+0xac]`，添加其长度，将百分比保持在 `+0xba` |
 | 3、发件人忙拒绝接收 | `0x6f5f2c` |仅在状态 4 中：重置传输，每个 `[+0x98]` 到 0xff，状态 7 |
 | 4、发件人取消| `0x6f5f9c` |重置传输，每个 `[+0x98]` 到 0xff，状态 0xC |
-| 5、接收方取消| `0x6f6000` | `[+0x98][sender] = 0xff`，在 `[+0xc8]` | 中标记发件人
+| 5，接收方取消 | `0x6f6000` | `[+0x98][sender] = 0xff`，在 `[+0xc8]` 中标记发送方 |
 | 6、发送方确认取消| `0x6f6024` |仅在状态 0xA 中：复位，状态 0xB |
 
 控制类型带有 ID 0xff。更新 `0x6f5560` 将类型 3 发送到 `[+0xc0]` 中标记的站（`0x6f6268` 与 `w2 = 3`、`0x6f5750`），将类型 6 发送到 `[+0xc8]` 中标记的站(`0x6f57d8`)，在状态 9 种类 5 中发送至预期发送者 `[+0xb0]`（`0x6f5904`，通过 `0x6f1de8` 单播），然后状态 0xA，并在状态 8 种类 4 中发送至其目的地 (`0x6f5984`)。发布的最小容量限制了发送 API 接受的块。
@@ -493,8 +493,8 @@ ack 发票正好是 0x260 字节，即 wiki 的原始“Ack Data”，5.29 替�
 `pokeldn/ldn/broadcast4.py`。游戏机在端口 0 上发送自己的传输，并在端口 1 上确认对等方的传输。
 ## 未解决
 
-- 零售 Sword 是否读取在没有其请求的类型 5 确认的情况下发送的版本 4 连接响应。其中一个做到了；模拟的 Shield 1.3.2 则没有。
+- 零售 剑 是否读取在没有其请求的类型 5 确认的情况下发送的版本 4 连接响应。其中一个做到了；模拟的 盾 1.3.2 则没有。
 ## 学分
 
 标头版本表、会话密钥派生和随机数布局来自 [NintendoClients wiki](https://github.com/kinnay/NintendoClients/wiki/Pia-Protocol)（其
-`Pokemon-Brilliant-Diamond.md` 说明游戏密钥的推导； `Pia-Game-Keys` 仅列出派生密钥；搜索它是在 [Reverse-engineering a Switch title](switch_re.md))。哪个派生属于哪个网络类型，`cryptoKeyDataSeed` 值和版本规则是从零售标题自己的代码中读出的。
+`Pokemon-Brilliant-Diamond.md` 说明游戏密钥的推导； `Pia-Game-Keys` 仅列出派生密钥；搜索它是在 [Switch 游戏逆向分析](switch_re.md))。哪个派生属于哪个网络类型，`cryptoKeyDataSeed` 值和版本规则是从零售标题自己的代码中读出的。

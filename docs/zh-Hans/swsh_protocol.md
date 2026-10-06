@@ -44,7 +44,7 @@ u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，
  解析器 `0x006a7580`（标签 `0x0a`..`0x22`）； RequestForcedProceed 的 `0x006a65c0` 将其字段存储在 `+0x14`、`+0x18` 处。接收，插槽 8 `0x008b9590`，调用侦听器插槽（案例 - 1）
 `[holder+0x168]` 通过 `0x0204c430`。
 
-Shield 1.3.2 仅构建 CancelAccepted：在 protobuf 代码 (`0x006a3000..0x006a8400`) 之外，没有任何内容调用其他构造函数 (`0x006a4b50`、`0x006a5730`、`0x006a6330`) 或其访问器。
+盾 1.3.2 仅构建 CancelAccepted：在 protobuf 代码 (`0x006a3000..0x006a8400`) 之外，没有任何内容调用其他构造函数 (`0x006a4b50`、`0x006a5730`、`0x006a6330`) 或其访问器。
 `0x006a3db0` 有 21 个外部调用者：发送包装器 `0x008b7420` 和十个同步内容（`0x008b71a0`、`0x008b7700`、`0x008cfb10`、`0x008cfbe0`、
 `0x00c06420`、`0x00c064f0`、`0x010763a0`、`0x01076470`、`0x010a2090`、`0x010a2160`、`0x010cf460`、
 `0x010cf530`、`0x010d7760`、`0x010d7830`、`0x010dd0c0`、`0x010dd190`、`0x012a8390`、`0x012a8460`、
@@ -153,7 +153,7 @@ elementId 10000 上的四个字节，由 `0x006d7b40` 在 `element+0xa8` 构建�
  非零表示每个站都已准备好。 `0x0065de30`是`zlib.crc32`（在unicorn下检查）；
 `0x0065df04`（聚`0x8005`）是CRC-16。行走列表 `element+0x110` 是 `0x006d48b0` 的 `+0x40` 的副本，其中 `+0x68` 的条目保持为零；它在交换中的长度是未读的。
 
-该链覆盖发送者的 elementId 0 和 1（无所有者），然后是其自己的 elementId 20000。托管 Sword 发送的每个非零哈希都匹配，例如内容 50：
+该链覆盖发送者的 elementId 0 和 1（无所有者），然后是其自己的 elementId 20000。托管 剑 发送的每个非零哈希都匹配，例如内容 50：
 
     elementId 0, no owner      clock 2304   the host's own Pokemon (344 bytes)
     elementId 1, no owner      clock 2313   the partner's Pokemon, sent back
@@ -175,7 +175,7 @@ elementId 10000 上的四个字节，由 `0x006d7b40` 在 `element+0xa8` 构建�
     0xD7E  2 bytes of padding                                -> 0xD80 = 3456
  MyStatus 和 TrainerCard 是 PKHeX 保存块 (`Saves/Substructures/Gen8/SWSH/`)。
 
-构建器 `0x0110c180`：`0x00784f90`（队伍）、`0x01424f10`（MyStatus）、0x1C8 memcpy（教练卡）、`0x01124fa0`（个人资料）、可选块的 0x188 memcpy 或一个内存集。 `0x010fcff0`的呼叫者中，链接交换（`0x010967f0`）和密码匹配（`0x00bd80f4`，
+构建器 `0x0110c180`：`0x00784f90`（队伍）、`0x01424f10`（MyStatus）、0x1C8 memcpy（训练家卡）、`0x01124fa0`（个人资料）、可选块的 0x188 memcpy 或一个内存集。 `0x010fcff0`的呼叫者中，链接交换（`0x010967f0`）和密码匹配（`0x00bd80f4`，
 `ChikaMatchingStateSession`) 通行无阻；对战体育场（`0x00b2d7d0`、`StateBtlSpot*Battle`、休闲、排名、竞技）通过一项。接收器 `0x0110cff0` 复制每个电台的两个区域。
 ### 战斗体育场街区
 
@@ -215,7 +215,7 @@ elementId 10000 上的四个字节，由 `0x006d7b40` 在 `element+0xa8` 构建�
 
 `v1/validate` (`0x011a2a70`) 发送一个以 NUL 结尾的字符串（`v1/public_key` 的所有主体），密钥版本为 BE u16（密钥持有者 `+0x68`，从 `0x0144fb90` 的 `v1/public_key` 回复中设置），游戏机的版本`0x007d4270() = 0x2D`（屏蔽）为BE u16，`00 01`，BE计数和0x148字节记录（`0x007664c0`）。签名消息持有相同的记录、版本和`00 01`；其中 `v` 是合作伙伴的 MyStatus 字节 `0xA4`（`obj+0x104`、`0x01424bf0`，默认 `0x2D` 位于 `0x014245f0`、PKHeX
 `MyStatus8.Game`）。回复解析器 `0x011a2870`：字节 0 状态（2：过时密钥，再次获取；
-`R+0x70` = 状态 == 1)，字节 5-6 a BE 计数 n 钳位到 6，n BE u32 进入 `R+0x74`，状态为 0
+`R+0x70` = 状态 == 1)，字节 5 至 6 为大端计数 n，上限为 6，n BE u32 进入 `R+0x74`，状态为 0
 0x100 字节转换为 `R+0x8c` (`0x011a29e4`)。五个呼叫者中，只有 `0x014f8c00` 保留他们（以
 `obj+0x183`); `0x014f808c` 将它们写入描述符形状的 0x136 字节运行的 `+0x36` 处。
 
@@ -270,7 +270,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 样本状态为`[[0x261bd18]]`的`+0x1c8`，仅由`0x00ebf570`设置，通过复位归零
 `0x00eb97b0`（唯一调用者`0x00dd2e00`、`0x00eb986c`）；当push为0时立即返回（`0x00ebf5a8`）：
 
-|状态|由 | 设置
+| 状态 | 设置该状态的代码 |
 |---|---|
 | 0 | `0x00dfd1d4`，vtable `0x2561ec8` 插槽 9 |
 | 1 |现场玩家插槽 13 (`0x00d98f28`)、30 (`0x00d9d2a8`)、76 (`0x00da0188`)； `0x00d97730` 运动 0 |
@@ -308,7 +308,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 
 `SetMode` (`0x01096d10`, `str w1,[x0,#0x70]`) 由 Link 交换 ([session](swsh_session.md#how-a-searching-sword-finds-a-partner)) 用 2 调用，用 0, 1, 6 调用。
 
-教练员姓名出现四次（我的状态、教练员卡、队伍记录、个人资料）；
+训练家员姓名出现四次（我的状态、训练家员卡、队伍记录、个人资料）；
 `pokeldn/swsh/trade_payload.rewrite` 移动所有四个，并交换屏幕名称该训练家。空的队伍槽位为零； 0x810 处的计数一致。
 ## PK8
 
@@ -324,7 +324,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 - 队伍统计重启LCG（`PokeCrypto.Decrypt8`种子`CryptArray`两次来自EC）；连续的流给出了看似合理的垃圾，例如 110 级。
 - `BLOCK_ORDER[sv]` 命名成为块 *i* 的块：应用它，永远不要反转它。 32 个 `sv` 值中的 16 个是自逆的，并且校验和忽略顺序，因此错误的方向通常读起来很好。   PKHeX 的 `BlockPosition` 条目 24-31 重复 0-7。
 
-检查解码的队伍：昵称与物种匹配；等级（未洗牌尾部）比赛经验；超级训练 0x126 匹配 IV 词 0x8C； MyStatus 的教练 ID 与每个 PK8 匹配。
+检查解码的队伍：昵称与种类匹配；等级（未洗牌尾部）比赛经验；极限训练 0x126 匹配 IV 词 0x8C； MyStatus 的训练家 ID 与每个 PK8 匹配。
 ## 交换消息
 
 `net_contents.trade.common.pokemon_trade.protocol_buffers`:

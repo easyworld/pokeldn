@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import flet as ft
 import flet.canvas as cv
 
@@ -30,8 +33,29 @@ SIDEBAR_WIDTH = 254
 SESSION_WIDTH = 360
 
 
-def app_theme() -> ft.Theme:
+def system_font_family() -> str | None:
+    """Prefer a complete Simplified Chinese family over per-glyph system fallback."""
+    if sys.platform == "win32":
+        return "Microsoft YaHei UI"
+    if sys.platform == "darwin":
+        return "PingFang SC"
+    if sys.platform.startswith("linux"):
+        try:
+            result = subprocess.run(["fc-list", "--format=%{family}\n"], capture_output=True,
+                                    text=True, encoding="utf-8", timeout=2, check=True)
+        except (OSError, subprocess.SubprocessError, UnicodeError):
+            return None
+        installed = {family.strip() for line in result.stdout.splitlines() for family in line.split(",")}
+        for family in ("Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC",
+                       "WenQuanYi Micro Hei", "WenQuanYi Zen Hei"):
+            if family in installed:
+                return family
+    return None
+
+
+def app_theme(*, system_fonts: bool = True) -> ft.Theme:
     return ft.Theme(
+        font_family=system_font_family() if system_fonts else None,
         color_scheme_seed=BLUE,
         color_scheme=ft.ColorScheme(primary=BLUE, secondary=BLUE, surface=PANEL, on_surface=TEXT,
                                     error=RED, outline=BORDER, surface_container_highest=FIELD),

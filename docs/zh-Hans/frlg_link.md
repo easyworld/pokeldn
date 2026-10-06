@@ -55,7 +55,7 @@ RFU块发送方等待同一个镜像：`HandleBlockSend`持有INIT直到它看�
 [cable_club.c:910-943]，后座备用轮的来源。仅当两名玩家都准备好后才驾驶；在仍然处于 `CABLE_SEAT_WAITING` 状态的游戏机上驾驶它们会导致其座椅状态机出现故障。
 ## 真正的子节点发送的是什么，端到端
 
-零售法国火红作为子节点对抗主机。顺序是由协议固定的； IDLE 计数来自一次交换：
+零售法语版《火红》作为子节点对抗主机。顺序是由协议固定的； IDLE 计数来自一次交换：
 
 ```
 IDLE x8
@@ -88,7 +88,7 @@ IDLE x75    -> the host pulls the party
 [overworld.c:2962-2981]。子节点必须在持有密钥流上用自己的 0x17 进行应答；全零的槽不是键。
 ## 交换后取消
 
-`BufferTradeParties` 在礼品丝带交换后清除收到的块标志
+`BufferTradeParties` 在礼品奖章交换后清除收到的块标志
 [trade.c:1549]，在`Leader_ReadLinkBuffer`读取菜单命令之前[1593-1633]。在设置合作伙伴的选择之前，可以清除在该交换期间完成的取消请求。领导者自己的 `REQUEST_CANCEL` (`0xEEAA`) 证明它正在处理 Cancel 输入 [2049]。 `bin/frlg_trade_join.py`，一旦其配置的交易完成并选择取消，当领导者到达时再次发送其 `REQUEST_CANCEL` (`pokeldn/frlg/link/trade.py`，
 `_on_linkcmd`）。
 `BOTH_CANCEL_TRADE` 在退出待机轮次之前清除任何挂起的请求。
@@ -101,20 +101,11 @@ IDLE x75    -> the host pulls the party
 S4_PARTY并在60帧后再次选择。用 `PARTNER_CANCEL_TRADE` 回答 `REQUEST_CANCEL` 会循环游戏机“votre ami veut échanger des 宝可梦”； `bin/frlg_trade_host.py` 用 `BOTH_CANCEL_TRADE`（退出路径）回答第一个。领导者自己的选择不发送任何内容（`SetReadyToTrade`
 [trade.c:1811-1828]);每位玩家的取消信息为 `REQUEST_CANCEL` [trade.c:2049]。首先发送 `READY_TO_TRADE` 的方加入会在领导者第一次取消时绘制 `PLAYER_CANCEL_TRADE`；
 `bin/frlg_trade_join.py` 然后在菜单中取消，因此领导者的第二次取消会结束会话。
-## Version and language on the link
+## 连接中的版本与语言
 
-> 本节已随上游更新，以下内容暂保留英文。
+`IsTryingToTradeAcrossVersionTooSoon` [union_room.c:1499] 仅对既不是《火红》也不是《叶绿》的伙伴触发，并显示消息而不断开连接；《火红》与《叶绿》之间的交换已在实机上验证。`ConvertInternationalString` 对日语名称作特殊处理；法语版《火红》可以接收英语神奇卡片。联合房间的 `Task_SearchForChildOrParent` 会跳过日语候选者 [union_room.c:3726]。神秘礼物使用 `Task_ListenForCompatiblePartners`，其玩家兼容性检查依据序列号和广播名称标志，不采用该语言过滤器。
 
-`IsTryingToTradeAcrossVersionTooSoon` [union_room.c:1499] fires only for a partner that is neither
-FireRed nor LeafGreen, and prints a message without dropping the link; FR↔LG trading works on
-hardware. `ConvertInternationalString` special-cases Japanese names; a French FireRed accepts an
-English Wonder Card. The Union Room's `Task_SearchForChildOrParent` skips Japanese candidates
-[union_room.c:3726]. Mystery Gift uses `Task_ListenForCompatiblePartners`, whose compatible-player
-check uses the serial number and advertised name flag, without that language filter.
-
-After the player selects pokeldn in the Mystery Gift Friend list, the console sends its ROM game
-code in GameData. The host chooses that cartridge's addresses and card layout before delivery.
-The GUI shows this automatic language detection beside the version on its Basic screen.
+玩家在神秘礼物的“朋友”列表中选择 pokeldn 后，主机会在 GameData 中发送 ROM 游戏代码。主持端在传送前选择对应卡带的地址和卡片布局。GUI 在基础页面的版本旁显示自动检测到的语言。
 
 ## 模拟器可以自行关闭链接
 
@@ -133,8 +124,8 @@ The GUI shows this automatic language detection beside the version on its Basic 
 | SVC |致电 |它是做什么的 |
 |---|---|---|
 | `swi 0x45` | librfu_rfu.c:667,749 |手中的模拟器`gRfuLinkStatus` |
-| `swi 0x49` | AgbRfu_LinkManager.c:657 |当非零时，在 SEARCH_CHILD |期间保持 `connect_period` 打开
-| `swi 0x4a` | AgbRfu_LinkManager.c:720 |同样，SEARCH_PARENT |期间
+| `swi 0x49` | AgbRfu_LinkManager.c:657 | 非零时，在 SEARCH_CHILD 期间保持 `connect_period` 开启 |
+| `swi 0x4a` | AgbRfu_LinkManager.c:720 | 同上，作用于 SEARCH_PARENT 期间 |
 | `swi 0x4b` | link_rfu_2.c:2114、union_room_player_avatar.c:518 | `SVC4B_EXIT_EARLY` 退出 SpawnGroupLeader； `SVC4B_RESEED_RNG` 从主机训练家 ID 重新播种 |
 | `swi 0x51` |链接.c:1654 |现在关闭链接（在神秘礼物下软重置） |
 | `swi 0x53` | wireless_communication_status_screen.c:328 |模拟器驱动退出状态屏幕|
@@ -145,11 +136,11 @@ The GUI shows this automatic language detection beside the version on its Basic 
 
 |协会回应|灯塔| 游戏机的关联请求 |还剩 3 秒 |留下来 |
 |---|---|---|---|---|
-|与 6, 9, 12 |与 |与 | 0 | 139 | 139
-|与 6, 9, 12 |与 |没有 | 0 | 84 | 84
-|与 6, 9, 12 |没有 |与 | 0 | 26 | 26
-|与 6, 9, 12 |没有 |没有 | 0 | 35 | 35
-|没有 |没有 |没有 | 42 | 42 34 | 34
+| 启用 6、9、12 | 启用 | 启用 | 0 | 139 |
+| 启用 6、9、12 | 启用 | 未启用 | 0 | 84 |
+| 启用 6、9、12 | 未启用 | 启用 | 0 | 26 |
+| 启用 6、9、12 | 未启用 | 未启用 | 0 | 35 |
+| 未启用 | 未启用 | 未启用 | 42 | 34 |
 
 仅交替设置响应的速率：20 个中的 0 个保留速率，8 个中的 4 个不保留速率。失败集是`1B 2B 5.5B 11B 18 24 36 54`（编号为6、9、12、48）；游戏机需要四个中的哪一个尚不清楚。 ESP32 softAP 的关联响应携带所有 12 个速率（[hardware_esp32.md](hardware_esp32.md)，接入点的帧）。
 
@@ -221,7 +212,7 @@ The GUI shows this automatic language detection beside the version on its Basic 
     26.587 OUT  D919 D920 ACK next=1851
     26.617 in   D1849* D1850*        (retransmits, no ack)
     26.653 in   ACK next=924         (catches up five frames at once)
- 两个盒式磁带和三个活动上有超过 42 个间隔，每个周期是 16 毫秒（一帧）内的 512 毫秒时隙的整数个。观察到的计数为 16 和 17 个槽位，其中一个 18 个槽位和一个 33 个槽位跳过了一个刻度。网格锁相至 LDN 连接：103 秒内有 12 个停顿，相位跨度为 18 毫秒。在空闲聊天链接上，未完成计数达到 5，无害；在神秘礼物或交换负载下，摊位会出现在完整的发送窗口上。 ROM没有512ms的tick，所以定时器属于模拟器或者Pia/LDN层；它是什么仍然未知。
+ 两个卡带和三个活动上有超过 42 个间隔，每个周期是 16 毫秒（一帧）内的 512 毫秒时隙的整数个。观察到的计数为 16 和 17 个槽位，其中一个 18 个槽位和一个 33 个槽位跳过了一个刻度。网格锁相至 LDN 连接：103 秒内有 12 个停顿，相位跨度为 18 毫秒。在空闲聊天链接上，未完成计数达到 5，无害；在神秘礼物或交换负载下，摊位会出现在完整的发送窗口上。 ROM没有512ms的tick，所以定时器属于模拟器或者Pia/LDN层；它是什么仍然未知。
 ## ident-25 停滞：一个漏洞加上无限的积压
 
 游戏机可以在最后一个传送脚本块（ident 25，`MG_LINKID_RAM_SCRIPT`）之后进入空闲状态，从不发送ident 20（READY_END），然后离开。父节点块永远不会被反射，因此丢失的片段在捕获中是不可见的。
@@ -302,12 +293,12 @@ ERR_RECV_BUFF_OVER [librfu_rfu.c:2300] → `recvErrorFlag` → REQ 错误 → `L
 | 0x40 |退出（返回）|视为游戏机的关闭|
 
 每次活动结束后，双方 `SetLinkStandbyCallback` [union_room.c:2995, :3012] 和游戏机返回其提示。 Switch 版本还对接受方进行了门控
-`svc_CommsAllowedByParentalControls()` [union_room.c:3159, :3037, REVISION >= 0xA]，因此游戏机自己的家长控制可以将其请求转变为拒绝。敬礼展示主机的教练卡并重复； Retour 发送 0x40，然后发送 READY_CLOSE_LINK，一旦应答，游戏机就会正常断开连接并留在房间内，没有错误。
+`svc_CommsAllowedByParentalControls()` [union_room.c:3159, :3037, REVISION >= 0xA]，因此游戏机自己的家长控制可以将其请求转变为拒绝。敬礼展示主机的训练家卡并重复； Retour 发送 0x40，然后发送 READY_CLOSE_LINK，一旦应答，游戏机就会正常断开连接并留在房间内，没有错误。
 ## 交换板
 
-董事会列出广告带有`tradeSpecies`、`tradeType`和`tradeLevel`的合作伙伴
+开发板列出广告带有`tradeSpecies`、`tradeType`和`tradeLevel`的合作伙伴
 [union_room.c:3400]：记录字节18（`type << 2`）、19（`gender | level << 1`）和22:24（小端字节序）
-`tradeSpecies:10` 的 `RfuGameData` [include/link_rfu.h:107]）。物种 277（木守宫；低字节单独 21，烈雀）列为“POKELDN / NORMAL / ARCKO / 26”，测量字节 23。
+`tradeSpecies:10` 的 `RfuGameData` [include/link_rfu.h:107]）。种类 277（木守宫；低字节单独 21，烈雀）列为“POKELDN / NORMAL / ARCKO / 26”，测量字节 23。
 
 交换板交换是每个链路一次交换。 `Task_StartUnionRoomTrade`将`gMain.savedCallback =
 CB2_ReturnToField`设置在`CB2_LinkTrade` [union_room.c:1744]之前，并且仅当保存的回调是交换中心的`CB2_StartCreateTradeMenu`时，`CB2_SaveAndEndTrade`才保持链接
@@ -412,7 +403,7 @@ ack 还等待回声的每个片段。 `rfu_leader.echo_blocks` 保持每一个�
 25.5/s 的数字基于最柔和的捕获。
 
 通过 Direct Corner 托管的火红游戏机在偏移处以纯 ASCII 形式携带 Switch 配置文件名称
-`application_data` 的 0x11；广告中没有游戏内教练的名字。
+`application_data` 的 0x11；广告中没有游戏内训练家的名字。
 ## 主机节拍率和游戏机的输出率
 
 `--tick-hz` 设置主机每秒的 RFU 插槽（每个 VBlank 默认一个）。使用相同的游戏机以每种速率进行一次交换：
@@ -425,13 +416,13 @@ ack 还等待回声的每个片段。 `rfu_leader.echo_blocks` 保持每一个�
 | 游戏机数据报，整个会话| 5663 | 10218 |
 
 在 20 Hz 时，游戏机的速率下降了六分之一，交换时间为 197 秒，而游戏机发送的数据报数量增加了 80%。默认值是每个 VBlank 一个插槽。
-# 有线电视俱乐部斗兽场
+# 连接俱乐部斗兽场
 
 `frlg_trade_host.py --colosseum` 宝可梦中心2楼→第三个NPC（无菲尔俱乐部）→斗兽场→单挑→加入。仅 `CB2_ReturnFromCableClubBattle` 增加神奇配合的 `battlesWon`
 [src/cable_club.c:792];联合房间战斗通过`CB2_ReturnToField`回归。
 
 `Task_StartActivity` 将 `ACTIVITY_BATTLE_SINGLE` 视为 `ACTIVITY_TRADE` [union_room.c:1903]，除了地图（`MAP_BATTLE_COLOSSEUM_2P` 位于 (6, 8)，而不是 `MAP_TRADE_CENTER` 位于 (5, 8)）和
-`HealPlayerParty()`，因此教练卡交换和`--card-flag-id`的工作方式不变。有四件事发生了变化：
+`HealPlayerParty()`，因此训练家卡交换和`--card-flag-id`的工作方式不变。有四件事发生了变化：
 
 1. 活动字节：`LINK_GROUP_SINGLE_BATTLE` 接受 `{ACTIVITY_BATTLE_SINGLE, 0xFF}` [src/data/union_room.h:398]； `build_colosseum_app_data` 仅更改该字节。
 2. `BattleColosseum_2P_EventScript_PlayerSpot0/1`没有队伍检查[data/scripts/cable_club.inc:576]（4P `ChooseHalfPartyForBattle`有选择步骤）。座位握手方式不变。

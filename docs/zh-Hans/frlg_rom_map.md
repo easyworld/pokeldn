@@ -7,10 +7,10 @@ nav_order: 4
 # ROM 映射
 
 这里的每个地址都是通过神秘礼物链接（`memory-dump`、`memory-scan`、`table-scan`、`call-chain`，在[游戏机上的代码](frlg_rom.md)上）从游戏机自己的盒带上读出的。
-`pokeldn/frlg/rom/rom_map.py`记录了每个是如何获得的； `tests/test_rom_map.py` 根据转储检查它。墨盒图像与每一个都一致。
+`pokeldn/frlg/rom/rom_map.py`记录了每个是如何获得的； `tests/test_rom_map.py` 根据转储检查它。卡带图像与每一个都一致。
 
-地址为法国火红，墨盒BPRF，软件版本0x0A。 叶绿位于[叶绿](frlg_leafgreen.md)。
-## 墨盒图像
+地址为法语版《火红》，卡带BPRF，软件版本0x0A。 叶绿位于[叶绿](frlg_leafgreen.md)。
+## 卡带图像
 
 Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
 
@@ -23,7 +23,7 @@ Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
 
 0xA0 处的标头读取为 `POKEMON FIRE` `BPRF` 和 `POKEMON LEAF` `BPGF`，版本 0x0A。
 
-法国火红 1.0.1 更新使卡带保持不变：其客户 ROM（通过 `rom-checksum` 在实机上读取）和一个不同延伸的字节读取，等于 `FireRed_f.gba` 到 `0x08000000..0x09000000`，除了包装器的三个加载时补丁之外([frlg_rom.md](frlg_rom.md),断点钩子); `0x09000000..0x0A000000` 读取两者上的开放总线（每个半字其自身地址减半）。
+法语版《火红》 1.0.1 更新使卡带保持不变：其客户 ROM（通过 `rom-checksum` 在实机上读取）和一个不同延伸的字节读取，等于 `FireRed_f.gba` 到 `0x08000000..0x09000000`，除了包装器的三个加载时补丁之外([frlg_rom.md](frlg_rom.md),断点钩子); `0x09000000..0x0A000000` 读取两者上的开放总线（每个半字其自身地址减半）。
 
 英文对（`BPRE`、`BPGE`、版本 0x0A、基本 v0 包）的字节相同
 `pokefirered_switch.gba` 和 `pokeleafgreen_switch.gba` 作为 `pret/pokefirered` 固定它们：分解是英文版本的精确地图。
@@ -38,62 +38,44 @@ Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
 `asm/create-mon.s` 依靠。任何函数体都可以从图像中离线读取。
 ## EWRAM 在两个版本中位于相同的地址
 
-英语版本的 EWRAM 符号是法语磁带的 EWRAM 地址。三个独立测量符合`pokefirered_switch.elf`：
+英语版的 EWRAM 符号是法语卡带的 EWRAM 地址。三个独立测量符合`pokefirered_switch.elf`：
 
     gDecompressionBuffer  0x0201C000
     gPlayerParty          0x02024280
     gPlayerPartyCount     0x02024025
- IWRAM 不传输：`gSaveBlock1Ptr` 在英文版中是 0x030042D8，在盒式磁带上是 0x03004228。
+ IWRAM 不传输：`gSaveBlock1Ptr` 在英文版中是 0x030042D8，在卡带上是 0x03004228。
 
 从该区域中减去 ELF 中每个大小的 EWRAM 符号，留下一个跨度无符号声明（`nm -S pokefirered_switch.elf`、`scratchpad/ram_survey.py`）：
 
     highest symbol end   0x0203FBAC
     EWRAM end            0x02040000
 
-## 英文墨盒
+## 英文卡带
 
-> 本节已随上游更新，以下内容暂保留英文。
+神秘礼物主持端为英语版《火红》（`BPRE`）和《叶绿》（`BPGE`）分别使用各自的地址构建代码。`pokeldn/frlg/rom/builds.py` 为每种卡带保存一张表（`BPRF`、`BPGF`、`BPRE`、`BPGE`、`BPRS`、`BPGS`、`BPRD`、`BPGD`、`BPRI`、`BPGI`、`BPRJ`、`BPGJ`），包含 IWRAM 全局变量、载荷或钩子或场景桩代码调用的 ROM 函数、`call-chain` 中命名的函数，以及礼物携带的 ROM 数据指针。
 
-The Mystery Gift host sends English FireRed (`BPRE`) and English LeafGreen (`BPGE`) code built on their
-own addresses. `pokeldn/frlg/rom/builds.py` holds one table per cartridge (`BPRF`, `BPGF`, `BPRE`,
-`BPGE`, `BPRS`, `BPGS`, `BPRD`, `BPGD`, `BPRI`, `BPGI`, `BPRJ`, `BPGJ`): the IWRAM globals, the ROM functions a payload, hook or field stub calls, the functions
-`call-chain` names, and the ROM data pointers a gift carries.
+主持端根据主机 `MysteryGiftLinkGameData` 中的游戏代码选择地址表 [mystery_gift.c:369]；该数据会在发送任何依赖地址的内容之前到达。不同版本字节不同的载荷会分别构建；没有地址表，或被当前运行排除的主机（`--console-build CODE`，或 `--version` 指定了另一版本），会在不发送任何内容的情况下被拒绝。与版本无关的载荷可发送到任意主机。
 
-The host picks the table from the game code in the console's `MysteryGiftLinkGameData`
-[mystery_gift.c:369], which arrives before anything address-dependent is sent. A payload whose bytes
-differ between builds is built for each; a console with no table, or one the run excludes
-(`--console-build CODE`, or `--version` against the other version), is refused with nothing sent. A
-build-independent payload goes to any console.
+英语版地址来自 `pokefirered_switch.elf` 和 `pokeleafgreen_switch.elf`，逐一对照零售版镜像检查：函数依据字节内容，IWRAM 全局变量依据使用它的字面量池，并与法语版卡带中对应的字面量池配对。
 
-English addresses come from `pokefirered_switch.elf` and `pokeleafgreen_switch.elf`, each checked
-against the retail image: a function by its bytes, an IWRAM global by the literal pools that use it,
-paired with the same pool on the French cartridge.
-
-| region | French to English |
+| 区域 | 法语版到英语版的偏移 |
 |---|---|
-| EWRAM | unchanged |
-| IWRAM 0x03000000..0x03001B6F | unchanged |
-| IWRAM 0x03002370..0x0300602F English, from `gMain` (0x030022D0 French, 0x03002380 English) | +0xB0 |
-| IWRAM 0x03006090..0x03007583 English, `gSoundInfo` (0x03005F80 French) to `gFlash` | +0x110 |
-| IWRAM 0x03007590 and up: the stack, the interrupt vector | unchanged |
-| ROM | no single offset; every function is looked up |
+| EWRAM | 不变 |
+| IWRAM 0x03000000..0x03001B6F | 不变 |
+| 英语版 IWRAM 0x03002370..0x0300602F，从 `gMain` 开始（法语版为 0x030022D0，英语版为 0x03002380） | +0xB0 |
+| 英语版 IWRAM 0x03006090..0x03007583，从 `gSoundInfo`（法语版为 0x03005F80）到 `gFlash` | +0x110 |
+| IWRAM 0x03007590 及以上：栈和中断向量 | 不变 |
+| ROM | 不存在统一偏移；逐个查找函数 |
 
-English values: `gRngValue` 0x030042D0, `gSaveBlock1Ptr` 0x030042D8, `gSaveBlock2Ptr` 0x030042DC,
-`gIntrTable[4]` 0x030027E0, `gLastWrittenSector` 0x03004650, `gSaveCounter` 0x03004660. English
-LeafGreen's RAM is English FireRed's; of a resident hook's addresses only `m4aSoundMain` moves
-(0x081E07C4 against 0x081E07E8).
+英语版数值：`gRngValue` 0x030042D0、`gSaveBlock1Ptr` 0x030042D8、`gSaveBlock2Ptr` 0x030042DC、`gIntrTable[4]` 0x030027E0、`gLastWrittenSector` 0x03004650、`gSaveCounter` 0x03004660。英语版《叶绿》的 RAM 与英语版《火红》相同；常驻钩子使用的地址中只有 `m4aSoundMain` 改变（0x081E07C4 对应 0x081E07E8）。
 
-`tests/test_frlg_english_cartridges.py` runs the English payloads on both retail images through each
-cartridge's own `Client_RunBufferScript`; it skips when `scratchpad/frlg_en/` holds no image.
+`tests/test_frlg_english_cartridges.py` 通过各卡带自身的 `Client_RunBufferScript`，在两个零售版镜像上执行英语版载荷；`scratchpad/frlg_en/` 中没有镜像时跳过。
 
-English FireRed (USA v0, `0100554023408000`) reports `BPRE` in its game data, accepts and shows a
-Wonder Card, and runs an English `call-chain`: `SpeciesToNationalPokedexNum` at `0x08046A41` answers
-252 for species 277, and `VarGet` at `0x08071CD5` returns. Verified on an emulated console; both
-sessions end in a success message, which saves [mystery_gift_menu.c:1379].
+英语版《火红》（USA v0，`0100554023408000`）在游戏数据中报告 `BPRE`，能接收并显示神奇卡片，也能运行英语版 `call-chain`：`0x08046A41` 处的 `SpeciesToNationalPokedexNum` 对种类 277 返回 252，`0x08071CD5` 处的 `VarGet` 正常返回。已在模拟主机上验证；两种会话均以成功消息结束并触发保存 [mystery_gift_menu.c:1379]。
 
 ## BIOS 包装器
 
-`libagbsyscall.s` 按照分解顺序 [src/libagbsyscall.s] 作为 THUMB `svc N ; bx lr` 对的一个块进行链接，在两个墨盒上相同，0x24 在叶绿上较低：
+`libagbsyscall.s` 按照分解顺序 [src/libagbsyscall.s] 作为 THUMB `svc N ; bx lr` 对的一个块进行链接，在两个卡带上相同，0x24 在叶绿上较低：
 
 |包装|服务中心 | 火红 | 叶绿|
 |---|---|---|---|
@@ -176,13 +158,13 @@ sMysteryEventScriptContext` [mystery_event_script.c:27]。 `table-scan --table-d
 | ＃|命令 |处理程序 | | ＃|命令 |处理程序 |
 |---|---|---|---|---|---|---|
 | 0 | `nop` | 0x080DE451 | | 9 | `givenationaldex` | 0x080DE61D |
-| 1 | `checkcompat` | 0x080DE401 | | 10 | 10 `addrareword` | 0x080DE641 |
-| 2 | `end` | 0x080DE3F5 | | 11 | 11 `setrecordmixinggift` | 0x080DE66D |
-| 3 | `setmsg` | 0x080DE465 | | 12 | 12 `givepokemon` | 0x080DE681 |
+| 1 | `checkcompat` | 0x080DE401 |  | 10 | `addrareword` | 0x080DE641 |
+| 2 | `end` | 0x080DE3F5 |  | 11 | `setrecordmixinggift` | 0x080DE66D |
+| 3 | `setmsg` | 0x080DE465 |  | 12 | `givepokemon` | 0x080DE681 |
 | 4 | `setstatus` | 0x080DE455 | | 13 | `addtrainer` | 0x080DE78D |
-| 5 | `runscript` | 0x080DE49D | | 14 | 14 `enableresetrtc` | 0x080DE7D5 |
-| 6 | `initramscript` | 0x080DE5B5 | | 15 | 15 `checksum` | 0x080DE7E9 |
-| 7 | `setenigmaberry` | 0x080DE4B9 | | 16 | 16 `crc` | 0x080DE831 |
+| 5 | `runscript` | 0x080DE49D |  | 14 | `enableresetrtc` | 0x080DE7D5 |
+| 6 | `initramscript` | 0x080DE5B5 |  | 15 | `checksum` | 0x080DE7E9 |
+| 7 | `setenigmaberry` | 0x080DE4B9 |  | 16 | `crc` | 0x080DE831 |
 | 8 | `giveribbon` | 0x080DE581 | | | | |
 
 `data/mystery_event_script_cmd_table.o(script_data)` 是 `script_data` [ld_script_rev10.ld:318-330] 的最后一个成员； 0x081DE188 读为 `0x4C41B510`，`push {r4, lr}`，序言
@@ -226,18 +208,18 @@ ROM 是 agbcc 构建的，并结束 THUMB 函数 `pop {r4,r5,r6}; pop {r1}; bx r
 - `firered_switch` 是 `GAME_VERSION=FIRERED GAME_REVISION=10 MODERN=0` [Makefile:227]：203 `#if REVISION >= 0xA` 块是活动的，它们的 `#else` 不是活动的。
 - 评估是后序的：`VarGet(ScriptReadHalfword(ctx))` 是 `bl ScriptReadHalfword`，然后是 `bl VarGet`。
 - 宏不是调用：`#define ScriptReadByte(ctx) (*(ctx->scriptPtr++))` [include/script.h:24] 不发出 `bl`，它出现在 151 个主体中。
-- `NDEBUG` 成立：`ScrCmd_special` 对盒式磁带进行两次调用，并且断言将添加第三次调用。
+- `NDEBUG` 成立：`ScrCmd_special` 对卡带进行两次调用，并且断言将添加第三次调用。
 
 分解也有 `rom_map` 名称，由到达该地址的每个主体确认（`rom_map.DECOMP_NAMES` 是连接）：
 
 | `rom_map` 名称 |分解|机构同意|
 |---|---|---|
-| `GET_MON_DATA` | `GetMonData3` | 15 | 15
-| `SCRIPT_CONTEXT_SET_NATIVE` | `SetupNativeScript` | 11 | 11
+| `GET_MON_DATA` | `GetMonData3` | 15 |
+| `SCRIPT_CONTEXT_SET_NATIVE` | `SetupNativeScript` | 11 |
 | `SET_RESPAWN` | `SetLastHealLocationWarp` | 1 |
 | `SCRIPT_MOVEMENT_START` | `ScriptMovement_StartObjectMovementScript` | 2 |
 | `CHANGE_AMOUNT_MONEY_BOX` | `ChangeAmountInMoneyBox` | 2 |
-| `ME_CHECK_COMPATIBILITY` / `ME_SET_INCOMPATIBLE` | `CheckCompatibility` / `SetIncompatible` | 1 / 3 | 1 / 3
+| `ME_CHECK_COMPATIBILITY` / `ME_SET_INCOMPATIBLE` | `CheckCompatibility` / `SetIncompatible` | 1 / 3 |
 
 `GetMonData` 是一个根据参数计数进行调度的宏 [include/pokemon.h:343]； `GetMonData2` 是
 `__attribute__((alias("GetMonData3")))` [pokemon.c:2970]：一个地址，三个名称。
@@ -246,7 +228,7 @@ ROM 是 agbcc 构建的，并结束 THUMB 函数 `pop {r4,r5,r6}; pop {r1}; bx r
 除 `return TRUE` 外，还有 `ScrCmd_waitstate`。
 ### 两种混合图像危险
 
-- 切勿将两个盒式磁带的转储读取为一张图像。 叶绿保留此代码−0x2C，因此放置在其火红`--dump-address`处的叶绿转储会错误地回答：混合图像将`gSpecials[54]`的（`Script_HasTrainerBeenFought`，`FlagGet(GetTrainerAFlag())`）调用读取为`FlagSet`，这是`SetBattledTrainerFlag2` 位于 +0x2C。 `script_read.every_dump` 从运行的 `--expect-console` 中取出一个墨盒（默认为火红），落回标签。
+- 切勿将两个卡带的转储读取为一张图像。 叶绿保留此代码−0x2C，因此放置在其火红`--dump-address`处的叶绿转储会错误地回答：混合图像将`gSpecials[54]`的（`Script_HasTrainerBeenFought`，`FlagGet(GetTrainerAFlag())`）调用读取为`FlagSet`，这是`SetBattledTrainerFlag2` 位于 +0x2C。 `script_read.every_dump` 从运行的 `--expect-console` 中取出一个卡带（默认为火红），落回标签。
 - 立即阅读每个转储。 `scrcmd.Memory` 合并重叠和相邻的转储，因此跨越两条跑道的块仍然可以行走（`tools/frlg/script_read.py --with-every-dump`）；一次转储建议运行已保存的字节。
 ### 测量什么
 
@@ -286,17 +268,11 @@ ROM 是 agbcc 构建的，并结束 THUMB 函数 `pop {r4,r5,r6}; pop {r1}; bx r
 
 调用胶合板为 `bx rN` 加对齐，每个四个字节：r0 0x081E2224、r1 0x081E2228 和 r3
 0x081E2230 测量，因此 0x081E2234 是 `_call_via_r4` 和 0x081E223C `_call_via_r6`。
-## Save backup and restore
+## 存档备份与还原
 
-> 本节已随上游更新，以下内容暂保留英文。
+各卡带的 `LoadGameSave` [decomp:src/save.c:803] 和 `gRfu.sendQueue.count` [link_rfu_2.c:3131]，在屏蔽 `bl` 目标和字面量池中的字后，与英语版修订号 0x0A 的 ELF 匹配。全部十二种卡带中，`LoadGameSave` 都打开 `push {r4-r6, lr}; lsls r0, r0, #24`（`70 b5 00 06`），并在字面量池中引用 `gDecompressionBuffer`、`0x0201C000`。队列计数由 12 字节叶函数 `ldr r0, =gRfu; ldr r1, =0x8D2; adds r0, r0, r1; ldrb r0, [r0]; bx lr` 读取，每种卡带各有一份。
 
-`LoadGameSave` [decomp:src/save.c:803] and `gRfu.sendQueue.count` [link_rfu_2.c:3131] on every
-cartridge, matched to the English revision 0x0A ELF with `bl` targets and literal-pool words masked.
-`LoadGameSave` opens `push {r4-r6, lr}; lsls r0, r0, #24` (`70 b5 00 06`) and pools
-`gDecompressionBuffer`, `0x0201C000` on all twelve. The queue count is read by a 12-byte leaf,
-`ldr r0, =gRfu; ldr r1, =0x8D2; adds r0, r0, r1; ldrb r0, [r0]; bx lr`, one copy per cartridge.
-
-| cartridge | `LoadGameSave` | `gRfu` | `gRfu.sendQueue.count` |
+| 卡带 | `LoadGameSave` | `gRfu` | `gRfu.sendQueue.count` |
 |---|---|---|---|
 | `BPRE` | `0x080DDBF4` | `0x03005590` | `0x03005E62` |
 | `BPGE` | `0x080DDBC8` | `0x03005590` | `0x03005E62` |
@@ -309,8 +285,7 @@ cartridge, matched to the English revision 0x0A ELF with `bl` targets and litera
 | `BPRJ` | `0x080DED68` | `0x03005520` | `0x03005DF2` |
 | `BPGJ` | `0x080DED3C` | `0x03005520` | `0x03005DF2` |
 
-`sSaveSlotLayout` agrees on all twelve except sector id 4: 3816 bytes on the Latin cartridges,
-3776 on the Japanese ones.
+全部十二种卡带的 `sSaveSlotLayout` 一致，只有扇区 ID 4 不同：拉丁字母语言版为 3816 字节，日语版为 3776 字节。
 
 # 阅读游戏机的脚本
 
@@ -373,14 +348,14 @@ cartridge, matched to the English revision 0x0A ELF with `bl` targets and litera
 `charmap.decode_message`。 `scrcmd.data_pointers` 和 `scrcmd.read_string` 解码转储所保存的内容。所有十个标准脚本都是从游戏机、代码和文本中读出的。
 
 一个已知命令的操作数超过转储的末尾意味着转储很短，读者也是这么说的。
-# 物种表
+# 种类表
 
 `gSpeciesInfo` = 0x0824CDFC，步幅 28。
 
-解压缩 26 字节步长处的 `friendship`、`growthRate` 和 `eggGroups` 的针与 16 MB 中的任何内容都不匹配；墨盒的步幅为 28。数据与英文分解相符：`CalculateMonStats`
-[pokemon.c:2095] 根据五个队伍的基础统计数据、等级、IV、EV 和性质重新计算，再现了 30 个存储统计数据中的 30 个。
+解压缩 26 字节步长处的 `friendship`、`growthRate` 和 `eggGroups` 的针与 16 MB 中的任何内容都不匹配；卡带的步幅为 28。数据与英文分解相符：`CalculateMonStats`
+[pokemon.c:2095] 根据五个队伍的种族值、等级、IV、EV 和性格重新计算，再现了 30 个存储统计数据中的 30 个。
 
-梦幻、时拉比和基拉祈的所有六个基本统计数据均为 100，因此 `0x64646464` 位于入口偏移量 0 和 2 处，其中一个无论步幅如何都是字对齐的：
+梦幻、时拉比和基拉祈的所有六个种族值均为 100，因此 `0x64646464` 位于入口偏移量 0 和 2 处，其中一个无论步幅如何都是字对齐的：
 
     scan: 3 match(es) for 0x64646464 in 0x08000000..0x08400000
        0x0824DE80   0x0824E970   0x0824FAB8
@@ -405,30 +380,15 @@ cartridge, matched to the English revision 0x0A ELF with `bl` targets and litera
 | `CreateBoxMon` | `0x080411C0` | ZeroMonData 和 SetMonData 之间的调用 |
 | `SetMonData` | `0x08043A78` |使用 56 (`MON_DATA_LEVEL`) 调用，然后使用 255 (`MAIL_NONE`) 调用 64 (`MON_DATA_MAIL`) |
 | `CalculateMonStats` | `0x08041B78` |最后一次通话|
-## 西班牙火红墨盒
+## 西班牙语版《火红》卡带
 
-> 本节已随上游更新，以下内容暂保留英文。
+西班牙语版《火红》基础版 v0（`0100EB702342C000`，显示版本 1.0.0）包含 `FireRed_s.gba`，游戏代码为 `BPRS`，修订号为 0x0A。16 MiB ROM 的 SHA-256 为 `d4dee5aeb5313e073d6067bee37278b0204886958467633978bb746bbe3d5b76`。其软件包的四个 NCA 签名、节头哈希、PFS0 和 IVFC 区块哈希及 CNMT 内容哈希均通过验证。控制信息中的标题为“Pokémon FireRed Version (Spanish Ver.)”和“Pokémon Edición Rojo Fuego”。
 
-Spanish FireRed base v0 (`0100EB702342C000`, display version 1.0.0) contains `FireRed_s.gba`,
-game code `BPRS`, revision 0x0A. The 16 MiB ROM has SHA-256
-`d4dee5aeb5313e073d6067bee37278b0204886958467633978bb746bbe3d5b76`.
-Its package's four NCA signatures, section-header hashes, PFS0 and IVFC block hashes, and CNMT
-content hashes verify. The control titles are “Pokémon FireRed Version (Spanish Ver.)” and
-“Pokémon Edición Rojo Fuego”.
+`builds.BPRS` 提供原生礼物、活动宝可梦和常驻钩子的西班牙语版地址。`vendor/gblink-cards/symbols.json` 提供 167 个卡片符号；生成器的语言 ID 为 7。主持端发送载荷前，根据主机游戏数据选择 `BPRS`。西班牙语版《叶绿》（`BPGS`）也有独立测量的地址表，见[修订号 0x0A 的国际版卡带](#the-international-revision-0x0a-cartridges)。
 
-`builds.BPRS` supplies the Spanish addresses for native gifts, event Pokemon and resident hooks.
-`vendor/gblink-cards/symbols.json` supplies the 167 card symbols; the generator's language id is 7.
-The host selects `BPRS` from the console's game data before it sends a payload. Spanish LeafGreen (`BPGS`) has its own measured table in
-[The international revision 0x0A cartridges](#the-international-revision-0x0a-cartridges).
+函数先通过唯一的函数体窗口，与字节一致的英语版反编译结果匹配，再通过屏蔽指针字和 THUMB BL 操作数后的指令序列匹配。RAM 或数据指针从对应已映射函数的字面量池中读取。多个短函数可能具有相同指令序列，需要额外引用来区分：`IsEnoughMoney` 在 0x080A376C 调用 `GetMoney`；0x080469A8 处的 `SpeciesToNationalPokedexNum` 读取 0x0824B9DE 处的表，种类 277 对应项返回 252。各地址分别查找，单一版本内部的 ROM 偏移也并不统一。
 
-Functions are matched against the byte-identical English decomp by unique body windows, then by
-instruction sequences with pointer words and THUMB BL operands masked. A RAM or data pointer is
-read from the corresponding mapped function's literal pool. Small functions sharing an instruction
-sequence need a separate reference: `IsEnoughMoney` calls `GetMoney` at 0x080A376C;
-`SpeciesToNationalPokedexNum` at 0x080469A8 reads the table at 0x0824B9DE, whose species 277 entry
-returns 252. These addresses are found individually; ROM offsets vary within one build.
-
-| symbol | Spanish FireRed |
+| 符号 | 西班牙语版《火红》 |
 |---|---|
 | `gRngValue`, `gSaveBlock1Ptr`, `gSaveBlock2Ptr` | 0x03004220, 0x03004228, 0x0300422C |
 | `gMain`, `gIntrTable[4]`, `gSoundInfo` | 0x030022D0, 0x03002730, 0x03005F80 |
@@ -437,23 +397,13 @@ returns 252. These addresses are found individually; ROM offsets vary within one
 | `CB1_Overworld`, `CB2_Overworld`, `RunTextPrinters` | 0x08059E5C, 0x08059EDC, 0x08002D50 |
 | `m4aSoundMain`, `ReadFlash` | 0x081E089C, 0x081E224C |
 | `MapGridGetElevationAt`, `MapGridGetCollisionAt` | 0x0805C658, 0x0805C6D8 |
-| Cut, Rock Smash, Strength message return pointers | 0x081C1909, 0x081C19FD, 0x081C1AE6 |
+| 居合斩、碎岩、怪力的消息返回指针 | 0x081C1909, 0x081C19FD, 0x081C1AE6 |
 
-The field-move return pointers follow their scripts' eight-byte `loadword` and message-call sequence.
-The badge checks point to the message scripts at 0x081C1901, 0x081C19F5 and 0x081C1ADE.
-The translated text lengths change the distance between each message and its resume script.
+场景招式返回指针位于脚本的八字节 `loadword` 和消息调用序列之后。徽章检查指向 0x081C1901、0x081C19F5、0x081C1ADE 处的消息脚本。翻译后文字长度不同，会改变消息与恢复执行脚本之间的距离。
 
-All 44 cards receive through a simulated host/client conversation and run bound to Mom in mGBA
-on this ROM. The shipped 4× speed card's trampoline installs 0x0203FC01 in `gIntrTable[4]` and keeps
-0x0800071D at 0x0203FBFC. On R press, release, then press, it dispatches respectively three, three
-and zero extra overworld callback pairs, and four, four and zero text runs, with one original V-blank
-handler call each frame (`tests/test_team_cards.py`).
+全部 44 张卡片均在该 ROM 上，通过模拟的主持端与客户端对话接收，并在 mGBA 中绑定到妈妈执行。随附的四倍速卡片跳板将 0x0203FC01 安装到 `gIntrTable[4]`，并在 0x0203FBFC 保存 0x0800071D。按下 R、释放、再次按下时，分别分发三、三、零组额外地图回调，以及四、四、零次文字处理；每帧仍调用一次原始 VBlank 处理器（`tests/test_team_cards.py`）。
 
-`tests/test_frlg_english_cartridges.py`, `tests/test_noclip.py` and `tests/test_follower.py` include the
-Spanish image at `scratchpad/frlg_es/FireRed_s.gba`; ROM-backed checks skip when the image is absent.
-The cartridge's own Mystery Gift client returns from the trainer probe, creates a checksummed
-Pikachu with language 7, calls `GetVarPointer`, installs a resident hook and loads the hook kept
-in the save. The collision and follower checks also run with the Spanish address table.
+`tests/test_frlg_english_cartridges.py`、`tests/test_noclip.py` 和 `tests/test_follower.py` 包含 `scratchpad/frlg_es/FireRed_s.gba` 处的西班牙语版镜像；镜像不存在时跳过依赖 ROM 的检查。卡带自身的神秘礼物客户端能从训练家探测代码返回，生成语言为 7 且校验和有效的皮卡丘，调用 `GetVarPointer`，安装常驻钩子，并加载存档中的钩子。碰撞和跟随检查也使用西班牙语版地址表执行。
 
 # 法语 Easy Chat 词汇
 
@@ -462,8 +412,8 @@ in the save. The collision and follower checks also run with the Spanish address
 ## 插槽问题
 
 Easy Chat id 是 `(group << 9) | index`，一个槽位。 `pokeldn/frlg/text/easychat_words.py` 来自英文 decomp，命名英文 ROM 中保存的内容；每个本地化 ROM 都有自己的
-`gEasyChatGroup_*` 表。邮件、教练卡提议、客座教练台词、
-`--denied-message`和问卷门都依赖于法国的。在游戏机上渲染，
+`gEasyChatGroup_*` 表。邮件、训练家卡提议、客座训练家台词、
+`--denied-message`和问卷门都依赖于法语版的。在游戏机上渲染，
 `EC_WORD_ENJOY` 渲染为 STRESSE，`EC_WORD_DONE` 渲染为 FURAX，`SPEECH/12` 渲染为 LES。
 ## 查找表
 
@@ -472,14 +422,14 @@ Easy Chat id 是 `(group << 9) | index`，一个槽位。 `pokeldn/frlg/text/eas
 `--buffer-script memory-scan --scan-word 0x00450045` 超过 0x08000000..0x08480000 准确地返回了这三个命中。范围：`src/easy_chat.o(.rodata)` 是 `ld_script.ld` 中的对象#99，如下
 `src/mystery_gift_client.o(.rodata)`（#182，`sClientFuncs` 已知）。该表位于 0x083E3700。
 
-所有 22 个条目的计数与英语版本的计数相同，因此两种语言中的 id 是相同的槽。字数组及其文本跨越 0x083DE2C8..0x083E3700，21560 字节，每个组的字符串位于其数组和下一个数组之间。 `string-gather` 每次运行读取一组；条目 42 和 60 是渲染时的 STRESSE 和 FURAX。 `tests/test_easychat_french.py` 需要渲染和 ROM 证据才能同意。
+所有 22 个条目的计数与英语版的计数相同，因此两种语言中的 id 是相同的槽。字数组及其文本跨越 0x083DE2C8..0x083E3700，21560 字节，每个组的字符串位于其数组和下一个数组之间。 `string-gather` 每次运行读取一组；条目 42 和 60 是渲染时的 STRESSE 和 FURAX。 `tests/test_easychat_french.py` 需要渲染和 ROM 证据才能同意。
 
 `TRAINER/11` 是 DRESSEUR，单数； DRESSEURS 不在表中。
 ## 表中内容
 
 与英文表的差异取决于组别：
 
-- `EC_GROUP_STATUS`（109个能力名称）几乎准确：`stench`→PUANTEUR，`thick_fat`→ISOGRAISSE，`rain_dish`→CUVETTE，`drizzle`→CRACHIN， `arena_trap`→PIEGE，`rock_head`→TETE DE ROC，`air_lock`→气闸。
+- `EC_GROUP_STATUS`（109 个特性名称）几乎准确：`stench`→PUANTEUR，`thick_fat`→ISOGRAISSE，`rain_dish`→CUVETTE，`drizzle`→CRACHIN， `arena_trap`→PIEGE，`rock_head`→TETE DE ROC，`air_lock`→AIR LOCK。
 - `EC_GROUP_FEELINGS` 几乎完全重新分类：英语混合了动词（meet、play、eat、drink、see、hear、got、gos、go home），法语仅保留情感状态。插槽 13 (`disappoints`) 是 RAVI，44 (`eat`) HUMILIE，51 (`drink`) HONTEUX。
 - `EC_GROUP_SPEECH`：`but`→MAIS，`however`→CEPENDANT，`how`→COMMENT，`the`→LE排队，LES和L'在`case`上获得英语支出， `miss`。
 
@@ -509,21 +459,13 @@ easychat_french.check(ids, strict=True)              # raises on anything unread
 
 叶绿的整个 Easy Chat 区域比火红移动了 −0x1C4，具有相同的词汇：22 个条目，每个计数相等，并且一组的 `string-gather` 在相同的槽中读取相同的单词。
 `easychat_french` 两个控制台的答案。
-## The international revision 0x0A cartridges
+## 修订号 0x0A 的国际版卡带
 
-> 本节已随上游更新，以下内容暂保留英文。
+六种语言版本各包含一个 16 MiB GBA ROM，卡带头修订号为 `0x0A`。主持端为英语、法语、德语、意大利语、西班牙语和日语的两个游戏版本均提供地址表。
 
-The six language editions each contain a 16 MiB GBA ROM with header revision `0x0A`. The host
-has address tables for both versions in English, French, German, Italian, Spanish and Japanese.
+函数依据唯一指令窗口与英语版修订号 0x0A 的 ELF 配对，必要时屏蔽相对调用和指针字面量。RAM 全局变量和指针表从对应字面量池读取。场景招式脚本按命令序列配对，屏蔽其中 ROM 指针；本地化文字位于这些序列之后。`SpeciesToNationalPokedexNum` 与两侧相邻的转换函数一起配对，因为三个叶函数具有相同的指令序列。
 
-Functions are paired with the English revision 0x0A ELF by unique instruction windows, masking
-relative calls and pointer literals where necessary. RAM globals and pointer tables are read
-from the corresponding literal pools. The field-move script families are paired as command
-sequences, with their ROM pointers masked; localized text follows those sequences.
-`SpeciesToNationalPokedexNum` is paired with both neighboring conversion functions because
-the three leaf functions share an instruction sequence.
-
-| cartridge | ROM file | SHA-256 |
+| 卡带 | ROM 文件 | SHA-256 |
 |---|---|---|
 | `BPRD` | `FireRed_d.gba` | `04f43a43f7cf9109561cd1744d108f50202c931ce31b30abaa6f18950824d20d` |
 | `BPRE` | `FireRed_e.gba` | `d32c8df8702293716ad8de68755fe5903161f4829a0a2e486bfa7e74a0b62e94` |
@@ -538,7 +480,7 @@ the three leaf functions share an instruction sequence.
 | `BPGJ` | `LeafGreen_j.gba` | `a2aa939a23a36610902be51169042efac78f2f6db6a433e06443a2ee09d4f19e` |
 | `BPGS` | `LeafGreen_s.gba` | `a943ecfd6560115b184dc244daed71ba328a67334f343eb35b39932c3ce7c731` |
 
-| symbol | German FireRed | German LeafGreen | Italian FireRed | Italian LeafGreen | Spanish LeafGreen |
+| 符号 | 德语版《火红》 | 德语版《叶绿》 | 意大利语版《火红》 | 意大利语版《叶绿》 | 西班牙语版《叶绿》 |
 |---|---|---|---|---|---|
 | `gmain` | `0x030022D0` | `0x030022D0` | `0x030022D0` | `0x030022D0` | `0x030022D0` |
 | `sb1ptr` | `0x03004228` | `0x03004228` | `0x03004228` | `0x03004228` | `0x03004228` |
@@ -549,51 +491,20 @@ the three leaf functions share an instruction sequence.
 | `client_run_buffer_script` | `0x08148BA4` | `0x08148B80` | `0x08148BE4` | `0x08148BC0` | `0x08148CAC` |
 | `save_slot_layout` | `0x083FCEC0` | `0x083FCCFC` | `0x083F464C` | `0x083F4488` | `0x083F7674` |
 
-The ROM-backed tests run each supported cartridge's `Client_RunBufferScript`, `CreateMon`,
-`GetVarPointer`, `VBlankIntr` and saved-hook loader. The collision tests call the cartridge's
-`MapGridGetCollisionAt` and `MapGridGetElevationAt` after installing the hook.
+依赖 ROM 的测试运行每种受支持卡带的 `Client_RunBufferScript`、`CreateMon`、`GetVarPointer`、`VBlankIntr` 和已保存钩子的加载器。碰撞测试在安装钩子后调用卡带的 `MapGridGetCollisionAt` 和 `MapGridGetElevationAt`。
 
-Spanish FireRed's `EventScript_CurrentTooFast` starts at `0x081AA346`, with `lockall` (`0x69`).
-The former card table pointed at `0x081AA347`, the following `loadword` (`0x0F`). The generated
-HM card now uses the script's entry.
+西班牙语版《火红》的 `EventScript_CurrentTooFast` 起点为 `0x081AA346`，含有 `lockall`（`0x69`）。旧卡片表指向其后的 `0x081AA347`，即 `loadword`（`0x0F`）。现在生成的秘传招式卡片使用脚本真正的入口。
 
-### Japanese layout
+### 日语版布局
 
-> 本节已随上游更新，以下内容暂保留英文。
+日语版《火红／叶绿》采用不同的 EWRAM 布局：队伍起点为 `0x020241E0`，玩家角色为 `0x02036FA8`，对象事件为 `0x02036D68`，调色板渐变为 `0x020379E8`，禁用野生遭遇的字节为 `0x02038624`。`0x08002D38` 处的 `RunTextPrinters` 从 `0x08002D60` 处的字面量读取数组指针 `0x02020030`，并在 `0x08002D94` 按 `0x20` 步长前进。国际版数组的步长为 `0x24`。
 
-Japanese FireRed and LeafGreen use a different EWRAM layout. Their party begins at
-`0x020241E0`, player avatar at `0x02036FA8`, object events at `0x02036D68`, palette fade at
-`0x020379E8`, and wild-encounter disable byte at `0x02038624`.
-`RunTextPrinters` at `0x08002D38` reads its array pointer `0x02020030` from the literal at
-`0x08002D60` and advances by `0x20` at `0x08002D94`. The international array advances by `0x24`.
+两种日语版卡带均使用 `0x030022E0` 处的 `gMain`、`0x03004238` 处的 `gSaveBlock1Ptr`、`0x0300423C` 处的 `gSaveBlock2Ptr`、`0x03004230` 处的 `gRngValue` 和 `0x03002740` 处的 `gIntrTable[4]`。`gSpecialVar_0x8000` 为 `0x02036FE8`，队伍数量位于 `0x02023F85`。
 
-Both Japanese cartridges use `gMain` at `0x030022E0`, `gSaveBlock1Ptr` at `0x03004238`,
-`gSaveBlock2Ptr` at `0x0300423C`, `gRngValue` at `0x03004230` and `gIntrTable[4]` at `0x03002740`.
-`gSpecialVar_0x8000` is `0x02036FE8`; the party count is at `0x02023F85`.
+日语版 SaveBlock1 为 `0x3D40` 字节，国际版为 `0x3D68`。最后一区块，即扇区 ID 4，在日语版覆盖 `0xEC0` 字节，国际版覆盖 `0xEE8` 字节。存档注入和原生闪存修补使用所选卡带的长度。`RamScript` 保留其偏移：校验和 `0x361C`、魔数 `0x3620`、脚本主体 `0x3624`。依赖 ROM 的校验和测试从各 ROM 的 `sSaveSlotLayout` 读取区块长度。
 
-Japanese SaveBlock1 is `0x3D40` bytes; international SaveBlock1 is `0x3D68`. The final chunk,
-sector id 4, covers `0xEC0` bytes in Japanese and `0xEE8` internationally. Save injection and
-native flash patching use the selected cartridge's length. `RamScript` retains its offsets:
-checksum `0x361C`, magic `0x3620`, script body `0x3624`. The chunk length is read from each
-ROM's `sSaveSlotLayout` in the ROM-backed checksum test.
+日语版神奇卡片占 164 字节，神奇新闻占 224 字节。`BPRJ` 的 `0x081481F4` 处 `SaveWonderCard` 复制 164 字节并计算校验和；`BPGJ` 使用 `0x081481CC`。对应验证例程为 `0x08148250` 和 `0x08148228`。依赖 ROM 的测试通过两个例程保存并验证应用生成的卡片。卡片 CRC 位于 SaveBlock1 `+0x3204`，数据位于 `+0x3208`；新闻数据始于 `+0x3124`。`0x08149934` 处的 `BufferCardText` 读取字节 10..27 的标题、28..40 的副标题、41..120 的四行各 20 字节正文，以及 121..160 的两行各 20 字节页脚。内置分发为日语版卡带使用此紧凑布局。原生 `.wc3` 布局见[礼物文件](gifts.md#native-formats)。
 
-Japanese Wonder Cards occupy 164 bytes and Wonder News 224 bytes. `BPRJ`'s
-`SaveWonderCard` at `0x081481F4` copies and checksums 164 bytes; `BPGJ` uses `0x081481CC`.
-The corresponding validation routines are `0x08148250` and `0x08148228`. Both routines save
-and validate an app-generated card in the ROM-backed tests. The card CRC is at SaveBlock1
-`+0x3204`, its data at `+0x3208`; news data starts at `+0x3124`.
-`BufferCardText` at `0x08149934` reads title bytes 10..27, subtitle 28..40, four 20-byte body
-lines at 41..120 and two 20-byte footers at 121..160. Built-in distributions use this compact
-layout for Japanese cartridges. The native `.wc3` layout is described in [Gift files](gifts.md#native-formats).
+两种日语版卡带均在 Unicorn 中执行原生客户端、`CreateMon`、变量查找、VBlank 处理器和已保存钩子的加载器。`CreateMon` 为种类 25 生成日语昵称“ピカチュウ”。日语名称采用假名表，训练家名称限五个字符；拉丁字母的重音字符与假名共用字节值。内置礼物说明仍用拉丁字母文本，日语版会移除重音。由于日语对话字体较宽，说明每 26 个字符换行，两行后换页。日语版 Team 卡片采用其源码中的日语结构大小和动态菜单宽度；两条提示缩短后可满足 RAM 脚本上限。
 
-Both Japanese cartridges execute the native client, `CreateMon`, variable lookup, VBlank handler
-and saved-hook loader under Unicorn. `CreateMon` produces the Japanese nickname ピカチュウ for
-species 25. Japanese names use the kana table and the five-character trainer-name limit;
-Latin accents share byte values with kana. Built-in gift prose stays in Roman text, with accents
-removed on Japanese cartridges. Dialogue prose wraps at 26 characters, with a page break
-after two lines, because the Japanese dialogue font is wider. The Japanese Team cards use their source's Japanese struct
-sizes and dynamic menu widths; two prompts are shortened to fit the RAM-script limit.
-
-The added German and Italian pairs, Spanish LeafGreen and Japanese pair have mGBA card checks.
-These are offline checks against the extracted cartridge ROMs; their Switch wireless delivery
-has not been checked on retail hardware.
+新增的德语版和意大利语版两组、西班牙语版《叶绿》及日语版两组均通过 mGBA 卡片检查。这些是对提取卡带 ROM 的离线检查；Switch 上的无线传送尚未在实机验证。

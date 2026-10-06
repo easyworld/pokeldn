@@ -5,7 +5,7 @@ nav_order: 5
 ---
 # gRngValue：读取它、预测它并瞄准它
 
-这里的一切都是在法国火红上测量的，BPRF软件版本0x0A。
+这里的一切都是在法语版《火红》上测量的，BPRF软件版本0x0A。
 ## 生成器
 
 ```c
@@ -24,7 +24,7 @@ void SeedRng(u16 seed) { gRngValue = seed; }
 
 没有 ARM 或 THUMB 指令对 `RAND_MULT` 进行编码，因此它位于 `Random` 池中 `&gRngValue` 旁边。扫描返回了 11 个结果； `ld_script.ld` 将 `src/random.o` 置于#86，并将常量的下一个用户 `src/title_screen.o` 置于#123，因此最低命中是 random.o 的。转储将 `Random` 指令与 [random.c:9-13] 指令相匹配，并且 `SeedRng` 后面带有相同的池字。
 
-`Random` 返回状态的上半部分：一个个性（两次抽奖）留下 2<sup>16</sup> 个候选状态。 `pokeldn/frlg/rom/lcg.py` 是算术； `distance(a, b)` 在任何范围内通过小步/巨步（2<sup>17</sup> 操作）都是精确的。该地图排列了所有 2<sup>32</sup> 状态，因此距离始终存在，并且仅在很小时（赔率 N / 2<sup>32</sup>）才是证据。
+`Random` 返回状态的上半部分：一个PID（两次抽奖）留下 2<sup>16</sup> 个候选状态。 `pokeldn/frlg/rom/lcg.py` 是算术； `distance(a, b)` 在任何范围内通过小步/巨步（2<sup>17</sup> 操作）都是精确的。该地图排列了所有 2<sup>32</sup> 状态，因此距离始终存在，并且仅在很小时（赔率 N / 2<sup>32</sup>）才是证据。
 
 `gRngValue` 和 `gSpecialVar_0x8000` 是链接时全局变量，从不移动。保存块地址移动：`SetSaveBlocksPointers` 在每次战斗中重新滚动 4 对齐偏移并加载 [load_save.c:75]。
 ## 速率：每帧正好 2 圈
@@ -34,8 +34,8 @@ void SeedRng(u16 seed) { gRngValue = seed; }
 
 |框架（精确）|圈数（精确）| 2N + 2 |
 |---|---|---|
-| 600 | 1,202 | 1,202 1202 | 1202
-| 3000 | 3000 6,002 | 6002 | 6002
+| 600 | 1,202 | 1202 |
+| 3000 | 6,002 | 6002 |
 
 +2是`delay`周围额外一帧；每帧 2.003333 的模型适合 N=600，但在 N=3000 时预测为 6010。 `rng-trace` 在神秘礼物链接菜单中每帧采样 `gRngValue` 一次，给出的间隙正好是 2、95 of 95。读取后 n 帧的状态是 `advance(S, 2n)`。
 
@@ -72,7 +72,7 @@ if ((svc_4b() & SVC4B_RESEED_RNG) != 0)
 ## 将宝可梦读回到创建它时的状态
 
 `GenerateWildMon` 致电 `CreateMonWithNature(..., USE_RANDOM_IVS, Random() % NUM_NATURES)`
-[wild_encounter.c:233]，滚动个性直到它与性质相匹配，然后是IV。野生宝可梦有四种抽法：性格低、性格高、HP/ATK/DEF、SPEED/SPATK/SPDEF。两次 IV 抽签添加了 30 位检查，并且只有一个状态幸存下来 (`lcg.recover_wild_state`)。 `Random32()`，
+[wild_encounter.c:233]，滚动PID直到它与性格相匹配，然后是IV。野生宝可梦有四种抽法：PID 低半字、PID 高半字、HP/ATK/DEF、SPEED/SPATK/SPDEF。两次 IV 抽签添加了 30 位检查，并且只有一个状态幸存下来 (`lcg.recover_wild_state`)。 `Random32()`，
 `(Random() | (Random() << 16))`，首先在两个调用站点绘制下半部分。
 
 必须搜索这两个间隙；不同月份的布局有所不同。零售观察：
@@ -81,9 +81,9 @@ if ((svc_4b() & SVC4B_RESEED_RNG) != 0)
 |---|---|---|---|
 | 1 | 0 | 0 |剧本百变怪、剧本鲤鱼王(2) |
 | 2 | 1 | 0 |野生独角虫，脚本鲤鱼王|
-| 4 | 0 | 1 |野生绿毛虫、独角虫、猴怪；鲤鱼王 | 脚本化
+| 4 | 0 | 1 | 野生绿毛虫、独角虫、猴怪；脚本生成的鲤鱼王 |
 
-对一个缺口的搜索报告称，“周一没有任何州为其他缺口建造”。杂散抽出不符合`CreateBoxMon`；其来源不明。在有脚本的遭遇中，它是断断续续的。要求异色 + Jolly + SPEED >= 20 的存根生成了 SPEED 10 的异色 Jolly 鲤鱼王； 2<sup>32</sup> 中恰好有一个状态在接下来的两次抽奖中具有该 PID：
+对一个缺口的搜索报告称，“周一没有任何州为其他缺口建造”。杂散抽出不符合`CreateBoxMon`；其来源不明。在有脚本的遭遇中，它是断断续续的。要求异色 + 爽朗 + SPEED >= 20 的存根生成了 SPEED 10 的异色 爽朗 鲤鱼王； 2<sup>32</sup> 中恰好有一个状态在接下来的两次抽奖中具有该 PID：
 
     state 0x429D2189
       draws 3,4 -> 15/0/12/25/7/14      what the stub tested: SPEED 25, passes
@@ -99,7 +99,7 @@ dowildbattle                     the battle starts          (0xB7)
 
 `ScrCmd_setptr` 将立即字节写入绝对地址 [scrcmd.c:300]。 `setwildbattle` 来电
 `CreateScriptedWildMon` → `CreateMon(&gEnemyParty[0], species, level, 32, 0, 0, OT_ID_PLAYER_ID, 0)`
-[script_pokemon_util.c:128]：随机 IV，无固定个性，无自然循环，简单的四次绘制方法 1。两个命令都返回 FALSE，并且字段引擎运行命令，直到一个返回 TRUE，因此四个命令
+[script_pokemon_util.c:128]：随机 IV，无固定PID，无性格循环，简单的四次绘制方法 1。两个命令都返回 FALSE，并且字段引擎运行命令，直到一个返回 TRUE，因此四个命令
 `setptr`s 和一代在一个框架中运行。它们之间不能有任何屈服（`playse` 会破坏它）；测试断言没有。
 
 作为由 `initramscript` 绑定到地图对象的 RAM 脚本交付，以 `end` (0x02) 结尾，而不是
@@ -119,7 +119,7 @@ BEFORE  0x9A4F5DAA        (read off the console)
 AFTER   0x8EEB8648
 ```
  单独从 `BEFORE` 预测，从 `gPlayerParty` 转储的 mon 在所有七个字段上都匹配：PID
-0x0BF87DD1，性质13 Jolly，不异色，IV 25/10/28/9/19/3。四次绘制从读取的状态开始，偏移量为零。
+0x0BF87DD1，性格13 爽朗，不异色，IV 25/10/28/9/19/3。四次绘制从读取的状态开始，偏移量为零。
 
 `distance(BEFORE, AFTER)` 是 6，其中 `CreateBoxMon` 为 `Random32()` 花费 4:2，加时则没有，因为玩家是加时 [pokemon.c:1796]，IV 为 2 [:1836,1845]。额外的 2（世界消耗一帧）在生成后落地。
 ## 读种子的 NPC
@@ -156,10 +156,10 @@ distance    2,595 turns
 
 |试用|已过帧数 |错误 vs 1791.8 |
 |---|---|---|
-| 1 | 1801 | 1801 +9.2 |
-| 2 | 1807 | 1807 +15.2 |
-| 3 | 1800 | 1800 +8.2 |
-| 4 | 1796 | 1796 +4.2 |
+| 1 | 1801 | +9.2 |
+| 2 | 1807 | +15.2 |
+| 3 | 1800 | +8.2 |
+| 4 | 1796 | +4.2 |
 
 平均值 +9.2 帧（取消的固定偏移），标准偏差 4.5，范围 11。所有四个转动计数都是偶数。
 
@@ -171,9 +171,9 @@ distance    2,595 turns
 |存根|礼物|零售验证|
 |---|---|---|
 | `shiny-seek.s` | `rng-shiny-hunt` |来自母亲的异色百变怪，来自两个不同的州|
-| `mon-seek.s` | `rng-mon-hunt` | 异色、Jolly、Speed IV >= 20 on a level 5 鲤鱼王 |
-| `mon-seek-far.s` | `rng-mon-hunt-far` |异色鲤鱼王，559 个填充字节到达 |
-| `mon-seek-both.s` | `rng-mon-hunt-both` | 异色、Jolly、SPEED 22；叶绿上的异色超梦|
+| `mon-seek.s` | `rng-mon-hunt` | 异色、爽朗、速度个体值 >= 20、等级 5 的 鲤鱼王 |
+| `mon-seek-far.s` | `rng-mon-hunt-far` | 异色、爽朗的鲤鱼王，证明 559 个填充字节已送达 |
+| `mon-seek-both.s` | `rng-mon-hunt-both` | 异色、爽朗、SPEED 22；叶绿上的异色超梦|
 
 ```c
 bool8 ScrCmd_setptr(struct ScriptContext * ctx)          // 0x11
@@ -186,8 +186,8 @@ bool8 ScrCmd_callnative(struct ScriptContext * ctx)      // 0x23
 
 `setptr` 在任何地方写入一个字节，`callnative` 运行它，因此 RAM 脚本将代码暂存在 EWRAM 中，并在 `CLI_RUN_BUFFER_SCRIPT` 无法到达的主世界中运行它。 `notblisy/RUBYSAPPHIREDLC` 在红宝石/蓝宝石上执行相同的操作（`writebytetoaddr` + `callasm`，LCG 循环，直到 PID 为异色）。
 
-`hasFixedPersonality` 在 `CreateScriptedWildMon` 中为 0，因此个性为 `Random32()` 且
-`OT_ID_PLAYER_ID`什么也不绘制：光泽是状态后的前两次绘制。 `setptr`，
+`hasFixedPersonality` 在 `CreateScriptedWildMon` 中为 0，因此PID为 `Random32()` 且
+`OT_ID_PLAYER_ID`什么也不绘制：异色状态是状态后的前两次绘制。 `setptr`，
 `callnative` 和 `setwildbattle` 返回 FALSE，因此存根在 `gRngValue` 中留下的状态是第一个
 `CreateScriptedWildMon`消耗。
 
@@ -208,21 +208,21 @@ load_save.c:75]。引擎将其指针保持在 `gSaveBlock1Ptr->ramScript.data.sc
 
 `gSpecialVar_0x8000` 不动，战斗或世界代码中没有任何内容写入它。
 当脚本停止 [script.c:335] 时，`ScriptContext_RunScript` 调用 `UnlockPlayerFieldControls()`，因此 `end` 返回控制权。没有 RAM 脚本可以依赖于战斗或地图加载中的保存块地址。
-## 选择性质和 IV
+## 选择性格和 IV
 
-`--gift rng-mon-hunt`、`asm/field/mon-seek.s`，旗帜 ID 1019。所有四张抽奖均经过测试：个性赋予光泽和自然（`personality % 25` [pokemon.c:5020]）；抽签3和4是IV [pokemon.c:1836, HP/ATK/DEF then SPE/SPATK/SPDEF]。
+`--gift rng-mon-hunt`、`asm/field/mon-seek.s`，旗帜 ID 1019。所有四张抽奖均经过测试：PID赋予异色状态和性格（`personality % 25` [pokemon.c:5020]）；抽签3和4是IV [pokemon.c:1836, HP/攻击/防御，然后是速度/特攻/特防]。
 
     --hunt-nature adamant,jolly   --hunt-iv speed=31 --hunt-iv attack=20   --hunt-cap N
- 捕获的鲤鱼王回读PID 0x01503B8A，异色值4，Jolly，IVs 6/2/25/28/12/7；
+ 捕获的鲤鱼王回读PID 0x01503B8A，异色值4，爽朗，IVs 6/2/25/28/12/7；
 `lcg.recover_wild_state` 给出状态 0x7041F74F 和 `rng_countdown` 再现每个字段。
 
-在十五条指令热循环中测试光泽度；除以 25 和 IV 比较在 8192 中针对 1 个状态运行，因此标准会在不减慢迭代速度的情况下乘以所需的迭代次数：
+在十五条指令热循环中测试异色状态；除以 25 和 IV 比较在 8192 中针对 1 个状态运行，因此标准会在不减慢迭代速度的情况下乘以所需的迭代次数：
 
 |要求| | 1 个州典型的冻结|最差的上限|
 |---|---|---|---|
 | 异色| 8,192 | 8,192 0.02 秒 | 0.10 秒 |
-| 异色+同性| 204,800 | 0.55 秒 | 2.5 秒 |
-| 异色+自然+1 IV >= 20 | 546,133 | 1.5 秒 | 6.7 秒 |
+| 异色 + 性格| 204,800 | 0.55 秒 | 2.5 秒 |
+| 异色+性格+1 IV >= 20 | 546,133 | 1.5 秒 | 6.7 秒 |
 | 异色 + 两个 IV = 31 | 8,388,608 | 22 秒 |拒绝 |
 
 `native_script.search_cost` 计算此；主机拒绝任何最坏情况超过
@@ -265,7 +265,7 @@ THUMB `ldr rN, [pc, #imm]` 和 `adr` 使用 `Align(PC, 4)`。两个字节关闭�
 rng-mon-hunt-far`携带196字节的存根和559字节的填充符。
 ## 进行搜索，以便杂散绘制无法移动答案
 
-`asm/field/mon-seek-both.s`（232 字节，`--gift rng-mon-hunt-both`，标志 id 1001）测试覆盖所有三种方法的两个位置的楼层。 d3、d4、d5 个性后的抽签：
+`asm/field/mon-seek-both.s`（232 字节，`--gift rng-mon-hunt-both`，标志 id 1001）测试覆盖所有三种方法的两个位置的楼层。 d3、d4、d5 PID后的抽签：
 
 |方法|第一个三重（HP/ATK/DEF）|第二个三元组（SPE/SPATK/SPDEF）|
 |---|---|---|
@@ -275,9 +275,9 @@ rng-mon-hunt-far`携带196字节的存根和559字节的填充符。
 
 字A是`d3 | d4<<15`，字B是`d4 | d5<<15`。要求两者都将第一个三元组的楼层放在 d3 和 d4 上，将第二个三元组的楼层放在 d4 和 d5 上，因此方法 4 在没有自己的单词的情况下通过。
 
-仅 IV 项进行平方：异色 + Jolly + SPEED >= 20 从 546,000 分之一变为 1,456,000 分之一，通常约为 4 秒。上限为 95%，因为一次失误会花费 1 个 A 压力，而 99% 的运气不好则需要 18 秒。
+仅 IV 项进行平方：异色 + 爽朗 + SPEED >= 20 从 546,000 分之一变为 1,456,000 分之一，通常约为 4 秒。上限为 95%，因为一次失误会花费 1 个 A 压力，而 99% 的运气不好则需要 18 秒。
 
-状态0xFCB5674F在零售上按方法1给出了异色、Jolly、SPEED 22，每种方法都通过：
+状态0xFCB5674F在零售上按方法1给出了异色、爽朗、SPEED 22，每种方法都通过：
 
 |方法|静脉注射 |地板 |
 |---|---|---|
@@ -303,9 +303,9 @@ rng-mon-hunt-far`携带196字节的存根和559字节的填充符。
 
 | | |
 |---|---|
-|迭代| 603,745 | 603,745
+| 迭代次数 | 603,745 |
 | `lcg.distance(start, found)` | 603,745, 差值 0 |
-|说明（每项 15 条）| 9,056,175 | 9,056,175
+| 指令数（每次 15 条） | 9,056,175 |
 | 3 个周期/指令的模型 | 1.62 秒 |
 |被玩家观察到| 2-3 秒 |
 |暗示| 3.7-5.6 周期/指令 |

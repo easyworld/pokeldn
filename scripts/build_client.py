@@ -30,14 +30,14 @@ def flet_versions() -> tuple[str, str]:
 def drop_extensions(pubspec: Path, main: Path) -> None:
     """Removes every optional Flet extension (video, maps, camera...): the app draws core controls only,
     and the extensions' native libraries were most of the client's size."""
-    text, count = re.subn(r"^  flet_\w+:\n    path: \.\./sdk/python/packages/.*\n", "", pubspec.read_text(),
+    text, count = re.subn(r"^  flet_\w+:\n    path: \.\./sdk/python/packages/.*\n", "", pubspec.read_text(encoding="utf-8"),
                           flags=re.M)
     assert count, "Flet's client pubspec changed shape"
-    pubspec.write_text(text)
-    text = re.sub(r"^import ['\"]package:flet_\w+/[^;]*;\n", "", main.read_text(), flags=re.M)
+    pubspec.write_text(text, encoding="utf-8")
+    text = re.sub(r"^import ['\"]package:flet_\w+/[^;]*;\n", "", main.read_text(encoding="utf-8"), flags=re.M)
     text, count = re.subn(r"^\s*flet_\w+\.Extension\(\),\n", "", text, flags=re.M)
     assert count and "flet_" not in text.replace("package:flet/", ""), "Flet's client main.dart changed shape"
-    main.write_text(text)
+    main.write_text(text, encoding="utf-8")
 
 
 MACOS_FLOOR = "12.0"   # Xcode 27 builds nothing older; Flet's client asks for 11.0
@@ -45,23 +45,23 @@ MACOS_FLOOR = "12.0"   # Xcode 27 builds nothing older; Flet's client asks for 1
 
 def raise_macos_floor(client: Path) -> None:
     podfile = client / "macos" / "Podfile"
-    text = podfile.read_text().replace("platform :osx, '11.0'", f"platform :osx, '{MACOS_FLOOR}'")
+    text = podfile.read_text(encoding="utf-8").replace("platform :osx, '11.0'", f"platform :osx, '{MACOS_FLOOR}'")
     anchor = "    flutter_additional_macos_build_settings(target)\n"
     assert anchor in text, "Flet's client Podfile changed shape"
     podfile.write_text(text.replace(anchor, anchor + "    target.build_configurations.each { |c| "
-                                    f"c.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '{MACOS_FLOOR}' }}\n", 1))
+                                    f"c.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '{MACOS_FLOOR}' }}\n", 1), encoding="utf-8")
     project = client / "macos" / "Runner.xcodeproj" / "project.pbxproj"
-    project.write_text(project.read_text().replace("MACOSX_DEPLOYMENT_TARGET = 11.0;",
-                                                   f"MACOSX_DEPLOYMENT_TARGET = {MACOS_FLOOR};"))
+    project.write_text(project.read_text(encoding="utf-8").replace("MACOSX_DEPLOYMENT_TARGET = 11.0;",
+                                                   f"MACOSX_DEPLOYMENT_TARGET = {MACOS_FLOOR};"), encoding="utf-8")
 
 
 def skip_rive_setup(client: Path) -> None:
     """Flet's macOS project runs `dart run rive_native:setup` on every build; without flet_rive it fails."""
     project = client / "macos" / "Runner.xcodeproj" / "project.pbxproj"
     text, count = re.subn(r'(name = "Rive Native Setup";.*?shellScript = )".*?";', r'\1"exit 0\\n";',
-                          project.read_text(), count=1, flags=re.S)
+                          project.read_text(encoding="utf-8"), count=1, flags=re.S)
     assert count, "Flet's client project changed shape"
-    project.write_text(text)
+    project.write_text(text, encoding="utf-8")
 
 
 def thin(app: Path) -> None:
@@ -82,15 +82,15 @@ def patch(client: Path) -> None:
         skip_rive_setup(client)
     pubspec, main = client / "pubspec.yaml", client / "lib" / "main.dart"
     drop_extensions(pubspec, main)
-    text = pubspec.read_text()
+    text = pubspec.read_text(encoding="utf-8")
     anchor = "dependencies:\n  flutter:\n    sdk: flutter\n"
     assert anchor in text, "Flet's client pubspec changed shape"
-    pubspec.write_text(text.replace(anchor, anchor + f"  flet_drop:\n    path: {EXTENSION.as_posix()}\n", 1))
-    text = main.read_text()
+    pubspec.write_text(text.replace(anchor, anchor + f"  flet_drop:\n    path: {EXTENSION.as_posix()}\n", 1), encoding="utf-8")
+    text = main.read_text(encoding="utf-8")
     anchor = "List<FletExtension> extensions = [\n"
     assert anchor in text, "Flet's client main.dart changed shape"
     text = text.replace(anchor, anchor + "    flet_drop.Extension(),\n", 1)
-    main.write_text("import 'package:flet_drop/flet_drop.dart' as flet_drop;\n" + text)
+    main.write_text("import 'package:flet_drop/flet_drop.dart' as flet_drop;\n" + text, encoding="utf-8")
 
 
 def main() -> int:
@@ -116,7 +116,11 @@ def main() -> int:
     key = platform_key()
     patch(client)
     flutter_cmd = ["flutter", "build", key, "--release", f"--build-name={flet}"]
-    subprocess.run(flutter_cmd, cwd=client, check=True, shell=os.name == "nt")
+    build_env = os.environ.copy()
+    if os.name == "nt":
+        # Plugin sources are UTF-8; MSVC's local code page can raise fatal C4819 warnings.
+        build_env["CL"] = f"{build_env.get('CL', '')} /utf-8".strip()
+    subprocess.run(flutter_cmd, cwd=client, check=True, shell=os.name == "nt", env=build_env)
     out = CLIENT / key
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)

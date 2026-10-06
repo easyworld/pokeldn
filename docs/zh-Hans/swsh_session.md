@@ -3,7 +3,7 @@ title: The cartridge and the session
 parent: Sword and Shield
 nav_order: 1
 ---
-# 墨盒、钥匙以及就座
+# 卡带、钥匙以及就座
 
 `main` 静态链接所有 Pia（252 个 `nn::pia` 类、2036 个虚拟方法）和导入
 `nn::ldn`。在 Pia 之上，游戏使用协议缓冲区：`main` 为 78 个 P2P 消息集（`gflnet.p2p.framework.pb`、`.block.pb`、`.sync.pb`，每个内容一个包：交换、战斗、营地、突袭）中的每一个携带一个 `FileDescriptorProto`。
@@ -32,7 +32,7 @@ nav_order: 1
     0x006ca938  stur x9, [sp, #0x1c]                  -> the setting's key field
     0x006ca93c  bl   #0x183fd10                       create/join
 
-## 读取墨盒
+## 读取卡带
 
     ./.venv/bin/python tools/switch/xci_read.py <the.xci> --keys prod.keys --type Program
     ./.venv/bin/python tools/switch/xci_read.py <the.xci> --nca 87e41bc8 --exefs 0 --extract main
@@ -62,9 +62,9 @@ Pia 标头携带版本 4，其形状与 [Pia 层](pia.md) 上的两个频段不�
 |屏幕|本地通讯 ID |版本 |场景|应用程序版本 |
 |---|---|---|---|---|
 |链接交换 | `0x0100ABF008968000`（剑的）| 4 | 60001 | 7 |
-| 本地无线神秘礼物相同| 4 | 65535 | 65535 |
+| 神秘礼物本地无线通信 | 相同 | 4 | 65535 |  |
 
-Shield 使用 Sword 的 id：它将 `0x0100ABF008968000` 与 `0x011083e0..0x011083f0` 处的 `mov`/`movk` 构建为 `sp+0x88`（`0x01108404`；其通往 LDN 意图的路径未追踪），并且其`control.nacp` 列出了 `LocalCommunicationId[0] = 0x0100ABF008968000`、`[1..7] = 0x01008DB008C2C000`。
+盾 使用 剑 的 id：它将 `0x0100ABF008968000` 与 `0x011083e0..0x011083f0` 处的 `mov`/`movk` 构建为 `sp+0x88`（`0x01108404`；其通往 LDN 意图的路径未追踪），并且其`control.nacp` 列出了 `LocalCommunicationId[0] = 0x0100ABF008968000`、`[1..7] = 0x01008DB008C2C000`。
 
 384字节的应用数据：
 
@@ -83,7 +83,7 @@ Shield 使用 Sword 的 id：它将 `0x0100ABF008968000` 与 `0x011083e0..0x0110
     0x1F 266 the player profile, as in the trade snapshot at 0xAEC but sampled at another moment
              ([the protocol page](swsh_protocol.md#the-player-profile)); zero to the end
 
-`Connect failed with status code 1` 是拒绝关联；下一次尝试相同的搜索可以关联。搜索 Sword 在一个 Comm id 下通告两个网络：其 Y-Comm 信标位于场景 65535，并且在第二条消息之后，其匹配网络位于场景 60001。信标上的站点在 16 个连接中的 0 个到达交换盒（网状连接因原因 1 被拒绝，或者其下的广告已更改）； `bin/swsh_connect.py` 仅加入场景 60001 并重新扫描直至其出现。关联后，游戏机向 `169.254.x.255:12345` 广播 Pia（每秒大约十个数据包）；屏幕什么也没显示。加入的电台离开后结束游戏机广告的内容是未读的。
+`Connect failed with status code 1` 是拒绝关联；下一次尝试相同的搜索可以关联。搜索 剑 在一个 Comm id 下通告两个网络：其 Y-Comm 信标位于场景 65535，并且在第二条消息之后，其匹配网络位于场景 60001。信标上的站点在 16 个连接中的 0 个到达交换盒（网状连接因原因 1 被拒绝，或者其下的广告已更改）； `bin/swsh_connect.py` 仅加入场景 60001 并重新扫描直至其出现。关联后，游戏机向 `169.254.x.255:12345` 广播 Pia（每秒大约十个数据包）；屏幕什么也没显示。加入的电台离开后结束游戏机广告的内容是未读的。
 ## 搜索之剑如何寻找伙伴
 
 在 Y-Comm 屏幕上，每个游戏机在场景 65535 处托管一个信标网络，并大约每秒浏览一次（`0x006c3630`：托管 `0x006c3840`，使用 `0x006c4550` 中的标准浏览 `0x006c3770`，
@@ -117,7 +117,7 @@ Pia本地协议0x24，如BDSP（`pokeldn.ldn.local_protocol`）：版本1，类�
 |领域 |写者 |价值|
 |---|---|---|
 | `+0xf0` | `0x018418a0` (`0x01841918`) |该游戏机自己的站id |
-| `+0xf8` | `0x018418a0` (`0x01841990`) |网格主机索引处的站点 ID，字节 `[[0x0262f7b0]]+0xab` (`0x017bbfe0`)； `[obj+0xd4] == 4` | 时跳过
+| `+0xf8` | `0x018418a0` (`0x01841990`) | 网状网络主机索引处的站点 ID，即字节 `[[0x0262f7b0]]+0xab`（`0x017bbfe0`）；当 `[obj+0xd4] == 4` 时跳过 |
 
 `0x018418a0` 在创建 (`0x018394d8`) 和加入 (`0x0183d9b0`) 上的 `0x018410e0` 之后运行。网格主机索引`+0xab`（自己的索引`+0xac`）由创建写入（`0x017b092c`，等于`+0xac`），加入响应（`0x017b4e4c`），重置为`0xfe` (`0x017bb820`) 和 `0xfd` 以及 `+0xac` (`0x017b99a0`)，以及主机迁移：`0x017ca454`（来自 `LanProcessHostMigrationJob`，
 `LocalProcessHostMigrationJobNew`，下）和 `0x017caf48`。
@@ -128,7 +128,7 @@ Pia本地协议0x24，如BDSP（`pokeldn.ldn.local_protocol`）：版本1，类�
 |---|---|
 | 1 |后端的插槽30（`0x01844bc4`），然后`0x018412a0(obj, 2, id)`就改变了|
 | 2 | id `0x017d6080` 返回（`0x01844a74`）；后端槽位30（`0x01844edc`）； `0x01844f60` |
-| 3 |零，与 `+0x100`（`0x0184415c`、`stp xzr,xzr`），当 `[obj+0xd4] != 3` | 时
+| 3 | 当 `[obj+0xd4] != 3` 时，与 `+0x100` 一起清零（`0x0184415c`、`stp xzr,xzr`） |
 
 `0x01837000..0x01850000` 中的商店为 `+0xd4`：
 
@@ -184,9 +184,9 @@ Pia本地协议0x24，如BDSP（`pokeldn.ldn.local_protocol`）：版本1，类�
 `bin/swsh_connect.py --sync-answers` 在有规则的情况下回答 `trade.SYNC_ANSWERS`，在其他地方回显每个协议，并打印每个未规则的 VOC（在它引起的答案之后；读取所有者 ID）。
 ## 离开
 
-离开交换会话的 Sword 发送框命令 3，并在大约 0.77 秒后开始 Pia 离开其角色。每个步骤都会等待答复，如果没有答复，则会因超时而失败。
+离开交换会话的 剑 发送框命令 3，并在大约 0.77 秒后开始 Pia 离开其角色。每个步骤都会等待答复，如果没有答复，则会因超时而失败。
 
-加入的 Sword 留下主机：
+加入的 剑 留下主机：
 
 |步骤|剑发送|主机欠 |未答复 |
 |---|---|---|---|
@@ -194,14 +194,14 @@ Pia本地协议0x24，如BDSP（`pokeldn.ldn.local_protocol`）：版本1，类�
 |车站断线| `03` on 0x14，每 0.5 秒 | `04` | 8 个请求，3.6 秒 |
 | LDN |离开网络| | |
 
-如果双方均未得到答复，Sword（零售或模拟 Shield）将在 LEAVE_REQUEST 后 9.0 至 9.1 秒离开 LDN 网络。当 `08 00` 发送两次且 `04` 应答时，零售剑在 LEAVE_REQUEST 0.04 秒后发送一个 `03` 并在其后 0.14 秒离开。
+如果双方均未得到答复，剑（零售或模拟 盾）将在 LEAVE_REQUEST 后 9.0 至 9.1 秒离开 LDN 网络。当 `08 00` 发送两次且 `04` 应答时，零售剑在 LEAVE_REQUEST 0.04 秒后发送一个 `03` 并在其后 0.14 秒离开。
 
 - 版本 4 主机处理程序 `0x017c19a0`（网格类型 4，表 `0x02081564`）通过 `0x017c2450` 发送 `08` 及其自己的索引，两个不可靠副本（`0x01851200` 的无捆绑标志为 0，然后为 1），并从网格。只有当 [1] 是网格主机的索引时，离开者的处理程序 `0x017c0d44` 才会接受它。
 - 0x14处理程序`0x017c6110`（类型3，表`0x02081804`）向发送方应答一字节`04`并将其标记为消失；类型 4 处理程序 `0x017c5fcc` 清除离开者的等待。
 
 `pokeldn/ldn/host4.py` 都回答了。
 
-托管 Sword 离开其客户端（它是 LDN 接入点）：
+托管 剑 离开其客户端（它是 LDN 接入点）：
 
 |步骤|剑发送|客户欠|未答复 |
 |---|---|---|---|
@@ -209,7 +209,7 @@ Pia本地协议0x24，如BDSP（`pokeldn.ldn.local_protocol`）：版本1，类�
 |本地会话 |其更新会话（0x24 类型 0x11）具有主机迁移字节 1 和新的序列 id，大约每 0.11 秒 |该序列 ID 的 0x21 确认 | 10.0 秒 |
 |破坏网络| START_HOST_MIGRATION `01 13 00..`（16 字节），每 0.33 秒 |离开LDN网络| 10.0 秒 |
 
-在零售 Sword 上测量，从 MIGRATION_START 到最后一个数据包：
+在零售 剑 上测量，从 MIGRATION_START 到最后一个数据包：
 
 |客户回答|网格步骤结束|最后一个数据包 |
 |---|---|---|

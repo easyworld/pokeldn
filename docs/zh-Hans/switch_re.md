@@ -12,10 +12,11 @@ nav_order: 3
        gh search code "<a constant, a field name, a class name>" --limit 20
        gh api repos/kinnay/NintendoClientsWiki/contents --jq '.[].name'
        gh api repos/kinnay/NintendoClientsWiki/contents/<Page>.md --jq .content | base64 -d
- 汇总表给出了导出值；每个游戏、Pia 版本和应用程序数据页面给出了规则。
+
+   汇总表给出了推导值；各游戏、Pia 版本和应用程序数据页面给出了规则。
 2. 查找已转储的游戏代码：C# 游戏（BDSP 为 `TeamLumi/opendpr`）读取速度比 IL2CPP 输出更快；游戏键找到第三队客户端（剑／盾的：四个LAN模式客户端）。
 3. 获取一次构建的可执行文件和元数据；首先命名一切。
-4.读取二进制文件验证转录并找到未写入的部分（BDSP的`cryptoKeyDataSeed`及其版本规则）。
+4. 读取二进制文件验证转录并找到未写入的部分（BDSP的`cryptoKeyDataSeed`及其版本规则）。
 5. 然后才搜索关键空间：固定错误的一个输入会给出肯定的否定结果。
 
 解密 Pia LDN 标题需要其密码、`cryptoKeyDataSeed`、本地通信版本、广告和每个发送者的 MAC（[Pia 层](pia.md)）。
@@ -24,8 +25,8 @@ nav_order: 3
 
 NSP 是 NCA 的 PFS0 档案；可执行文件位于多 GB NCA 的末尾附近。
 
-1.直接解析PFS0头：hactool的`--listfiles`偏移量是相对于数据库的。
-2.解密`<rights id>.tik`中的标题密钥（权限id是NSP的文件名）：加密密钥在`+0x180`，权限id在`+0x2A0`，绝对。它的最后一个字节是密钥生成 *n*，它使用 `titlekek_{n-1}`。 hactool取`--titlekey`上的加密密钥； `xci_read.py` 自行读取票据。
+1. 直接解析PFS0头：hactool的`--listfiles`偏移量是相对于数据库的。
+2. 解密`<rights id>.tik`中的标题密钥（权限id是NSP的文件名）：加密密钥在`+0x180`，权限id在`+0x2A0`，绝对。它的最后一个字节是密钥生成 *n*，它使用 `titlekek_{n-1}`。 hactool取`--titlekey`上的加密密钥； `xci_read.py` 自行读取票据。
 3. 构建稀疏文件：`dd` NCA 的头部，`truncate -s` 为其实际大小，`dd ... seek_bytes
    conv=notrunc` 所需范围。磁盘上的 109 MB 相当于 2.7 GB，并通过 hactool 的边界检查（`du -h` 显示实际大小，`ls -l` 则不显示）。
 ### 来自 XCI

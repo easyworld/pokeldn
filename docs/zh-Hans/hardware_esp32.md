@@ -35,19 +35,19 @@ XIAO ESP32C6 版本 0.2 在 macOS 上通过本机 USB 以 824.6 KB/s 的速度�
 
 打开端口会通过 USB 串行/JTAG 重置 C6 或 S3（重置原因 11，核心重置）。与
 `CONFIG_ESP_SYSTEM_BBPLL_RECALIB=y`，两个芯片上的 ESP-IDF 默认值，应用程序的启动运行 `recalib_bbpll()`（`esp_system/port/soc/esp32c6/clk.c`，在 S3 上相同）：在除 CPU 复位之外的任何复位上，它都会调用 `rtc_clk_cpu_freq_set_xtal()`，这会停止 BBPLL 而不检查其 USB 消费者，然后重新启动它。当主机与其通信时，USB 串行/JTAG 从该 PLL 获取 48 MHz 时钟。在 XIAO ESP32C6 上，链接有时会出现乱码，并一直保持这种状态，直到拔掉板：固件继续运行，SOF 帧号在启动后从未移动，
-`USB_SERIAL_JTAG_INT_RAW` 存在 PID、CRC5 和位填充错误（`0000b5b2` 与 `0000b50a` 正常），答复卡在 IN FIFO 中，时钟使能、pad 和 PCR 寄存器与正常板匹配，GET_CONFIGURATION over EP0 失败，esptool 的 USB 重置没有答复。
+`USB_SERIAL_JTAG_INT_RAW` 存在 PID、CRC5 和位填充错误（`0000b5b2` 与 `0000b50a` 正常），答复卡在 IN FIFO 中，时钟使能、pad 和 PCR 寄存器与正常板匹配，通过 EP0 执行 GET_CONFIGURATION 失败，esptool 的 USB 重置没有答复。
 
 | C6图像|端口打开（重置和启动）|链接失效，直到拔掉插头|
 |---|---|---|
 |重新校准 | 113 | 113 1、开113|
-|重新校准关闭| 900 | 900 0 |
+| 重新校准关闭 | 900 | 0 |
 
 C6 和 S3 构建集 `CONFIG_ESP_SYSTEM_BBPLL_RECALIB=n`；它的 Kconfig 帮助允许使用 ESP-IDF v5.2 或更高版本构建的引导加载程序，并且每个合并的映像都带有自己的 v6.1 引导加载程序。 S3 设置未在 S3 上进行测试。 C3没有这个选项，也没有显示任何故障。关闭重新校准后，在 macOS 重新枚举设备（“设备未配置”）后，C6 上的 600 个打开中的 4 个一次没有找到答案，并且在下一次打开时找到工作链接。
 
 C6 版本还带有 USB 手表 (`usbwatch.c`)：它每 5 ms 对 SOF 帧编号进行一次采样，一旦帧计数或主机发送了一个字节，就会在 2 s 停顿后重新启动芯片，并在下一个 HELLO 上将其前后的 USB 和时钟寄存器报告为 LOG 行。在 `idf.py` 环境中使用 `POKELDN_USB_BEACON=1` 构建，C6 映像还将这些寄存器、它看到的 SOF 更改以及它每秒读取一次的主机字节作为供应商操作帧（类别 127，OUI `02:55:53`）发送到组地址 `03:55:53:42:57:00`；当 USB 链路断开时，嗅探板将它们与 `esp32_sniff.py --mac 03:55:53:42:57:00` 保持在一起。 4 字节供应商标头之后的帧主体是 u32 小端：正常运行时间 ms、SOF 更改、主机字节、`wire_dropped`、停顿计数，然后是 `usbwatch.c` 中列出的 16 个寄存器。
 ## 角色
 
-|角色 |董事会的职责 |
+|角色 |开发板的职责 |
 |---|---|
 |闲置|在一个频道上混杂；每个带有 Nintendo LDN 前缀 `7f 00 22 aa` 的动作帧都会转到主机 |
 |车站|通过 BSSID 和主机派生的 CCMP 密钥加入游戏机的网络 |
@@ -67,7 +67,7 @@ SoftAP的信标、探测响应和关联响应内置于封闭的环境中。
 |领域 |切换形式| ESP32 软AP |可设置|
 |---|---|---|---|
 |隐藏 SSID 元素 | 32 个零字节 |长度 0 (`ieee80211_beacon_construct` 0xc4) |没有|
-|支持的价格 | `82 84 8B 96 0C 12 18 24` | `8B 96 82 84 0C 18 30 60` |不;相同的 12 个速率和基本位，扩展 | 中的 9 和 18
+| 支持的速率 | `82 84 8B 96 0C 12 18 24` | `8B 96 82 84 0C 18 30 60` | 否；12 个速率及基本速率标志相同，9 和 18 位于 Extended 中 |
 |延长价格 | `30 48 60 6C` | `6C 12 24 48` |没有|
 |能力，灯塔| `0x0511` | `0x0431`（短前导码常量，`ieee80211_getcapinfo` 0x7b）|没有|
 | HT 元件 |无 |存在于 11b/g/n |删除：固件设置 11b/g |
@@ -92,26 +92,26 @@ SoftAP的信标、探测响应和关联响应内置于封闭的环境中。
 | `0x08` ETH_TX | 主机 |以太网帧，由驱动程序使用站密钥或组密钥进行加密。完整的驱动程序队列 (`ESP_ERR_NO_MEM`) 每 1 毫秒重试一次，最多 100 毫秒；发往离开站的帧立即失败，并显示 `0x3015` (`ESP_ERR_WIFI_NOT_ASSOC`)。站点将以太网源作为其 802.11 发送器地址发送：LINK 中除 MAC 之外的源永远不会得到确认 (49 of 49) |
 | `0x09` RAW_TX | 主机 |没有 FCS 的 802.11 帧 (`esp_wifi_80211_tx`)；广告|
 | `0x0A` 嗅探 | 主机 | u8通道，6个MAC；每个管理和数据帧到或来自它，整体，如RX_SNIFF； MAC ff:ff:ff:ff:ff:ff 将通道上的每个帧发送为 RX_CENSUS |
-| `0x0B` 状态 | 主机 |没有任何;状态 | 回答
+| `0x0B` STATUS | 主机 | 无；由 STATUS 应答 |
 | `0x0C` 长凳 | 主机 | u32字节，u16消息大小（8到1600）；结果，然后 BENCH 消息的速度与 UART 接收消息的速度一样快 |
 | `0x0D` LED | 主机 | u8模式、u8峰值亮度、u16周期ms（0：模式默认）、u16持续时间ms（0：直到下一个LED）；结果。较旧的固件答案 `0x106` |
 | `0x0E` 显示器 | 主机 |屏幕命令（[屏幕](#the-screen)）；结果 `0x105` (`ESP_ERR_NOT_FOUND`) 无屏幕，`0x106` 来自旧固件 |
 | `0x0F` 活着 | 主机 |没有，没有回复；武器[主机看门狗](#the-host-watchdog)。 1.4.0之前的固件回答`0x106`，因此主机只将其发送到1.4.0及更高版本 |
-| `0x81` 信息 |董事会| u8协议版本（一）、6站MAC、6AP MAC、u8芯片改版，正文|
-| `0x82` 结果 |董事会| u8 命令，i32 `esp_err_t` |
-| `0x83` 日志 |董事会|文字|
-| `0x84` RX_MGMT |董事会| u8通道，i8 RSSI，不带FCS的帧：LDN动作帧；同时还托管一个到板的 BSSID 的管理帧、一个数据帧的前 40 个字节以及一个站的 no-DS 广播整体 |
-| `0x85` RX_ETH |董事会|驱动程序解密的以太网帧 |
-| `0x86` 链接 |董事会| u8向上，u16原因，6 MAC；原因 `0xFFFF` 在 15 秒内没有关联，`0xFFFE` 密钥被拒绝 |
-| `0x87` STA_JOINED |董事会| 6 MAC、u8 AID、i8 密钥安装结果、u8 端口打开 |
-| `0x88` STA_LEFT |董事会| 6 MAC、u16原因|
-| `0x89` 状态 |董事会|文本计数器（下）；托管期间每 2 秒自动发送一次，每 5 秒由主机轮询一次写入跟踪 |
-| `0x8A` 长凳 |董事会| u32 序列和发票字节；最后一个携带序列 `0xFFFFFFFF` 和板花费的 u32 微秒 |
-| `0x8B` 信用 |董事会| u32 自上次 HELLO 以来读取和处理的主机字节数，从其分隔符后的字节开始计数；当线路空闲时，每 1024 字节在 HELLO 上发送一次，并且在空闲时每 100 毫秒发送一次，在任何排队的消息之前 |
-| `0x8C` RX_SNIFF |董事会| u8 通道、i8 RSSI、u8 `sig_mode`（0 传统、1 HT）、u8 传统速率代码 (`wifi_phy_rate_t`)、u8 HT MCS（40 MHz 的第 7 位）、无 FCS 的帧；还有通道上的每个 10 字节 ACK |
-| `0x8D` TX_DONE |董事会|驱动程序的一帧、站或接入点的 TX 完成：u32 板时间 µs、自 ETH_TX 完成以来的 u32 µs（如果没有则全部为 1）、由对等无线收发设备确认的 u8、u8 接口、u16 长度、帧的前 24 个字节（其 802.11 标头）|
-| `0x8E` 按钮 |董事会| BOOT 按下，去抖超过 30 ms：u32 板时间 µs，u16 自启动以来按下计数；主机打印 `BOOT button, mark N` 并且跟踪保留它 |
-| `0x8F` RX_CENSUS |董事会|每个接收到的帧，FCS 故障和控制帧包括：u32 接收时间 µs、i8 RSSI、i8 本底噪声、u8 `rx_state`（0 好）、u8 数据包类型（0 管理、1 控制、2 数据、3 其他）、u8 `sig_mode`、u8 速率代码、u8 MCS（40 MHz 的位 7）、u16 `sig_len` 带 FCS，帧的前 16 个字节 |
+| `0x81` 信息 |开发板| u8协议版本（一）、6站MAC、6AP MAC、u8芯片改版，正文|
+| `0x82` 结果 |开发板| u8 命令，i32 `esp_err_t` |
+| `0x83` 日志 |开发板|文字|
+| `0x84` RX_MGMT |开发板| u8通道，i8 RSSI，不带FCS的帧：LDN动作帧；同时还托管一个到板的 BSSID 的管理帧、一个数据帧的前 40 个字节以及一个站的 no-DS 广播整体 |
+| `0x85` RX_ETH |开发板|驱动程序解密的以太网帧 |
+| `0x86` 链接 |开发板| u8向上，u16原因，6 MAC；原因 `0xFFFF` 在 15 秒内没有关联，`0xFFFE` 密钥被拒绝 |
+| `0x87` STA_JOINED |开发板| 6 MAC、u8 AID、i8 密钥安装结果、u8 端口打开 |
+| `0x88` STA_LEFT |开发板| 6 MAC、u16原因|
+| `0x89` 状态 |开发板|文本计数器（下）；托管期间每 2 秒自动发送一次，每 5 秒由主机轮询一次写入跟踪 |
+| `0x8A` 长凳 |开发板| u32 序列和发票字节；最后一个携带序列 `0xFFFFFFFF` 和板花费的 u32 微秒 |
+| `0x8B` 信用 |开发板| u32 自上次 HELLO 以来读取和处理的主机字节数，从其分隔符后的字节开始计数；当线路空闲时，每 1024 字节在 HELLO 上发送一次，并且在空闲时每 100 毫秒发送一次，在任何排队的消息之前 |
+| `0x8C` RX_SNIFF |开发板| u8 通道、i8 RSSI、u8 `sig_mode`（0 传统、1 HT）、u8 传统速率代码 (`wifi_phy_rate_t`)、u8 HT MCS（40 MHz 的第 7 位）、无 FCS 的帧；还有通道上的每个 10 字节 ACK |
+| `0x8D` TX_DONE |开发板|驱动程序的一帧、站或接入点的 TX 完成：u32 板时间 µs、自 ETH_TX 完成以来的 u32 µs（如果没有则全部为 1）、由对等无线收发设备确认的 u8、u8 接口、u16 长度、帧的前 24 个字节（其 802.11 标头）|
+| `0x8E` 按钮 |开发板| BOOT 按下，去抖超过 30 ms：u32 板时间 µs，u16 自启动以来按下计数；主机打印 `BOOT button, mark N` 并且跟踪保留它 |
+| `0x8F` RX_CENSUS |开发板|每个接收到的帧，FCS 故障和控制帧包括：u32 接收时间 µs、i8 RSSI、i8 本底噪声、u8 `rx_state`（0 好）、u8 数据包类型（0 管理、1 控制、2 数据、3 其他）、u8 `sig_mode`、u8 速率代码、u8 MCS（40 MHz 的位 7）、u16 `sig_len` 带 FCS，帧的前 16 个字节 |
 
 `rx_state` 98 标记双流 HT（MCS 8 到 15），单流 ESP32 永远不会解码（一次普查中 79 个中的 79 个）； 65 标记任何其他调制的损坏帧（5605 中的 1397）。
 
@@ -165,7 +165,7 @@ EtherType `0x88B7`帧是LDN认证； `esp32_wlan` 将它们变成LDN图书馆的
 | 1000000 | 99.4 KB/秒 | 1429 共 1400 字节 | 0 | 0 |
 | 1500000 | 149.1 KB/秒 | 4286 共 1400 字节 | 0 | 0 |
 | 1500000 | 140.2 KB/秒 | 20000 个 100 字节 | 0 | 0 |
-| 2000000, 3000000 |董事会从未以新的费率回答“HELLO”| | | |
+| 2000000, 3000000 |开发板从未以新的费率回答“HELLO”| | | |
 
 传说中位于 921600 的 Z-A 席位与 CREDIT 没有拒绝关联，其第一条消息位于 1.68 秒（1500000 处为 1.7 秒），并且计算了 695 个 ETH_TX 中的 695 个消息。
 ### 主机到板命令丢失和信用
@@ -179,7 +179,7 @@ EtherType `0x88B7`帧是LDN认证； `esp32_wlan` 将它们变成LDN图书馆的
 | FIFO 在 120 字节时耗尽 (`UART_FULL_THRESH_DEFAULT`)，在 1500000 时从满需要 53 µs |朱座，信用：1901 年的约 210 号丢失，`uart_fifo_ovf` 235 |阈值 32 (`uart_set_rx_full_threshold`)，640 µs：1691 中的 10，`uart_fifo_ovf` 0 |
 | `uart_read_bytes` (IDF 6.1 `uart.c:1738`) 再次等待每个环项目的超时，直到它有 `length` |每 15 ms 读取一个 21 字节命令，延迟 461 ms (`--trickle 5`)；朱座 `read_max_us` 311644 |等待一个字节，然后取`uart_get_buffered_data_len`：20.3 ms |
 | `uart_write_bytes` 在整个 TX 环上忙环 (`uart.c:1662`)；作者（优先级 20）与读者（19）共享核心 1 |朱洪水持有ETH_TX长达707毫秒； `esp32_pair_bench.py AP STA --flood 0 --send 20 --bench`：`read_max_us` 7982767，74 次发送被拒绝 |作者睡眠直到框架适合（`uart_get_tx_buffer_free_size`）：30382 µs，没有人拒绝（[朱和紫](sv.md#the-retail-acknowledgement-and-a-flood-of-retransmits)）|
-|每 32 个字节将一个 `UART_DATA` 事件发送到携带溢出事件（`uart.c:1369`、`1543`）的 64 条目队列中，在 1500000 时在 14 毫秒内满 |长命令期间的溢出可能无法计数读者上面的任务每次都会耗尽它的精力； `uart_events_full` |
+| 每 32 字节向承载溢出事件的 64 项队列投递一个 `UART_DATA` 事件（`uart.c:1369`、`1543`）；波特率为 1500000 时，14 ms 即可填满 | 长命令期间的溢出可能未被计数 | 优先级高于读取任务的任务每个 tick 都清空该队列；`uart_events_full` |
 
 忽略窗口 (`--uplink 5000 --no-flow`)，每个 `uart_fifo_ovf` 丢失 136.5 个字节，大约一个 FIFO，并且 `uart_events_full` 保持 0：完整的环停止 `UART_DATA` 事件。
 
@@ -213,7 +213,7 @@ TX_DONEs 在他们的主板时间平静后 15 毫秒到达主机，最糟糕的�
 |---|---|---|---|---|---|---|
 | 1 | 7489 | 1.24 毫秒 | 116 毫秒 | 261 毫秒 | 5 | 13.3% / 12.8% |
 | 6 | 13670 | 0.85 毫秒 | 18 毫秒 | 108 毫秒 | 1 | 10.5% / 7.7% |
-| 11 | 11 7069 | 7069 0.86 毫秒 | 9 毫秒 | 46 毫秒 | 0 | 15.0% / 5.7% |
+| 11 | 7069 | 7069 0.86 毫秒 | 9 毫秒 | 46 毫秒 | 0 | 15.0% / 5.7% |
 | 1 | 7332 | 1.03 毫秒 | 25 毫秒 | 88 毫秒 | 0 | 20.6% / 9.4% |
 | 1、24 Mbit/s 固定 | 6892 | 0.73 毫秒 | 69 毫秒 | 185 毫秒 | 5 | 2.8% / 14.3% |
 
@@ -228,49 +228,49 @@ TX_DONEs 在他们的主板时间平静后 15 毫秒到达主机，最糟糕的�
 
 |位 3..5 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |---|---|---|---|---|---|---|---|
-|速率，兆比特/秒 | 1 | 11 | 11 6 | 12 | 12 24 | 36 | 36 54 | 54
+| 速率，Mbit/s | 1 | 11 | 6 | 12 | 24 | 36 | 54 |
 
 是什么让主板在副本之间等待大约 100 毫秒尚不清楚。 `tools/ldn/esp32_hold.py CAPTURE
 TRACE` 将每个等待分为几个阶段，按长度配对 TX-done（它们完成时乱序）；
 `tools/ldn/esp32_hold_air.py` 列出了嗅探器在每次保持期间看到的内容。
 ### CPU时钟
 
-固件以 240 MHz 运行 CPU（`CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240`；IDF 的默认值为 160）。通道 1 上有 6 个火红交易，每次交易一行；错过的是董事会没有听到的游戏机第一批副本的份额：
+固件以 240 MHz 运行 CPU（`CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240`；IDF 的默认值为 160）。通道 1 上有 6 个火红交易，每次交易一行；错过的是开发板没有听到的游戏机第一批副本的份额：
 
-|中央处理器 | RX 缓冲器 |框架| p90 | p90 | p99 | p99 | p99.9 | p99.9超过 5 毫秒 |超过 40 毫秒 |超过 80 毫秒 |持有|错过了| 游戏机重试 |
+| CPU | RX 缓冲区 | 帧数 | p90 | p99 | p99.9 | 超过 5 ms | 超过 40 ms | 超过 80 ms | 保持次数 | 漏收率 | 游戏机重试率 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 160兆赫| 16 | 16 6744 | 4.7 毫秒 | 30.4 毫秒 | 91.7 毫秒 | 605 | 605 41 | 41 10 | 10 1 | | 8.8% |
-| 160兆赫| 25 | 25 6999 | 4.6 毫秒 | 34.4 毫秒 | 106.5 毫秒 | 615 | 615 57 | 57 19 | 19 1 | 6.8% | 13.0% |
-| 240兆赫| 25 | 25 7425 | 3.1 毫秒 | 13.5 毫秒 | 34.3 毫秒 | 322 | 322 5 | 0 | 0 | 5.2% | 12.4% |
-| 240兆赫| 25 | 25 7235 | 3.0 毫秒 | 15.7 毫秒 | 66.3 毫秒 | 242 | 242 16 | 16 3 | 0 | 4.9% | 11.9% |
-| 160兆赫| 25 | 25 8349 | 4.3 毫秒 | 27.5 毫秒 | 82.3 毫秒 | 666 | 666 41 | 41 9 | 0 | 5.3% | 10.2% |
-| 240兆赫| 25 | 25 7021| 5.0 毫秒 | 31.7 毫秒 | 109.6 毫秒 | 708 | 708 57 | 57 16 | 16 1 | 8.5% | 18.9% |
+| 160兆赫 | 16 | 6744 | 4.7 毫秒 | 30.4 毫秒 | 91.7 毫秒 | 605 | 41 | 10 | 1 |  | 8.8% |
+| 160兆赫 | 25 | 6999 | 4.6 毫秒 | 34.4 毫秒 | 106.5 毫秒 | 615 | 57 | 19 | 1 | 6.8% | 13.0% |
+| 240兆赫 | 25 | 7425 | 3.1 毫秒 | 13.5 毫秒 | 34.3 毫秒 | 322 | 5 | 0 | 0 | 5.2% | 12.4% |
+| 240兆赫 | 25 | 7235 | 3.0 毫秒 | 15.7 毫秒 | 66.3 毫秒 | 242 | 16 | 3 | 0 | 4.9% | 11.9% |
+| 160兆赫 | 25 | 8349 | 4.3 毫秒 | 27.5 毫秒 | 82.3 毫秒 | 666 | 41 | 9 | 0 | 5.3% | 10.2% |
+| 240兆赫 | 25 | 7021 | 5.0 毫秒 | 31.7 毫秒 | 109.6 毫秒 | 708 | 57 | 16 | 1 | 8.5% | 18.9% |
 
 一种设置的运行之间的差异与时钟的差异一样大。
 ### 频道
 
 频道被占用后，需要等待很长时间。在测量这些交易时，频道 1 还承载游戏机的家庭接入点并进行漫长的等待：
 
-|频道 |交易 |等等 p99 |等待最大 |交易持有时间超过 100 毫秒 |董事会错过了，游戏机第一个副本|
+|频道 |交易 |等等 p99 |等待最大 |交易持有时间超过 100 毫秒 |开发板错过了，游戏机第一个副本|
 |---|---|---|---|---|---|
 | 1 | 9 | 13.5 至 116 毫秒 | 65 至 261 毫秒 | 5 | 4.9% 至 8.5% |
 | 6 | 1 | 18 毫秒 | 108 毫秒 | 1 | |
-| 11 | 11 4 | 9 至 11.2 毫秒 | 19 至 46 毫秒 | 0 | 3.3%、5.5%、6.0% |
+| 11 | 4 | 9 至 11.2 毫秒 | 19 至 46 毫秒 | 0 | 3.3%、5.5%、6.0% |
 
 在通道 11 上，主板在相同的 p90 等待（4.5 ms）下错过了同样多的第一个副本；只有尾部不同（20 毫秒内有 8 帧和 9 帧，而 42 到 137 帧）：接收未命中不会保持。 `config/host.local.toml`取`[host] channel`；游戏机加入 1、6 或 11 上的主机。
-### 董事会是聋方
+### 开发板是聋方
 
 嗅探板将每个 ACK 保存为 10 字节 RX_SNIFF； ACK 仅命名其接收者，因此
 `tools/ldn/esp32_hold_air.py` 将其与之前的数据副本配对；副本被确认并再次发送意味着其发送者错过了 ACK。通道 1 上的一次火红交换（6744 帧）：
 
-|发件人 |第一份副本| | 之后没有 ACK |确认并再次发送 |
+| 发送方 | 首次发送的副本 | 未收到 ACK | 已确认后再次发送 |
 |---|---|---|---|
-|董事会| 6514 | 490 (7.5%) | 56 | 56
-| 游戏机 | 4517 | 4517 428 (9.5%) | 2 |
+| 开发板 | 6514 | 490 (7.5%) | 56 |
+| 游戏机 | 4517 | 428 (9.5%) | 2 |
 
-在那次交换中，董事会错过的 ACK 远多于游戏机（56 对 2）。在保持期间，板既不会听到游戏机的数据，也不会听到其 ACK：其所保持帧的副本每隔大约 40 ms 发出，并且游戏机的 42% 到 66% 的帧携带重试位（整个会话中的 11% 到 14%），而嗅探器以 -19 到 -21 dBm 听到双方的声音。
+在那次交换中，开发板错过的 ACK 远多于游戏机（56 对 2）。在保持期间，板既不会听到游戏机的数据，也不会听到其 ACK：其所保持帧的副本每隔大约 40 ms 发出，并且游戏机的 42% 到 66% 的帧携带重试位（整个会话中的 11% 到 14%），而嗅探器以 -19 到 -21 dBm 听到双方的声音。
 
-游戏机的重试是主板的接收未命中。通过与嗅探器（`tools/ldn/esp32_rx_copies.py HOST_TRACE SNIFF_TRACE --ap BSSID --sta MAC`）的序列号匹配，游戏机多次发送的帧到达主板的RX_MGMT头，将重试位复制为一份，重试位位于1027中的1008；这样的副本没有更早的序列号，仅从电路板的跟踪上就可以看出它的缺失。该主板在 54 和 48 Mbit/s、-20 dBm 下错过了游戏机第一个副本的 4.5% 到 12.1%。错过第一个副本的概率为 37% 到 52%，听到一个副本的概率为 28% 到 32%； RSSI、速率和长度没有不同。
+游戏机的重试是主板的接收未命中。通过与嗅探器（`tools/ldn/esp32_rx_copies.py HOST_TRACE SNIFF_TRACE --ap BSSID --sta MAC`）的序列号匹配，游戏机多次发送的帧到达主板的RX_MGMT头，将重试位复制为一份，重试位位于1027中的1008；这样的副本没有更早的序列号，仅从开发板的跟踪上就可以看出它的缺失。该主板在 54 和 48 Mbit/s、-20 dBm 下错过了游戏机第一个副本的 4.5% 到 12.1%。错过第一个副本的概率为 37% 到 52%，听到一个副本的概率为 28% 到 32%； RSSI、速率和长度没有不同。
 ### 在两个板上接收未命中
 
 `tools/ldn/esp32_pair_bench.py AP STA --flood 0 --burst N --send R` 让站板发送 200 字节帧，并根据接入点的标头副本计算其第一个副本丢失的帧。任一板都会在空闲空气中作为接入点丢失，以 -43 至 -48 dBm 收听电台：每秒 20 至 100 帧时为 5.5 至 22.2%，相同的 30 秒运行范围为 6.1 至 43.7%。站等待确认的最长等待时间在通道 1 上为 89 到 100 毫秒，在通道 11 上为 8 到 22 毫秒。随着标头副本中的接收时间（RSSI 之后的第二个 AP_START 标志字节位 2、`rx_ctrl.timestamp`、u32 µs），丢失率在 102.4、51.2、25.6 和50 和 100 Hz 时为 1024 毫秒。
@@ -398,16 +398,16 @@ DISPLAY（`0x0E`）携带一项操作：
 |标题 |来自|在游戏机上收到宝可梦|动画后的第一条消息|
 |---|---|---|---|
 | 火红／叶绿 | START_TRADE | 22.7 秒 | READY_FINISH_TRADE ([火红链接](frlg_link.md)) |
-|我们走吧|步骤 `0e` | 15.3 秒 |类型 4 发票 ([Let's Go session](lgpe_session.md#the-trade-animation)) |
+|Let's Go|步骤 `0e` | 15.3 秒 |类型 4 记录 ([Let's Go session](lgpe_session.md#the-trade-animation)) |
 | 剑／盾 |最后的同步命令 40 | 15.0 秒 |无 ([剑交换](swsh_trade.md#the-trade-animation)) |
 | BD/SP | `tradeState` 5 | 18.6 秒 |无 ([BDSP 交换](bdsp_trade.md#the-completed-trade)) |
 | 传说阿尔宙斯 | `01 0e` | 28.5 秒 |盒子消息 `00 02` ([传说阿尔宙斯](pla.md#the-completed-trade)) |
 | 朱／紫 | `8001010e` | 19.8 秒 |无 ([朱和紫](sv.md#the-trade)) |
 | 传说 Z-A |第四步 | 26.2 秒 |下一个 `01 01` 预览 ([传说 Z-A](za.md#a-trade-with-a-retail-console)) |
 
-每次都是在一个会话中手工标记的，最多可能会延迟 2 秒。当游戏机在动画结束后发送消息时，启动器会在那里调用 `arrived`。通过 PKHeX 助手记录其国家物种和名称；精灵是 PokeAPI 的火红／叶绿之一 (64x64)，最多为 386 种，之后为默认精灵，通过应用程序的精灵缓存及其下载设置。精灵变成每像素一位：
+每次都是在一个会话中手工标记的，最多可能会延迟 2 秒。当游戏机在动画结束后发送消息时，启动器会在那里调用 `arrived`。通过 PKHeX 助手记录其国家种类和名称；精灵是 PokeAPI 的火红／叶绿之一 (64x64)，最多为 386 种，之后为默认精灵，通过应用程序的精灵缓存及其下载设置。精灵变成每像素一位：
 
-1.裁剪至其可见像素；大于 64（卡上为 40）时，它会按面积缩小，每个输出像素占据其框的较暗的三分之一。
+1. 裁剪至其可见像素；大于 64（卡上为 40）时，它会按面积缩小，每个输出像素占据其框的较暗的三分之一。
 2. 亮度超过截止值的地方点亮：可见像素最暗的八分之一处的亮度加6，钳位到20..60，因此轮廓很暗，而黑暗的宝可梦的身体保持点亮。
 3. 暗，其中亮像素比其最亮的四个相邻像素低 40 以上或 0.72 以下：内线。
 
@@ -428,38 +428,24 @@ ESP-IDF v6.1（标签 `v6.1`，提交 `fff9895c82d744c7237be8847347bdd1b07c6643`
 桌面应用程序在用于刷新的同一连接上使用 esptool 检测芯片。它在写入之前在芯片的闪存偏移量（ESP32：`0x1000`、S3、C3 和 C6：`0x0`）处验证合并映像的引导加载程序，包括自定义映像。当合并图像以填充开始时，esptool 5.4.0 的 `write_flash` 可以跳过其芯片检查。切勿从 USB 桥 ID 选择固件。 [桌面版本](gui.md) 涵盖了所有四个图像的打包。
 ### USB 主机链接
 
-S3、C3 和 C6 通过 USB 串行/JTAG 使用相同的 COBS、CRC 和 CREDIT 协议。两个驱动环均为 16 KB。 IDF v6.1的`usb_serial_jtag_write_bytes`将整个帧入队或超时后返回零；作者等待 20 毫秒重试，并在 500 毫秒后没有进展地计算丢弃的消息。 `write_max_us` 包括此等待。读取器在 20 毫秒超时后获取可用字节。 UART 溢出和帧计数器在此路径上保持为零；它们不测量 USB 丢失情况。当 16 KB RX 环已满且不计数时，接收中断会丢弃 64 字节数据包（`usb_serial_jtag.c:144` 忽略 `xRingbufferSendFromISR` 的结果）。 CREDIT 窗口可防止环被填满；那里的损失仅显示为写入超过董事会最后一个信用的字节。
+S3、C3 和 C6 通过 USB 串行/JTAG 使用相同的 COBS、CRC 和 CREDIT 协议。两个驱动环均为 16 KB。 IDF v6.1的`usb_serial_jtag_write_bytes`将整个帧入队或超时后返回零；作者等待 20 毫秒重试，并在 500 毫秒后没有进展地计算丢弃的消息。 `write_max_us` 包括此等待。读取器在 20 毫秒超时后获取可用字节。 UART 溢出和帧计数器在此路径上保持为零；它们不测量 USB 丢失情况。当 16 KB RX 环已满且不计数时，接收中断会丢弃 64 字节数据包（`usb_serial_jtag.c:144` 忽略 `xRingbufferSendFromISR` 的结果）。 CREDIT 窗口可防止环被填满；那里的损失仅显示为写入超过开发板最后一个信用的字节。
 `POKELDN_ESP32_BAUD` 在所有目标上均被接受，并且仅更改经典 ESP32 的线路速率。
 ## 跑步
 
-> 本节已随上游更新，以下内容暂保留英文。
+`POKELDN_RADIO=esp32:<port>` 将各启动器的 `ldn` 调用转交给开发板。`esp32:auto` 选择唯一连接的 USB 串口（`/dev/cu.usbserial-*`、`/dev/cu.SLAB_USBtoUART*`、`/dev/cu.wchusbserial*`、`/dev/cu.usbmodem*`、`/dev/ttyUSB*`、`/dev/ttyACM*`；Windows 上为 USB COM 端口）；若连接了多个则拒绝自动选择，因为打开端口可能重置开发板。每个进程只打开一次端口，DTR 和 RTS 均释放；macOS 上的 CP2102 开发板仍会在打开时复位，因此主持端在切换到 921600 前，会在 5 秒内重试 HELLO。Windows 以独占方式打开 COM 端口：只要本进程或其他进程仍持有句柄，第二次打开就会因 `PermissionError(13, 'Access is
+denied.')` 失败。所以开发板始终不应答 HELLO 时，启动器必须先关闭端口再重试。
 
-`POKELDN_RADIO=esp32:<port>` puts every launcher's `ldn` calls on the board. `esp32:auto` takes the
-only USB serial port present (`/dev/cu.usbserial-*`, `/dev/cu.SLAB_USBtoUART*`,
-`/dev/cu.wchusbserial*`, `/dev/cu.usbmodem*`, `/dev/ttyUSB*`, `/dev/ttyACM*`; USB COM ports on Windows)
-and refuses to choose between several, since opening a port can reset its board. The port is opened once
-per process with DTR and RTS released; a CP2102 board on macOS resets on open regardless, so the host
-retries HELLO for 5 s before switching to 921600. Windows opens a COM port exclusively: a second open
-while any handle is held, in this process or another, fails with `PermissionError(13, 'Access is
-denied.')`, so a board that never answers HELLO closes its port before the launcher retries.
+使用开发板时，启动器跳过所有 nl80211 步骤：`--phy auto` 解析为 `esp32`，不删除虚拟接口，也不执行 `iw`、`ip`、`nmcli` 或 `sysctl`；加入方的 `--mac` 改为开发板站点地址。macOS 不需要 root 权限。扫描会跳过 5 GHz 信道（36 及以上），因为开发板只支持 2.4 GHz，无法连接在 5 GHz 上主持会话的主机。FRLG 主持端不注入信标，由开发板接入点自行广播。
 
-On the board the launchers skip every nl80211 step: `--phy auto` resolves to `esp32`, no vif is
-deleted, no `iw`, `ip`, `nmcli` or `sysctl` runs, and a joiner's `--mac` becomes the board station's
-address. No root is needed on macOS. A scan skips 5 GHz channels (36 and up): the board is 2.4 GHz
-only, so a console hosting on 5 GHz cannot be reached. The FRLG hosts inject no beacons; the board's
-access point beacons itself.
+`POKELDN_ESP32_TRACE=FILE` 逐行追加所有串口消息：Unix 时间、`>`（主持端）或 `<`（开发板）、类型及十六进制载荷。
 
-`POKELDN_ESP32_TRACE=FILE` appends every serial message, one line each: Unix time, `>` (host) or `<`
-(board), type and payload in hex.
-
-| tool | what it does |
+| 工具 | 功能 |
 |---|---|
-| `tools/ldn/esp32_first_contact.py` | first run against a new board: `--flash` writes the build with esptool, then HELLO, STATUS, an idle scan counting LDN action frames per channel and source, and with `--keys` the LDN library's scan, decrypting each network |
-| `tools/ldn/esp32_sniff.py` | a second board as a sniffer (SNIFF) |
-| `tests/test_esp32.py` | the LDN library's host and station on two simulated boards (`pokeldn.ldn.esp32_sim`), from scan to fragmented UDP through two userspace stacks |
+| `tools/ldn/esp32_first_contact.py` | 新开发板首次运行：`--flash` 使用 esptool 写入固件，随后执行 HELLO、STATUS 和空闲扫描，按信道及来源统计 LDN action 帧；指定 `--keys` 时还运行 LDN 库扫描并解密各网络 |
+| `tools/ldn/esp32_sniff.py` | 使用第二块开发板进行嗅探（SNIFF） |
+| `tests/test_esp32.py` | 在两块模拟开发板上运行 LDN 库的主持端与站点（`pokeldn.ldn.esp32_sim`），覆盖扫描到通过两个用户态协议栈发送分片 UDP 的全过程 |
 
-A CH9102 or CH343 USB bridge enumerates as CDC ACM: `/dev/ttyACM0` on Linux, `/dev/cu.usbmodem*` on
-macOS.
+CH9102 或 CH343 USB 转串口芯片以 CDC ACM 设备枚举：Linux 为 `/dev/ttyACM0`，macOS 为 `/dev/cu.usbmodem*`。
 
 ### 不解码 OFDM 的板
 
@@ -470,8 +456,8 @@ macOS.
 | `tools/ldn/esp32_census.py` 靠近游戏机或繁忙的接入点 | `OFDM` 和 `HT` 属于好镜架 |好镜架全部为`DSSS`； OFDM 帧失败并显示 `rx_state` 65 |
 |作为站加入接入点，接入点向其发送的单播帧的速率 | HT MCS 5 至 7（HT40 接入点）| DSSS 5.5 Mbit/s 时约为 97%，从未高于 OFDM 6 或 HT MCS 1 |
 
-站关联和 ping 在这样的板上成功：接入点的速率自适应回落到 DSSS。通用 ESP32-WROOM-32 DevKit（ESP32-D0WD-V3 版本 3.1，CP2102）未通过 pokeldn 以外的固件的两项检查；具有相同芯片的WROOM-32E板通过了两者，听到了Sword的礼物网络并交付了一份神秘礼物（[问题1](https://github.com/Decryptu/pokeldn/issues/1)）。
-## 董事会交易
+站关联和 ping 在这样的板上成功：接入点的速率自适应回落到 DSSS。通用 ESP32-WROOM-32 DevKit（ESP32-D0WD-V3 版本 3.1，CP2102）未通过 pokeldn 以外的固件的两项检查；具有相同芯片的WROOM-32E板通过了两者，听到了剑的礼物网络并交付了一份神秘礼物（[问题1](https://github.com/Decryptu/pokeldn/issues/1)）。
+## 开发板交易
 
 ELEGOO 板（其无品牌模块上的 ESP32-D0WD-V3 版本 3.1、CP2102、macOS、921600 波特）可与零售 Switch 2 控制台进行交易：
 
@@ -482,16 +468,16 @@ ELEGOO 板（其无品牌模块上的 ESP32-D0WD-V3 版本 3.1、CP2102、macOS�
 |车站| 朱 | 交换，一个座位上不止一个；下面 |
 |接入点| 朱 | 交换：游戏机的类型 3 加入以类型 9 接受应答，密钥 `0x80` 打开，加入后 11.4 秒发送提议 |
 |站、接入点| 传说 Z-A | 交换两个角色 |
-|站、接入点|我们走吧| 交换两个角色 |
+|站、接入点|Let's Go| 交换两个角色 |
 |接入点| 传说阿尔宙斯 | 通过四个主机阶段（3、6、11、14）进行交换 |
-|车站|剑| 交换；延迟确认重新发送无序到达 ([Sword session](swsh_session.md)) |
+|车站|剑| 交换；延迟确认重新发送无序到达 ([剑 session](swsh_session.md)) |
 |接入点|剑| 交换和神秘礼物|
 |车站| 晶灿钻石 | 联合房间交换以节省费用。一个停下来但没有离开的客户会在房间里停留一站；游戏机拒绝相同的变量 id（结果 7），直到玩家重新进入房间或使用新的 id（[Pia 层](pia.md#the-version-9-connection-request)）|
 |接入点| 晶灿钻石 | a 明亮珍珠 进入托管房间并交易至存档 ([托管](bdsp_session.md#hosting)) |
 
-其他董事会及其交易：
+其他开发板及其交易：
 
-|董事会|角色 |标题 |结果 |
+|开发板|角色 |标题 |结果 |
 |---|---|---|---|
 |肖ESP32C3 |车站| 火红 | 交换，有效的 PK3 校验和；零丢失 ETH_TX、坏线框和 USB 重新同步 |
 |肖ESP32C3 |接入点|剑| 通过打包的 macOS 应用进行交换，合法 PK8 |
@@ -501,12 +487,12 @@ ELEGOO 板（其无品牌模块上的 ESP32-D0WD-V3 版本 3.1、CP2102、macOS�
 
 加入板卡接入点的火红游戏机列出网络（它接受零长度隐藏 SSID、速率顺序、功能 `0x0431` 和 WMM 元素），验证打开并在验证后 24 毫秒发送一个关联请求：功能 `0x0431`，侦听间隔 10，SSID 为 32 个十六进制字符，速率 `02 04 0b 16 0c 12 18 24`和 `30 48 60 6c`、功率能力 `00 14`、RSN 能力 `0x0000`、WMM 信息元素、供应商元素 `00 22 aa 10 01 02`。其LDN认证请求在`STA_JOINED`之后40毫秒到达`RX_ETH`。其首次广播需要固件转发（[A站广播](ldn.md#a-stations-broadcasts)）。
 
-朱作为加入方：董事会在第一次关联尝试中就座，从 `STA_JOIN` 到 0.35 秒
+朱作为加入方：开发板在第一次关联尝试中就座，从 `STA_JOIN` 到 0.35 秒
 `LINK`;会话加入在 0.93 秒内得到应答，并且在入座后 5.8 至 7.7 秒内发布公告。游戏机首次突发 46 条记录（约 50 KB），板到主机的速度达到 92 KB/s。
 ### 加入
 
-`STA_JOIN` 进行一次关联尝试：快速扫描给定通道和 BSSID，然后打开身份验证和关联。零售 Sword 的匹配网络在 10 次板连接中有 2 次尝试失败，`LINK` 因 `0xc9` 原因而关闭（未找到接入点，`STA_JOIN` 后 2.4 秒）或
-`0x2`（身份验证过期，1.3 秒后），而董事会继续在该频道上听到其广告；同一搜索上有一个新的 `STA_JOIN` 关联。成功连接报告 `LINK` 在 `STA_JOIN` 后增加 0.23 到 0.34 秒。主机在加入超时时间内发送 `STA_JOIN` 最多 3 次 (`pokeldn.ldn.esp32_wlan.JOIN_ATTEMPTS`)。为什么游戏机的网络会错过给定的尝试尚不清楚。
+`STA_JOIN` 进行一次关联尝试：快速扫描给定通道和 BSSID，然后打开身份验证和关联。零售 剑 的匹配网络在 10 次板连接中有 2 次尝试失败，`LINK` 因 `0xc9` 原因而关闭（未找到接入点，`STA_JOIN` 后 2.4 秒）或
+`0x2`（身份验证过期，1.3 秒后），而开发板继续在该频道上听到其广告；同一搜索上有一个新的 `STA_JOIN` 关联。成功连接报告 `LINK` 在 `STA_JOIN` 后增加 0.23 到 0.34 秒。主机在加入超时时间内发送 `STA_JOIN` 最多 3 次 (`pokeldn.ldn.esp32_wlan.JOIN_ATTEMPTS`)。为什么游戏机的网络会错过给定的尝试尚不清楚。
 ## 未解决
 
 - softAP 协商 WMM，而交换机主机则不协商；有或没有它的交易都完整。   `POKELDN_ESP32_AP_FLAGS=2` (`AP_FLAG_NO_QOS`) 关联后清除站点的 QoS 标志：然后板发送明文数据，而游戏机继续发送 QoS 数据。 Z-A、传说阿尔宙斯、Let's Go 和叶绿与之交易。两次嗅探 Z-A 交易重试了 11.9% 的主板帧和 11.5% 的游戏机帧（没有 QoS 数据），以及 1.3% 的游戏机帧（有 QoS 数据）；没有什么可以将差异归因于设置。

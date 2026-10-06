@@ -6,7 +6,7 @@ nav_order: 4
 
 # 神秘礼物菜单的本地无线分支
 
-剑和盾的神秘礼物菜单通过本地无线接收神奇卡：分销商在 LDN 网络上做广告，其广告数据中携带有碎片卡。地址是 Shield 1.3.2 的 `main`，除非标记为 Sword；直播行为是根据零售控制台来衡量的。
+剑和盾的神秘礼物菜单通过本地无线接收神奇卡：分销商在 LDN 网络上做广告，其广告数据中携带有碎片卡。地址是 盾 1.3.2 的 `main`，除非标记为 剑；直播行为是根据零售控制台来衡量的。
 ## 菜单
 
 接收方法选择器 `StateSelectReceiveDataBase` 每个菜单按钮都有一个子类 (`L_mystery_top_btn_00` .. `_04`)：
@@ -29,13 +29,13 @@ nav_order: 4
 |线 |文字|
 |---|---|
 | 9 | `Recherche de cadeau en cours...` |
-| 11 | 11 `Aucun cadeau n'a été trouvé.` |
-| 39 | 39 `Connexion à Internet activée.` |
-| 42 | 42 `Communication sans fil locale activée.` |
-| 63 | 63 `Via Internet` |
-| 64 | 64 `Via un code ou mot de passe` |
-| 65 | 65 `Voir vos Cadeaux Mystère` |
-| 69 | 69 `Via communication sans fil locale` |
+| 11 | `Aucun cadeau n'a été trouvé.` |
+| 39 | `Connexion à Internet activée.` |
+| 42 | `Communication sans fil locale activée.` |
+| 63 | `Via Internet` |
+| 64 | `Via un code ou mot de passe` |
+| 65 | `Voir vos Cadeaux Mystère` |
+| 69 | `Via communication sans fil locale` |
 | 72-75 | 72-75顶部菜单：`Recevoir un Cadeau Mystère`、荒野新闻、精灵球Plus、对战竞技场奖励|
 ### 应用程序的状态机
 
@@ -70,7 +70,7 @@ nav_order: 4
 |---|---|---|---|
 | 1 | 0 | 90 年代 153 次 | 0 |
 | 6 | 70 年代 339 | 70 年代 435 | 0 |
-| 11 | 11 0 | 90 年代的 95 | 0 |
+| 11 | 0 | 90 年代的 95 | 0 |
 ### 模式字节
 
 `session_config+0x70` 为本地播放模式。 `0x01096730`通过跳转表`0x02066C14`将其映射到Pia场景id和参与者计数； `0x010961a8` 通过 `0x02066C40` 将其映射到广告数据字节 `0x97`（广告 `0xAF`；游戏数据从 `0x18` 开始）：
@@ -310,7 +310,7 @@ LDN广告数据的0x180字节是由信标核心构成的0x18字节标头和0x168
 | `+0x0C` | 2 |惰性|
 | `+0x0E` | 2 |游戏版面具|
 | `+0x10` | 1 |标志：位 0 跳过每卡一次表，位 2 跳过每卡日期一次 |
-| `+0x11` | 1 |礼物种类，1 至 5 |
+| `+0x11` | 1 |礼种类类，1 至 5 |
 | `+0x12` | 1 |每卡一次限制 |
 | `+0x13` | 1 |每张卡一次标签 |
 | `+0x15` | 1 |标题索引 |
@@ -335,7 +335,7 @@ LDN广告数据的0x180字节是由信标核心构成的0x18字节标头和0x168
 
 卡牌id：导入循环`0x00ff2760`后收集id匹配的卡牌； `0x00ff2f50` 根据 16 位 id 读取记录 `+0x08`（`0x00ff30c0`、`ldr w8,[card+0xe0]`）处的 u32，因此 `+0x0A` 或 `+0x0B` 处的任何非零值均不匹配，导入器报告 2（礼物）在本游戏中无法获得）。在 `+0x0A` 的实机 `80 06` 上被这样拒绝；收到 `+0x0A` 零，`a5 6a` 位于 `+0x0C`。没有读取任何内容触及 `+0x0C`。 Projectpokemon 的 EventsGallery 中的所有 161 张 SwSh 卡在 `+0x0A` 和 `+0x0C` 处均为零，要么是 3，要么是它们的标题索引。
 
-标题：`+0x15` 索引标题表 PKHeX 作为 `text_wondercard8_<lang>.txt`，在接受卡之前显示在列表中。建造者使用的指数：1个宝可梦蛋、3个物品名称、21个“{物种}（Gigantamax宝可梦）”、34个零用钱、36个衣服、39个战斗点。索引0仅是物种名称（在`+0x0C`处有`0b 00`的记录，标题0被列为“皮卡丘”）；索引 11 是“{species} de {初训家}”，在法国游戏机上列为“皮卡丘 de POKELDN”并保存。
+标题：`+0x15` 索引标题表 PKHeX 作为 `text_wondercard8_<lang>.txt`，在接受卡之前显示在列表中。建造者使用的指数：1个宝可梦蛋、3个物品名称、21个“{物种}（Gigantamax宝可梦）”、34个零用钱、36个衣服、39个战斗点。索引0仅是种类名称（在`+0x0C`处有`0b 00`的记录，标题0被列为“皮卡丘”）；索引 11 是“{species} de {初训家}”，在法语版游戏机上列为“皮卡丘 de POKELDN”并保存。
 
 种类：1至5通过`0x02067620`调度；其他任何事情都会在没有任何构建的情况下返回成功。类型 3 和 5 (`0x010b5fd8`) 将 `+0x20` 处的字保留在标头 `+0x30` 中，并且不构建任何内容。类型 1 转到
 `0x010b58f0`，种类2复制其项目对，种类4转到`0x010b5bb0`。
@@ -351,28 +351,28 @@ LDN广告数据的0x180字节是由信标核心构成的0x18字节标头和0x168
 | `+0x2C` | 4 | PID，0滚一| |
 | `+0x030` | 9 个 0x1C |昵称，每种语言一个：0x1A 字节 UTF-16，语言字节位于 `+0x1A` |显示的名称 |
 | `+0x12C` | 9 个 0x1C | 初训家名称，0x1A 字节 UTF-16 |初训家 |
-| `+0x228` | 2 |鸡蛋位置| |
+| `+0x228` | 2 |蛋位置| |
 | `+0x22A` | 2 |见面地点 | |
 | `+0x22C` | 2 |球 | 1 人赠送了大师球 |
-| `+0x22E` | 2 |持有的物品；标头 `+0x10` |第236章 送了一个光球|
-| `+0x230` | 4×2 |举动，合法性不受检查|一个不相关物种的四个动作被保留|
+| `+0x22E` | 2 |持有物；标头 `+0x10` |第236章 送了一个光球|
+| `+0x230` | 4×2 |举动，合法性不受检查|一个不相关种类的四个动作被保留|
 | `+0x238` | 8 |四个重新学习动作| |
-| `+0x240` | 2 |物种，国家索引| 25 给了皮卡丘 |
+| `+0x240` | 2 |种类，国家索引| 25 给了皮卡丘 |
 | `+0x242` | 1 |表格| 77 与 1 给了加拉利安小火马 |
 | `+0x243` | 1 |性别，0男，1女，2无性别，3随机（`0x010b62ac`）；标头 `+0x64` | 1 给了一位女性 |
 | `+0x244` | 1 |等级，0 掷 1 | |
-| `+0x245` | 1 |蛋;标头 `+0x12` | 1 给了一个鸡蛋 |
-| `+0x246` | 1 |性质，`0xFF` 随机低于 25 (`0x7672c8`) | 10 给胆怯|
-| `+0x247` | 1 |能力，0/1/2 插槽 1/2/隐藏，3 个随机的两个，4 个随机的三个 | 2 给了避雷针 |
+| `+0x245` | 1 |蛋;标头 `+0x12` | 1 给了一个蛋 |
+| `+0x246` | 1 |性格，`0xFF` 随机低于 25 (`0x7672c8`) | 10 给胆小|
+| `+0x247` | 1 |特性，0/1/2 插槽 1/2/隐藏，3 个随机的两个，4 个随机的三个 | 2 给了避雷针 |
 | `+0x248` | 1 | 异色, 0 从不, 1 随机, 2 星形, 3 方形, 4 给定的 PID | 3 给了异色 |
 | `+0x249` | 1 |达到水平| |
-| `+0x24A` | 1 | Dynamax 级别 | 10 显示最大|
+| `+0x24A` | 1 | 极巨化 级别 | 10 显示最大|
 | `+0x24B` | 1 |超极巨化 | 1 给了分数 |
-| `+0x24C` | 32 | 32丝带索引，`0xFF` 结束列表|所有 `0xFF` 都没有给出 |
+| `+0x24C` | 32 | 32奖章索引，`0xFF` 结束列表|所有 `0xFF` 都没有给出 |
 | `+0x25C` | 1 |标头 `+0x63` | |
-| `+0x26C` | 6 | IV，HP Atk Def Spe SpA SpD | |
+| `+0x26C` | 6 | 个体值，顺序为 HP、攻击、防御、速度、特攻、特防 | |
 | `+0x272` | 1 | 初训家性别，低于2时适用，否则游戏自带| |
-| `+0x273` | 6 |电动汽车，相同订单 | |
+| `+0x273` | 6 |努力值，相同订单 | |
 
 语言索引来自 `0x02067650` 的表（游戏语言为 0..8）。功能区字节转到
 `0x00775d50`；指数高于 127 没有任何意义。具有零功能区字节的记录将功能区 0 命名为三十二次：用 `0xFF` 填充列表。
@@ -380,14 +380,14 @@ LDN广告数据的0x180字节是由信标核心构成的0x18字节标头和0x168
 解析器不读取级别或满足级别。两个偏移量都来自卡片，而不是代码：
 `+0x244` 和 `+0x249` 是 `0x238..0x272` 中唯一预测两张认领卡的不同等级的偏移量（等级为 28 和 63，满足等级为 32 和 59）。
 
-0级：建造者抽`r = random & 0x7f`直到`r <= 99`并拿走`r + 1`，统一超过1..100（`0x010b6218`）；一条记录给出了 20，然后是 35。无论如何，鸡蛋 (`+0x245` = 1) 都会获得 1 级 (`0x010b6400`)。滚动的宝可梦显示已达到0级，空的`+0x249`。经验总是与物种的成长组相匹配（立方曲线物种在 20 级时有 8000 个，较慢的物种在 4 级时有 96 个）。
+0级：建造者抽`r = random & 0x7f`直到`r <= 99`并拿走`r + 1`，统一超过1..100（`0x010b6218`）；一条记录给出了 20，然后是 35。无论如何，蛋 (`+0x245` = 1) 都会获得 1 级 (`0x010b6400`)。滚动的宝可梦显示已达到0级，空的`+0x249`。经验总是与种类的成长组相匹配（立方曲线种类在 20 级时有 8000 个，较慢的种类在 4 级时有 96 个）。
 
 IVs：构建器按 HP、Atk、Def、SpA、SpD、Spe 的顺序测试六个字节；第一个在
 `0xFC..0xFE` 在 `[sp+0x110]` 存储完美计数 `byte - 0xFB`（1 到 3），并将所有六个规格 IV 设置为 `0xFFFF`，丢弃其余部分 (`0x010b6300..0x010b63c4`)。否则 32 或更多的字节就变成
 `0xFFFF` 和 32 以下的字节被保留。规格通过`0x007662a0`达到`0x007667a0`，
 `0x00777f40` 和 `0x00766660`，其级别上限为 100 (`0x00766a14`)，并且对于 1 到 5 的计数，将 31 写入到许多不同的随机位置 (`0x00766a50..0x00766b04`)；计数为 6 或更多（超出卡的范围）不会给出 31 (`0x00766a2c..0x00766a44`)。每个IV仍然是`0xFFFF`滚动0..31（`0x00766de8`，`0x007660d0(0x20)`，游戏的随机数低于`n`）。因此，任何 IV 字节中的 `0xFC`、`0xFD` 或 `0xFE` 恰好给出 31 的 1、2 或 3 个随机 IV。
 
-记录为零时，雄性哈迪宝可梦的第一个能力和 IV 为 0，正如在独角兽下运行的构建者所显示的那样。 `pokeldn.swsh.wc8.pokemon_card` 写入性别 3、性质 `0xFF`、能力 3 和每个 IV 字节 `0xFF` 除非给出字段，所以游戏滚动每一个。
+记录为零时，性格为勤奋的雄性宝可梦的第一个特性和 IV 为 0，正如在Unicorn下运行的构建者所显示的那样。 `pokeldn.swsh.wc8.pokemon_card` 写入性别 3、性格 `0xFF`、特性 3 和每个 IV 字节 `0xFF` 除非给出字段，所以游戏滚动每一个。
 
 性别 3 每个构建滚动一次，并且声明构建宝可梦两次：揭示状态
 `0x00fe3720` 从记录 (`0x00fe3a50`) 中构建一个并为模型读取其性别，并赎回 `0x010159d0` 构建队列接收的一个 (`0x01015a0c`)。在零售剑上，一项声明显示的是女性，而给出的是男性。性别 0、1 或 2 跳过掷骰 (`0x00766d94`)，因此两个版本一致；零售剑显示并给出 0 为男性，1 为女性。该应用程序和
@@ -409,83 +409,54 @@ IVs：构建器按 HP、Atk、Def、SpA、SpD、Spe 的顺序测试六个字节�
 `+0x11`，`+0x20` 处单词的数量，2070 年 1 月 1 日为归零日期；如果标识符为零，则它不会提供任何内容。
 ## 一张发送到实机的卡
 
-> 本节已随上游更新，以下内容暂保留英文。
+`bin/swsh_gift_host.py` 通过 LDN 向零售版《剑》传送礼物卡。只有通告数据以 Pia 头部开头时，零售版《剑》才会列出卡片：
 
-`bin/swsh_gift_host.py` delivers a card to a retail Sword over LDN. A retail Sword lists a card only
-when the advertise data opens with the Pia header:
-
-| what the host advertised | listed |
+| 主机端通告内容 | 是否显示 |
 |---|---|
-| LDN protocol 3 (the GBA app's), advertise data opening with 24 zero bytes | no |
-| LDN protocol 1, the console's own, 24 zero bytes | no |
-| LDN protocol 1, the Pia header at the front of the advertise data | yes |
+| LDN 协议 3（GBA 应用使用的协议），通告数据以 24 个零字节开头 | 否 |
+| LDN 协议 1（游戏主机自身的协议），24 个零字节 | 否 |
+| LDN 协议 1，通告数据以 Pia 头部开头 | 是 |
 
-The Pia header is the one the console's own gift advertisement opens with
-([Sword sessions](swsh_session.md)): a random network id, a zero password CRC, system communication
-version 5, header size 0x18, a random session parameter and eight zero bytes. Scene id 0 and
-application version 4 were accepted; the console's own advertisement carries scene 65535 and
-application version 7, so neither is filtered on. ldn_mitm carries no 802.11 advertisement, so an
-emulator cannot test these variables.
+Pia 头部与游戏主机自身礼物通告的开头相同（[《剑》的会话](swsh_session.md)）：随机网络 ID、值为零的密码 CRC、系统通信版本 5、头部大小 0x18、随机会话参数，以及八个零字节。场景 ID 0 和应用版本 4 均被接受；主机自身通告使用场景 65535、应用版本 7，因此这两个字段都不是筛选条件。ldn_mitm 不携带 802.11 通告，所以模拟器无法测试这些变量。
 
-| kind | record | result on the console |
+| 类型 | 记录 | 主机上的结果 |
 |---|---|---|
-| 1 | `+0x245` = 1, level-1 Pikachu, title index 1 | listed "Oeuf de Pokemon", an egg in the party |
-| 2 | item id at `+0x20`, quantity at `+0x22`: `01 00 03 00`, title index 3 | listed "Master Ball", three in the bag |
-| 3 | amount 10 at `+0x20`, title index 1 | listed with the title "Oeuf de Pokemon", 10 BP added |
-| 3 | amount 10 at `+0x20`, title index 39, as the EventsGallery Battle Points cards carry | listed "Points de Combat", 10 BP added |
-| 4 | EventsGallery's Casual Tee (Pokemon Quest) card, title index 36 | listed, the tee in the wardrobe |
-| 4 | the Pikachu uniform's pairs, title index 36 | received five pieces: haut, gants, short, bas and chaussures de sport |
-| 5 | amount 100,000 at `+0x20`, title index 34 | listed "Argent de poche", money up by 100,000 |
-| 1 | Pikachu with `+0x24B` = 1, Dynamax level 10, title index 21 | listed "Pikachu (Pokemon Gigamax)", the Gigantamax mark in its summary |
+| 1 | `+0x245` = 1，等级 1 的皮卡丘，标题索引 1 | 显示“Oeuf de Pokemon”（宝可梦的蛋），队伍中获得一颗蛋 |
+| 2 | 道具 ID 位于 `+0x20`，数量位于 `+0x22`：`01 00 03 00`，标题索引 3 | 显示“Master Ball”（大师球），包包中增加三个 |
+| 3 | `+0x20` 处数量为 10，标题索引 1 | 以“Oeuf de Pokemon”（宝可梦的蛋）为标题显示，增加 10 BP |
+| 3 | `+0x20` 处数量为 10，标题索引 39，与 EventsGallery 的对战点数卡相同 | 显示“Points de Combat”（对战点数），增加 10 BP |
+| 4 | EventsGallery 的休闲 T 恤（宝可梦探险寻宝）卡，标题索引 36 | 显示卡片，衣柜中获得 T 恤 |
+| 4 | 皮卡丘套装的编号对，标题索引 36 | 收到五件：上衣、手套、短裤、袜子和运动鞋（原文分别为 haut、gants、short、bas、chaussures de sport） |
+| 5 | `+0x20` 处数量为 100,000，标题索引 34 | 显示“Argent de poche”（零用钱），金钱增加 100,000 |
+| 1 | 皮卡丘，`+0x24B` = 1，极巨化等级 10，标题索引 21 | 显示“Pikachu (Pokemon Gigamax)”（皮卡丘，超极巨化宝可梦），其概要中带有超极巨化标志 |
 
-The title comes from `+0x15` alone, whatever the kind; the kind decides what is delivered.
+标题只由 `+0x15` 决定，与类型无关；类型决定实际发放的内容。
 
-A kind-2 record needs only the kind, the item pairs and a quantity. The parser copies exactly six
-id/quantity pairs from record `+0x20..+0x37` to header `+0x30..+0x47` (`0x010b6024..0x010b6080`) and
-sets header `+0x0D` to the number of non-zero quantities (`0x010b6084..0x010b60e4`); the redemption
-calls `Bag::AddItem` per pair with a non-zero quantity (`0x01015d00..0x01015dd0`). The 1.3.2 item
-table has 1607 entries; those whose name in `bin/message/<lang>/common/itemname.dat` starts with `★`
-are dummies (1279 to 1578 among them). PKHeX names 51 of the 1607 ids `???`; the app's item pickers
-list the 817 ids of `ItemStorage8SWSH.GetAllHeld()`, the set its card check accepts.
+类型 2 记录只需要类型、道具编号对及数量。解析器将记录 `+0x20..+0x37` 中的六组 ID/数量对完整复制到头部 `+0x30..+0x47`（`0x010b6024..0x010b6080`），并将头部 `+0x0D` 设为数量非零的组数（`0x010b6084..0x010b60e4`）；领取时对每个数量非零的组调用 `Bag::AddItem`（`0x01015d00..0x01015dd0`）。1.3.2 的道具表有 1607 项；`bin/message/<lang>/common/itemname.dat` 中名称以 `★` 开头的为占位项（其中包括 1279 至 1578）。PKHeX 将这 1607 个 ID 中的 51 个命名为 `???`；应用的道具选择器列出 `ItemStorage8SWSH.GetAllHeld()` 的 817 个 ID，这也是礼物卡检查接受的集合。
 
-Kind 4 is clothing ([Clothing](#clothing)). Kinds 3 and 5 add the word at `+0x20` to clamped counters in the status object
-`[[0x2610798]+0x208]`:
+类型 4 是服饰（[服饰](#clothing)）。类型 3 和 5 将 `+0x20` 处的字加到状态对象 `[[0x2610798]+0x208]` 中有上下限约束的计数器：
 
     kind 3  0x01015e00   [status+0x17c] = min(old + amount, 9999)                  0x014390fc
     kind 5  0x010160b0   [status+0x64]: an amount above 9,999,999 sets 9,999,999;
                          otherwise old + amount, clamped to 9,999,999              0x01438f2c
 
-`status+0x64` is pocket money: `AddPocketMoney_` (`0x014ad5e0`) calls the same `0x01438f20`
-(`0x014ad624`) and `GetPocketMoney_` (`0x014ad700`) reads it through `0x01438ef0`. Both redemptions read
-the amount at header-and-record `+0x88`, record `+0x20`. Under unicorn, `0x010160b0` on a kind-5
-record of 100,000 took the money from 0 to 100,000 and from 9,950,000 to 9,999,999. EventsGallery
-holds no kind-5 card.
+`status+0x64` 是零用钱：`AddPocketMoney_`（`0x014ad5e0`）调用同一个 `0x01438f20`（`0x014ad624`），`GetPocketMoney_`（`0x014ad700`）通过 `0x01438ef0` 读取。两个领取流程都从头部及记录的 `+0x88`（记录 `+0x20`）读取数量。在 Unicorn 中，对数量 100,000 的类型 5 记录执行 `0x010160b0`，金钱从 0 增到 100,000，从 9,950,000 增到 9,999,999。EventsGallery 没有类型 5 卡片。
 
-The kind-1 redemption `0x010159d0` builds the Pokemon (`0x010b6110`; null returns 0) and offers it to
-the party (`0x01015b78`, virtual `+0x28`). If the party refuses, it asks the box store
-`[[0x2610798]+0x220]` for a free slot (`0x01408000`, `0x01015bd0`) and places it only if one exists
-(`0x01406b00`, `0x01015c08`). It returns `{1, 0}` for the party, `{1, 1}` for a box, `{0, 1}` when
-not placed (`0x01015cd0`, `0x01015cf4`); the caller stores that at `+0x78` of the object `0x00feb610`
-returns (`0x01014fe4`) and never tests it. A card that fails the room test never gets here
-([What the menu refuses](#what-the-menu-refuses)).
+类型 1 领取函数 `0x010159d0` 构造宝可梦（`0x010b6110`；为空时返回 0），并尝试加入队伍（`0x01015b78`，虚函数 `+0x28`）。队伍拒绝时，向盒子存储 `[[0x2610798]+0x220]` 请求空栏位（`0x01408000`、`0x01015bd0`），仅在存在空栏位时放入（`0x01406b00`、`0x01015c08`）。加入队伍返回 `{1, 0}`，放入盒子返回 `{1, 1}`，未放入返回 `{0, 1}`（`0x01015cd0`、`0x01015cf4`）；调用方将其存入 `0x00feb610` 返回对象的 `+0x78`（`0x01014fe4`），但从不检查结果。未通过空间检查的卡片不会执行到这里（[菜单拒绝哪些内容](#what-the-menu-refuses)）。
 
-`Bag::AddItem` (`0x01420790`; bag, id, count, new-flag) takes the pocket from item field 14
-(`0x00788c50(id, 14)`, item byte `+0x11 & 0xF`), finds the slot holding the id or the first empty
-one, and writes `id | min(count + n, 999) << 15`; a slot already at 999 refuses. A slot is one u32:
-id in bits 0-14, count in bits 15-29, bit 30 the new-item flag. The save block is registered by
-`0x0141fae0`, key `0x1177C2C4`, `0x12F8` bytes. Pockets, from `bag+0x1358`:
+`Bag::AddItem`（`0x01420790`；参数为包包、ID、数量、新道具标志）从道具字段 14 获取口袋分类（`0x00788c50(id, 14)`，道具字节 `+0x11 & 0xF`），找到已有该 ID 的栏位或首个空栏位，然后写入 `id | min(count + n, 999) << 15`；数量已为 999 的栏位会拒绝。每个栏位是一个 u32：第 0 至 14 位为 ID，第 15 至 29 位为数量，第 30 位为新道具标志。存档数据块由 `0x0141fae0` 注册，键为 `0x1177C2C4`，大小 `0x12F8` 字节。口袋分类来自 `bag+0x1358`：
 
-| field 14 | pocket | slots |
+| 字段 14 | 口袋分类 | 栏位数 |
 |---|---|---|
-| 0 | Medicine | 60 |
-| 1 | Balls | 30 |
-| 2 | Battle | 20 |
-| 3 | Berries | 80 |
-| 4 | Items | 550 |
-| 5 | TMs | 210 |
-| 6 | Treasures | 100 |
-| 7 | Ingredients | 100 |
-| 8 | Key | 64 |
+| 0 | 回复道具 | 60 |
+| 1 | 精灵球 | 30 |
+| 2 | 战斗道具 | 20 |
+| 3 | 树果 | 80 |
+| 4 | 道具 | 550 |
+| 5 | 招式学习器 | 210 |
+| 6 | 宝物 | 100 |
+| 7 | 食材 | 100 |
+| 8 | 重要物品 | 64 |
 
 ## 官方活动卡
 
@@ -493,12 +464,12 @@ id in bits 0-14, count in bits 15-29, bit 30 the new-item flag. The save block i
 
 |组 |卡片 |
 |---|---|
-| 宝可梦| 87 | 87
-|项目 | 69 | 69
+| 宝可梦 | 87 |
+| 道具 | 69 |
 |服装 | 9 |
 |战斗积分 | 6 |
 
-画廊的949张剑／盾卡中，所有949张都通过了验证器`0x010b5de0`。遗漏：740张礼物重复保留的卡片，仅更改日期或卡片ID（主要是排名战斗奖励），24张模拟卡片，12张物品是★假人，以及2张没有Gigantamax形式的物种的HOME Gigantamax礼物，PKHeX检查拒绝。
+画廊的949张剑／盾卡中，所有949张都通过了验证器`0x010b5de0`。遗漏：740张礼物重复保留的卡片，仅更改日期或卡片ID（主要是排名战斗奖励），24张模拟卡片，12张物品是★假人，以及2张没有超极巨化形式的种类的HOME 超极巨化礼物，PKHeX检查拒绝。
 
 `+0x10` 处的标志设置游戏机拿牌的频率（[菜单拒绝的内容](#what-the-menu-refuses)）：
 
@@ -516,19 +487,19 @@ kind-4 记录携带来自 `+0x20` 的 12 对 u32，一个类别，然后一个�
 
 解析器`0x010b5bb0`将玩家的六对复制到标头`+0x30..+0x5F`，并将索引不是`0xFFFFFFFF`的对的计数复制到标头`+0x0D`。赎回 `0x01015eb0` 通过相同的测试再次读取记录的对（`0x01015f14`；记录 `+0x20` 是标头和记录 `+0x88`），并且对于索引不是 `0xFFFFFFFF` 的每对，在衣柜上调用 `0x0143a450(wardrobe, category, index, 1)` `[[0x2610798]+0x218]`。该设置器拒绝高于 14 的类别或高于 1023 的索引，否则设置字节 `wardrobe + 0x68 + category * 0x80 + index / 8` 的位 `index & 7`。一对 `(0, 0)` 设置类别 0 的位 0；跳过索引为 `0xFFFFFFFF` 的槽。
 
-在状态字节为 0 和 1 的独角兽下运行，验证器、解析器和兑换器将记录的第一对和最后六对精确设置为应用程序提供的每件服装的衣柜位 (`tests/test_swsh_gift.py`)。这些对来自于projectpokemon EventsGallery 的十四张官方服装卡：
+在状态字节为 0 和 1 的Unicorn下运行，验证器、解析器和兑换器将记录的第一对和最后六对精确设置为应用程序提供的每件服装的衣柜位 (`tests/test_swsh_gift.py`)。这些对来自于projectpokemon EventsGallery 的十四张官方服装卡：
 
-|服装 |卡 |前六名 |最后六场 |
+| 服装 | 卡片 | 前六对 | 后六对 |
 |---|---|---|---|
-| 皮卡丘制服 | 1607 | 1607 (9,20) (11,21) (12,20) (13,20) (14,19) | (9,20) (11,21) (12,20) (13,20) (14,19) | (9,2) (11,3) (12,2) (13,2) (14,19) | (9,2) (11,3) (12,2) (13,2) (14,19) |
-| 伊布制服| 1608 | 1608 (9,21) (11,22) (12,21) (13,21) (14,20) | (9,21) (11,22) (12,21) (13,21) (14,20) | (9,3) (11,4) (12,3) (13,3) (14,20) | (9,3) (11,4) (12,3) (13,3) (14,20) |
-|运动服| 1605 | 1605 (7,0) (8,0) (12,24) (10,0) (11,25) (13,26) | (7,0) (8,0) (12,24) (10,0) (11,25) (13,26) | (7,0) (8,0) (12,24) (10,0) (11,25) (13,25) | (7,0) (8,0) (12,24) (10,0) (11,25) (13,25) |
-|莱昂的帽子和紧身衣| 1624 | 1624 (7,80) (13,89) | (7,80) (13,89) | (7,80) (13,121) |
-|金色镶钉背包 | 1606 | 1606 (10,45) | (10,48) |
-|休闲 T 恤，精灵球小子 | 0001| (9,101) | (9,89) |
-|休闲 T 恤，出色的球手 | 0001| (9,102) | (9,90) |
-|休闲 T 恤，超级球男 | 0001| (9,103) | (9,91) | (9,91) |
-|休闲T恤，宝可梦Quest | 0105| (9,104) | (9,92) | (9,92) |
+| 皮卡丘制服 | 1607 | (9,20) (11,21) (12,20) (13,20) (14,19) | (9,2) (11,3) (12,2) (13,2) (14,19) |
+| 伊布制服 | 1608 | (9,21) (11,22) (12,21) (13,21) (14,20) | (9,3) (11,4) (12,3) (13,3) (14,20) |
+| 运动服 | 1605 | (7,0) (8,0) (12,24) (10,0) (11,25) (13,26) | (7,0) (8,0) (12,24) (10,0) (11,25) (13,25) |
+| 丹帝的帽子与紧身裤 | 1624 | (7,80) (13,89) | (7,80) (13,121) |
+| 金色镶钉背包 | 1606 | (10,45) | (10,48) |
+|休闲 T 恤（球球人·精灵球） | 0001| (9,101) | (9,89) |
+|休闲 T 恤（球球人·超级球） | 0001| (9,102) | (9,90) |
+| 休闲 T 恤（球球人·高级球） | 0001 | (9,103) | (9,91) |
+| 休闲 T 恤，宝可梦探险寻宝 | 0105 | (9,104) | (9,92) |
 
 每张官方服装卡都带有标题 36 或 38 以及标志位 0（每个卡 ID 一次）。
 ## 菜单拒绝什么
@@ -568,7 +539,7 @@ kind-4 记录携带来自 `+0x20` 的 12 对 u32，一个类别，然后一个�
         card day > entry day (0x016cc1f0, cset hi): a free entry
     a free entry                                                                               -> 0
     none                                                                                       -> 3
- 位图读取需要字节 `id >> 3` (`0x00ff1a8c ubfx x9, x23, #3, #0xd`)，没有限制：位图是 0x100 字节（id 0 到 2047），因此标志位为 0 且 id 为 2048 或更多的记录会读取它，并从 id 13000 开始读取块的 0x17C8 字节。标志位 0 清除的记录永远不会读取它。该位在收到时设置；它的作者不存在。在零售 Sword 上，EventsGallery 的 Poke Ball x100 卡（id 0x6A，标志 1）通过本地无线第二次发送被拒绝，消息为 7，并从列表中删除；标记为 0 且 ID 为 0x270F 的记录已收到十次。
+ 位图读取需要字节 `id >> 3` (`0x00ff1a8c ubfx x9, x23, #3, #0xd`)，没有限制：位图是 0x100 字节（id 0 到 2047），因此标志位为 0 且 id 为 2048 或更多的记录会读取它，并从 id 13000 开始读取块的 0x17C8 字节。标志位 0 清除的记录永远不会读取它。该位在收到时设置；它的作者不存在。在零售 剑 上，EventsGallery 的 Poke Ball x100 卡（id 0x6A，标志 1）通过本地无线第二次发送被拒绝，消息为 7，并从列表中删除；标记为 0 且 ID 为 0x270F 的记录已收到十次。
 
 这些条目仅由 `0x01449560` 写入，其唯一调用者 `0x00ff1558` 位于后面
 `0x00ff154c tbz w8,#2` on `[card+0xe8]`，并且它们存储记录自己的日期（`0x01449570`，
@@ -577,9 +548,9 @@ kind-4 记录携带来自 `+0x20` 的 12 对 u32，一个类别，然后一个�
 保留路径`0x00ff13f0`在宝可梦被放置(`0x01014fb0 bl 0x010159d0`)之前的赎回`0x01014eb0`中有一个调用者`0x01014f74`。它的主体`0x00ff14c0`（唯一调用者`0x00ff1404`）调用`0x01449470`，`0x014494a0`，`0x01449560`，`0x01444f80`，`0x018fdc60`， `0x01444d60`，
 `0x01445000`和`0x01444de0`，都没有读到宝可梦；然后，对于路线 1 至 4，`0x00ff13f0` 将当前时间（`0x01449ca0` -> `0x01900050`）写入 `card+0x70`，或者对于路线 0，将 `card+0xd8` 复制到其中，并归档卡（`0x014480f0`）。 keep 路径不检查合法性。
 
-构建和救赎检查没有移动，重新学习移动，性质，球，持有的物品或形式对抗物种。构建器 `0x010b6110` 有一个出口且没有拒绝：它存储给定的四个移动和四个重新学习移动（`0x77bfb0`、`0x77b9a0`；存储在 `0x770c7c`），并且高于 826 的移动 id 仅更改 PP 查找（`0x00781490`）。赎回 `0x010159d0` 仅测试种类字节、非空构建和队伍中的空间（`0x7840f0` 拒绝物种 0 或完整队伍）或盒子（`0x1406b00` 需要一个空槽）。在独角兽下运行1.3.2个人表，建造者保留了皮卡丘的非法棋步14、337、57、900，并重新学习了棋步1、2、3、9999、性质200、球200和项目9999。
+构建和救赎检查没有移动，重新学习移动，性格，球，持有物或形式对抗种类。构建器 `0x010b6110` 有一个出口且没有拒绝：它存储给定的四个移动和四个重新学习移动（`0x77bfb0`、`0x77b9a0`；存储在 `0x770c7c`），并且高于 826 的移动 id 仅更改 PP 查找（`0x00781490`）。赎回 `0x010159d0` 仅测试种类字节、非空构建和队伍中的空间（`0x7840f0` 拒绝种类 0 或完整队伍）或盒子（`0x1406b00` 需要一个空槽）。在Unicorn下运行1.3.2个人表，建造者保留了皮卡丘的非法棋步14、337、57、900，并重新学习了棋步1、2、3、9999、性格200、球200和项目9999。
 
-单一物种测试位于 PokemonParam 构造函数 `0x777f40` (`0x778118..0x778148`) 中：其个人条目具有字节 0x21 清除位 6 (`0x764990`、`0x77f530`) 的物种获得记录的位 2 `+0x04` 字集 (`0x76eb40`)。设置该位后，每个访问器都会读取和写入一个静态替身，其种类为 0x383 (`0x776c50`)。高于 898 的物种会读取个人条目 0，该条目被标记为存在，而物种表单计数或之上的表单会读取基本物种，因此两者都不会被标记。永远不要派出剑和盾缺席的物种；桌面应用程序中的 PKHeX 检查拒绝之一。
+单一种类测试位于 PokemonParam 构造函数 `0x777f40` (`0x778118..0x778148`) 中：其个人条目具有字节 0x21 清除位 6 (`0x764990`、`0x77f530`) 的种类获得记录的位 2 `+0x04` 字集 (`0x76eb40`)。设置该位后，每个访问器都会读取和写入一个静态替身，其种类为 0x383 (`0x776c50`)。高于 898 的种类会读取个人条目 0，该条目被标记为存在，而种类表单计数或之上的表单会读取基本种类，因此两者都不会被标记。永远不要派出剑和盾缺席的种类；桌面应用程序中的 PKHeX 检查拒绝之一。
 
 性别是构建更正的一个字段（`0x777490`，在 `0x7774a4` 读取的个人字段 0x14）：比率 0、254 和 255 强制男性、女性和无性别（表 `0x1c4d2d0`）；对于任何其他比率，请求的 2 变为 0 (`0x7774d8`)。构建器将记录性别 3 转换为 0xFF，随机 (`0x010b62ac`)。
 ## 卡的日期
@@ -597,12 +568,12 @@ kind-4 记录携带来自 `+0x20` 的 12 对 u32，一个类别，然后一个�
 
 `0x016cc5e0` 按天数将其转换为 posix 时间（`146097`、`1461` 和除以 100 的常量都在其中），并且当该值等于 `main+0x2616900` 后面的哨兵时返回 0。专辑抽签 `0x00ffbaa0` 将其传递给 `nn::time::ToCalendarTime` (`0x00ffbaf0`)，因此游戏机的区域适用，回落到 `ToCalendarTimeInUtc`。年份用两位数绘制。
 
-|记录字节|法国实机上显示|
+|记录字节|法语版实机上显示|
 |---|---|
 |零| 01/01/2070 01:00 |
-|世界标准时间 10 月 18 日 16:26 | 2018 年 10 月 18 日 18:26 |
+| 世界标准时间 10 月 18 日 16:26 | 18/10/2018 18:26 |
 | 8218 年 | 2018 |
-| `01 02 03 04 05 06 07 08`（321 年 0 月）| 2020 年 1 月 12 日 15:53 |
+| `01 02 03 04 05 06 07 08`（321 年 0 月） | 01/12/2020 15:53 |
 
 只有本地无线卡才会保留其日期。每个其他路由都会用以下内容覆盖八个字节
 `nn::time::StandardNetworkSystemClock::GetCurrentTime` (`0x00ff3f8c` -> `0x01449ca0`; PLT

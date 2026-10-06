@@ -40,7 +40,7 @@ ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错
 - 读取器不得引发：可靠窗口上的网格消息（`44 00 01`，[主机迁移](#host-migration)）不是交换消息，并且引发的读取器结束接收任务和交换（`la communication avec l'autre joueur a été interrompue`）。 `trade.py` 中的读者返回 `None`。
 ## 主机迁移
 
-离开会话的托管 Sword 请求协议 0x18 端口 1 (`nn::pia::mesh::LeaveWithHostMigrationJob`) 上的主机迁移：
+离开会话的托管 剑 请求协议 0x18 端口 1 (`nn::pia::mesh::LeaveWithHostMigrationJob`) 上的主机迁移：
 
     0f 00 00 03 00 01 00 01   44 00 01
     ^ version 4's reliable header, sequence 1     ^ the mesh message
@@ -50,17 +50,17 @@ ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错
 
 使用 `--answer-migration --update-mesh`，客户端发送完成信息并在其新主机索引下发布网格更新。切换后保留会话未经验证。
 
-托管零售 Sword 在两种情况下发送 MIGRATION_START 一次：
+托管零售 剑 在两种情况下发送 MIGRATION_START 一次：
 
 |当 |状况 |
 |---|---|
 |其框命令 3 | 后 0.8 秒完成交换后 |
 |玩家接受后几秒钟，游戏机以 `2-ALZAA-0016` 崩溃之前 |在梯子之前失败的交换，加入方没有发送确认命令|
 
-`bin/swsh_host.py --migrate`通过box命令3和MIGRATION_START结束自己的托管交换；保存后，模拟的 Shield 加入方会显示通信中断消息。默认情况下，主机保留会话。
+`bin/swsh_host.py --migrate`通过box命令3和MIGRATION_START结束自己的托管交换；保存后，模拟的 盾 加入方会显示通信中断消息。默认情况下，主机保留会话。
 ## 举办交换会
 
-`bin/swsh_host.py` 主持，`pokeldn/swsh/host_trade.py` 作为主持 Sword 领先。零售版 French Sword 1.3.2 和仿真版 Shield 1.3.2 分别加入并交换。下面的详细信息是从两个模拟 Shields 1.3.2 之间的交换中读取的。
+`bin/swsh_host.py` 主持，`pokeldn/swsh/host_trade.py` 作为主持 剑 领先。零售版 French 剑 1.3.2 和仿真版 盾 1.3.2 分别加入并交换。下面的详细信息是从两个模拟 Shields 1.3.2 之间的交换中读取的。
 
 主机使用新的网络 ID、设备 ID 和帐户 UID 构建站广告。在0x84上，它确认加入方的三个快照片段，用其训练者身份和`--offer-file` PK8重写该实时快照，然后在端口0上发送结果。主机将游戏机提供的PK8写入`--received`。 `--advert FILE` 和 `--snapshot FILE` 保留已保存记录路径以供比较。
 
@@ -91,68 +91,36 @@ ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错
 游戏机在最后一个同步命令 40 (`3`) 之后播放交换动画，期间没有交换消息。加入 `bin/swsh_host.py` 的零售剑在同步命令后 1.2 秒开始动画，并在大约 24 秒时给予玩家控制权。它不会发送任何应用程序消息，直到玩家退出盒子（盒子命令 3）。
 ## 一个交易日连续交易
 
-> 本节已随上游更新，以下内容暂保留英文。
+一个会话可连续进行多次交换。交换状态 9 发送事件 7（成功）或 8（失败），在 `0x010ca360` 写入状态 0，玩家回到盒子界面。内容 30 和 ping 110 存活整个会话（由会话初始化 `0x010c9280` 构造一次）；内容 50、40 及各自的 ping 每次交换都会重建：
 
-A session carries one trade after another. Trade state 9 sends event 7 (success) or 8 (failure)
-and writes state 0 at `0x010ca360`, and the player is back in the box. Content 30 and ping 110 live
-for the session (built once by the session setup `0x010c9280`); contents 50 and 40 and their pings
-are rebuilt for every trade:
-
-| object | lifetime | code |
+| 对象 | 生命周期 | 代码 |
 |---|---|---|
-| content 30, ping 110 | the session | `0x010c9280` -> `0x010cca10` |
-| content 50, ping 130 | one trade | trade state 1 -> `0x010d5440` -> init `0x010d4d90` (new content, old one released), element minted at phase 0 `0x010d53fc`; torn down in state 3 by `0x010d54b0` |
-| content 40, ping 120 | one trade | state 6 -> `0x010dabc0` -> init `0x010da470`; released in state 8 by `0x010dac90` |
-| a content's SyncPing | its element | the mint `0x006d44e0` builds a new SyncPing with id offset + 0x50 (`0x006d46d0`), destroying the previous one (`0x006cd940`) |
+| 内容 30、ping 110 | 整个会话 | `0x010c9280` -> `0x010cca10` |
+| 内容 50、ping 130 | 一次交换 | 交换状态 1 → `0x010d5440` → 初始化 `0x010d4d90`（新内容，旧对象释放），阶段 0 的 `0x010d53fc` 创建元素；状态 3 由 `0x010d54b0` 拆除 |
+| 内容 40、ping 120 | 一次交换 | 状态 6 → `0x010dabc0` → 初始化 `0x010da470`；状态 8 由 `0x010dac90` 释放 |
+| 内容对象的 SyncPing | 对应元素的生命周期 | 创建函数 `0x006d44e0` 用 ID 偏移 + 0x50 构造新 SyncPing（`0x006d46d0`），并销毁旧对象（`0x006cd940`） |
 
-A SyncPing that reached synced is never reset in place, so a ping 130 sent while a console has no
-content 50 reaches no holder.
+已经达到同步状态的 SyncPing 不会原地重置，因此主机没有内容 50 时发送的 ping 130 不会到达任何持有者。
 
-The box screen's step machine (`0x00aa5160`, table `0x2059218`) reads the partner's box-command flags
-set by the listener `0x00c8d900`. In step 3, on the partner's flag 1 (its offer), it clears flags 1
-and 4 together (`0x00aa5688..0x00aa569c`); step 7 waits for flag 4 (`0x00aa5628`), and only step 10
-issues action 6, which starts trade state 1. A box command 4 sent in the same burst as the offer is
-therefore erased, and the console waits in step 7 with "En attente d'une réponse". The partner's 4
-must arrive after the console has processed its offer: `pokeldn.swsh.host_trade` sends its 4 only
-after the joiner's 4, and the joiner launcher sends its 4 in answer to the host's.
+盒子界面的步骤状态机（`0x00aa5160`，表 `0x2059218`）读取监听器 `0x00c8d900` 设置的对方盒子命令标志。在步骤 3 收到对方标志 1（交换提议）时，同时清除标志 1、4（`0x00aa5688..0x00aa569c`）；步骤 7 等待标志 4（`0x00aa5628`），只有步骤 10 才发出动作 6、启动交换状态 1。因此，与提议同一批发送的盒子命令 4 会被清除，主机停在步骤 7，显示“En attente d'une réponse”（等待回应）。对方命令 4 必须在主机处理提议之后到达：`pokeldn.swsh.host_trade` 仅在收到加入方的 4 后发送自己的 4；加入方启动器则回应主机端的 4。
 
-Step 7 also ends on the player pressing B; no timer ends it. The step machine's ui is the View_Model
-at `[this+0x80]` (`0x00aa4e78`, vtable `0x25376d8`). Its input handler `0x00aab0b0` (slot 16, called
-from the UI dispatcher at `0x00efad28`) sets `ui+0x5cc = 1` when `ui+0x5d0` is armed and the
-pressed-this-frame mask carries bit 49, which the remap table `0x02062928` produces from B alone.
-Steps 2 and 6 arm it after the offer and the acceptance (`0x00aa5434`); every tick clears it
-(`0x00aa5608`). In step 7 a press clears the partner's flags, sends box command 5 (the acceptance
-withdrawn) and leaves the sequence (`0x00aa57d0`); in step 3 it sends box command 2.
+玩家按 B 也会结束步骤 7；没有计时器结束它。步骤状态机的界面是 `[this+0x80]` 处的 View_Model（`0x00aa4e78`，虚函数表 `0x25376d8`）。输入处理函数 `0x00aab0b0`（槽位 16，由 `0x00efad28` 的界面调度器调用）在 `ui+0x5d0` 已启用且本帧按下掩码包含第 49 位时设置 `ui+0x5cc = 1`；重映射表 `0x02062928` 仅由 B 键产生该位。步骤 2、6 在提议及接受后启用它（`0x00aa5434`），每次更新都会清除它（`0x00aa5608`）。步骤 7 按下时清除对方标志、发送盒子命令 5（撤回接受），并离开流程（`0x00aa57d0`）；步骤 3 则发送盒子命令 2。
 
-Every later trade repeats the trade's own part: both offers and box command 1, the two box command
-4s in that order, ping 130 (the joiner pings first), a new content 50 at phase 0, ping 120, a new
-content 40 from phase 0 to 4. No 0x84 snapshot, ping 97 or 110, box command 3 or content 30 publish
-comes between trades. `bin/swsh_host.py` and `bin/swsh_connect.py` with a repeated `--offer-file`
-trade one queued record per trade on one session with a retail Sword joiner and host respectively;
-the host closes when the console leaves.
+后续每次交换都会重复自身交换流程：双方提议与盒子命令 1、按上述顺序发送的两个盒子命令 4、ping 130（加入方先发送）、阶段 0 的新内容 50、ping 120、从阶段 0 到 4 的新内容 40。交换之间不会出现 0x84 快照、ping 97 或 110、盒子命令 3、内容 30 发布。`bin/swsh_host.py` 和 `bin/swsh_connect.py` 配合重复的 `--offer-file`，分别与零售版《剑》的加入方及主机在同一会话内，每次交换一条排队记录；游戏主机离开后，主机端关闭。
 
-`bin/swsh_connect.py` with a repeated `--offer-file` takes the console's offer after a finished
-ladder (phase 4 on 40040) as the next trade. It answers that offer with its next record, so the
-console's box sequence is already in step 3 holding its own offer, and clears its per-trade state:
-the 40050 and 40040 pairs and bodies answered, the confirmation command queue, the selection-offer
-latch. The 40030 pair and the ping answers carry over. `bin/swsh_host.py --accept-first --lead
-SECONDS` plays a console host's player (accepts first, offers its next queued record from the box
-after a trade), and the two launchers trade two records each way on one session on simulated boards
-(`tests/test_esp32.py`).
+`bin/swsh_connect.py` 配合重复的 `--offer-file`，将完整阶梯结束后（40040 的阶段 4）主机的提议视为下一次交换。它用下一条记录回应该提议，此时主机盒子流程已处于步骤 3 并持有自身提议，然后清除每次交换的状态：已回应的 40050、40040 克隆对及消息体、确认命令队列、选择提议锁存状态。40030 克隆对与 ping 回应会保留。`bin/swsh_host.py --accept-first --lead
+SECONDS` 模拟游戏主机的玩家（先接受，交换后从盒子提供下一条排队记录）；两个启动器在模拟开发板上的同一会话中双向各交换两条记录（`tests/test_esp32.py`）。
 
-When a retail joiner's player presses B in the box, the console sends box commands 2 and 3 and mesh
-`0401` and deauthenticates with no error; its next search can join the same hosted network (same
-network id). A searching console joins any network that passes the
-[matching rules](swsh_session.md#how-a-searching-sword-finds-a-partner).
+零售版加入方玩家在盒子中按 B 时，主机发送盒子命令 2、3 及网状网络 `0401`，随后取消认证，不显示错误；再次搜索时可加入同一个主机端网络（相同网络 ID）。搜索中的主机会加入任何通过[匹配规则](swsh_session.md#how-a-searching-sword-finds-a-partner)的网络。
 
 ## 盒子状态机
 
 内容 30 包含从交换屏幕到提议的所有内容。 `onBoxSyncStateCommand`
 `0x010ce180`，0x50 字节包装器的插槽 1，位于 `session+0x120`（虚表组 `0x2625808`）：
 
-1.忽略自身的echo（`sender == [[0x2616a30]]+0xf0`）；
+1. 忽略自身的echo（`sender == [[0x2616a30]]+0xf0`）；
 2、`if ((msg->data - 1) > 5) return`：0、7及以上静默掉线；
-3.跳转表`0x2067bec`：连线命令*N*通知每个监听器事件*N*。
+3. 跳转表`0x2067bec`：连线命令*N*通知每个监听器事件*N*。
 
 字段 1，`boxSendPokemon`，作为事件 0 进入插槽 0 `0x010ce080`。调度程序采用 0..6；发送者发出 1..5。
 
@@ -265,11 +233,11 @@ Vtable组`0x257fe90`：主`0x257fea0`（插槽0中SyncCommand接收`0x010dbc90`�
 | `0x010daa9c` |登记员 | 1 |
 | `0x010dbc70` | `0x010dbab0`，命令发送（需要2；写入`+0x86`）| 3 |
 | `0x010de3c4` | `0x010de310`，提交；清除 `0x010de344` 处的每个标志 | 2 |
-| `0x010dc7a0` | `0x010dc720`（时隙 `0x257ff70`），一个站离开：用 `[+0x374]` 告诉代表时隙 4，否则将其从元素（`0x006d50e0`）和标志（`0x006a2140`）中删除 | 11 | 11
+| `0x010dc7a0` | `0x010dc720`（槽位 `0x257ff70`），站点离开：存在 `[+0x374]` 时通知委托对象的槽位 4，否则从元素（`0x006d50e0`）和标志（`0x006a2140`）中移除 | 11 |
 | `0x010dc6f4` | `0x010dc6c0`（插槽 `0x257ff68`），需要 `[+0x374]` 和 `0x006a2a80([+0x2a0])` | 13 |
 | `0x010dccec` |插槽 `0x257ff90` | 2 |
 | `0x010dcee8` | `0x010dce70`，取消接受 (`x19 = content+0x68`)，除非 16 | 2 |
-| `0x010db998` | `0x010db970`，拆解| 16 | 16
+| `0x010db998` | `0x010db970`，拆除 | 16 |
 
 内容40的注册器将`w2 = 1`(`0x010da6a8`)存储在`[+0x374]`(`0x010da800`)：离开的站走11、12并结束梯子。
 ### 相位是元素的字段
@@ -353,7 +321,7 @@ Vtable组`0x257fe90`：主`0x257fea0`（插槽0中SyncCommand接收`0x010dbc90`�
                 bl 0x00793ec0
                 bl 0x011092f0     0x01109304 bl 0x01111db0, 0x01109308 bl 0x006a9a20, the drain again
  内容40的命令勾选`0x010dae70`在交换场景任务中运行：`0x00c8c6b0`调用
-`0x010c9bb0` at `0x00c8c6d8`，调用 `0x010c9c34` 处的提议。任务调度程序通过`0x00f19770`和`0x00f19080`到达它。模拟器跟踪将此标记置于之前
+`0x010c9bb0` 位于 `0x00c8c6d8`，调用 `0x010c9c34` 处的提议。任务调度程序通过`0x00f19770`和`0x00f19080`到达它。模拟器跟踪将此标记置于之前
 `0x01109250`，然后 `0x00f1cc60`，然后 `0x01109308`。在那里耗尽的命令可以被下面的场景标记所消耗。
 
 RequestCancel 和 RequestCancelAll 还读取了地图（[下](#the-cancel-and-proceed-messages)）。
@@ -418,7 +386,7 @@ Oui 将其原封不动地保存在保存块 `0x28e707f5` 中：来自 `album+0x2
 |名字，添加一个字母 |没有|
 | timestamp_printed，仅字节 0x1A8 发生变化 |是的 |
 
-零售剑在左上角绘制了收到日期、`game`（0x24，0 Sword）的徽标、0x39左下角的三个ASCII字节、`dex_complete`（0x30）的洛托姆-Dex皇冠和星星。景色
+零售剑在左上角绘制了收到日期、`game`（0x24，0 剑）的徽标、0x39左下角的三个ASCII字节、`dex_complete`（0x30）的洛托姆-Dex皇冠和星星。景色
 `0x01592e70` 将卡复制到 `view+0x3c0`； `0x015a52f0(view, count)` 点亮七个窗格中的 `count + 1`（`view+0x618..+0x648`；验证器上限为 6）：
 
     count = card[0x177] + (card[0x1b6] != 0) + (card[0x1b7] != 0)      0x015930bc..0x015930dc
@@ -447,53 +415,55 @@ Oui 将其原封不动地保存在保存块 `0x28e707f5` 中：来自 `album+0x2
 |请求字段 |返回记录 |
 |---|---|
 |水平| 30|
-|自然与统计自然|坚定，3 |
-|能力|避雷针，31 |
+|性格与能力值修正所用性格|固执，3 |
+|特性|避雷针，31 |
 |性别 |女, 1 |
 |球 |超级球，2 |
-|持有物品 |光球，236 |
+|持有物 |光球，236 |
 |选定的 IV |生命值 31，攻击力 0，速度 31 |
-|电动汽车 | HP 252，速度 4，其他所有统计数据 0 |
+|努力值 | HP 252，速度 4，其他所有统计数据 0 |
 
 20030的提议是快照的队伍槽位`--offer-slot`，已就地编辑，因此显示的队伍与提议一致；身份重写首先运行并且 `party_matches_trainer` 成立。
-`pokeldn.swsh.pokemon.build_from` 重写校验和，在新的加密常数下重新洗牌，并保留每个未命名的字节（色带、内存、met 数据、处理程序记录）。
+`pokeldn.swsh.pokemon.build_from` 重写校验和，在新的加密常量下重新洗牌，并保留每个未命名的字节（色带、内存、met 数据、处理程序记录）。
 
-法国剑 1.3.2 接受了其在四次交易中已保存的记录（相同的 PID 和 EC）并继续进行交易。 Shield 1.3.2 中读取的路径不存在重复检查：PID getter（`0x0076bc20`，块 A + 0x14）仅由异色测试调用；在 12 个站点读取加密常量 getter (`0x0077ec90`)，没有一个站点能够走动；盒子代码（`obj+0x60 + box*0x2850 + slot*0x158`）仅读取物种和鸡蛋标志；并且没有访问器触及 PK8 字节 0x52，其中晶灿钻石保留其非法标志（[BDSP 交换页面](bdsp_trade.md#duplicate-detection)）。 `bin/swsh_host.py --fresh-pid` 和
-`bin/swsh_connect.py --fresh-pid` 绘制新的加密常数和PID；在剑上这是一种预防措施。
+法语版《剑》 1.3.2 接受了其在四次交易中已保存的记录（相同的 PID 和 EC）并继续进行交易。 盾 1.3.2 中读取的路径不存在重复检查：PID getter（`0x0076bc20`，块 A + 0x14）仅由异色测试调用；在 12 个站点读取加密常量 getter (`0x0077ec90`)，没有一个站点能够走动；盒子代码（`obj+0x60 + box*0x2850 + slot*0x158`）仅读取种类和蛋标志；并且没有访问器触及 PK8 字节 0x52，其中晶灿钻石保留其非法标志（[BDSP 交换页面](bdsp_trade.md#duplicate-detection)）。 `bin/swsh_host.py --fresh-pid` 和
+`bin/swsh_connect.py --fresh-pid` 绘制新的加密常量和PID；在剑上这是一种预防措施。
 
     --offer-slot 1 --offer-nickname POKELDN --offer-ivs 31,31,31,31,31,31
 
 |旗帜|效果|
 |---|---|
-| `--offer-nickname`，`--offer-ot` | 26字节UTF-16字段，最多12个字符；昵称设置昵称标志，否则绘制物种名称 |
-| `--offer-species` |单独的物种词；其他一切都保留模板的 |
+| `--offer-nickname`，`--offer-ot` | 26字节UTF-16字段，最多12个字符；昵称设置昵称标志，否则绘制种类名称 |
+| `--offer-species` |单独的种类词；其他一切都保留模板的 |
 | `--offer-ability ID`，`--offer-moves A,B,C,D` |两个领域； PP 和重新学习动作留下 |
-| `--offer-level N` | | 0x148 | 的电平字节
+| `--offer-level N` | 0x148 处的等级字节 |
 | `--offer-experience N` |经验词0x10 |
 | `--offer-ivs` |六个 IV |
 | `--offer-file FILE` |四种形状中任意一种的 `.pk8`（存储或队列、加密或 PKHeX 的解密导出，由标头校验和区分）； OT 名称和 ID 已移至快照的训练家 |
 | `--offer-file-as-is` |保留文件的 OT |
 | `--save-offer FILE` |在触摸收音机之前写入构建的记录|
 
-French Sword 1.3.2 对已编辑记录的作用：
+French 剑 1.3.2 对已编辑记录的作用：
 
-|发送记录 |结果 ||---|---||模板、昵称、IV 31 |公认;未命名字段保留模板的 |
-|物种93，耿鬼能力130，招式|绘制为鬼斯通，交换进化：能力和动作不受检查|
-|物种 25 |根据 IV、EV、自然和超级训练重建统计数据0x126;统计字节数0x14A丢弃|
-|电平字节0x148= 50，经验等级100 | 100级：等级来自经验（0x10）；腿尾重建|
+| 发送的记录 | 结果 |
+|---|---|
+| 模板、昵称、IV 全部为 31 | 接受；未指定的字段保持模板值 |
+| 种类 93，使用耿鬼的特性 130 和招式 | 显示为鬼斯通，并在交换时进化：特性和招式不作检查 |
+| 种类 25 | 根据 IV、EV、性格及极限训练字段 0x126 重新计算能力值；丢弃 0x14A 处的能力值字节 |
+| 等级字节 0x148 = 50，经验值对应 100 级 | 等级为 100：由经验值（0x10）决定等级；重新生成队伍记录尾部 |
 | OT 移至 12345/54321 |显示 ID 993401，`(SID << 16 \| TID) mod 1000000`|
 |接收者自己的OT在国外MyStatus下|接受为玩家自己的捕获：OT id 不会与 MyStatus 进行比较 |
 | PID高半部=`low ^ TID ^ SID`| 异色|
-|物种 152（缺席）|存储：皮卡丘的模型、姓名字段、黑色精灵球图标、成长组 0 和零基础统计数据；仅当前HP（0x8A）和处理程序块（0xA8, 0xC2, 0xC3, 0xC8, 0xCB-0xCC) 改变 |
+|种类 152（缺席）|存储：皮卡丘的模型、姓名字段、黑色精灵球图标、成长组 0 和零种族值；仅当前HP（0x8A）和处理程序块（0xA8, 0xC2, 0xC3, 0xC8, 0xCB-0xCC) 改变 |
 
-未测量：其他不存在的物种绘制了什么，以及该名称是否是名称字段或查找失败。
+未测量：其他不存在的种类绘制了什么，以及该名称是否是名称字段或查找失败。
 ## 已完成交换的命令行
 
 `swsh_connect.py --preset trade` 携带交换所需的标志；覆盖预设后给出的标志。让游戏机搜索本地链路交换（Y-Comm、链路交换、本地、两条消息上的 A）并运行：
 
     POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/swsh_connect.py --keys PROD_KEYS \
         --preset trade --save-offered offered.pk8 --capture trade.jsonl
- 发回的快照是游戏机自己的来自同一会话的快照（`--send-snapshot live`，预设的默认值）：三个 0x84 片段在到达时重新组合，训练器名称、TID 和 SID 被重写为 `--snapshot-name/-tid/-sid`，一旦游戏机的快照被删除，它就会消失。重新组装，因此不需要早期的捕获会话。 `--send-snapshot FILE` 发送一个已保存的 3456 字节的 TCP（`--preset capture`，然后 `tools/switch/swsh_snapshot.py`，写入 1）。
+ 发回的快照是游戏机自己的来自同一会话的快照（`--send-snapshot live`，预设的默认值）：三个 0x84 片段在到达时重新组合，训练家名称、TID 和 SID 被重写为 `--snapshot-name/-tid/-sid`，一旦游戏机的快照被删除，它就会消失。重新组装，因此不需要早期的捕获会话。 `--send-snapshot FILE` 发送一个已保存的 3456 字节的 TCP（`--preset capture`，然后 `tools/switch/swsh_snapshot.py`，写入 1）。
 
 `--offer-file FILE` 将 `.pk8` 放入提供的队伍槽位，其 OT 移至快照的训练家处。如此重复，它会在会话中的每个交换中排队一个记录；最后一个服务于以后的交换，在带有 `--fresh-pid` 的新 PID 下，并且交换 N 用 `-N` 写入 `--save-offered`。游戏机提供的交换，其阶梯尚未完成，使会话持续到 `--grace` 秒 (300) 过去
 `--hold`。没有队伍统计数据的存储格式交易记录；游戏机根据经验计算等级。
@@ -506,4 +476,4 @@ French Sword 1.3.2 对已编辑记录的作用：
 ## 验证已完成的交换
 
 收到的宝可梦在0xC4处带有`CurrentHandler` 1，在
-`HandlingTrainerName` at 0xA8 发送者的初训家。 `--offer-echo` 交回游戏机自己的记录，因此只有不同的物种才能证明转移。
+`HandlingTrainerName` at 0xA8 发送者的初训家。 `--offer-echo` 交回游戏机自己的记录，因此只有不同的种类才能证明转移。

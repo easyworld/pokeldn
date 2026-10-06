@@ -4,7 +4,7 @@ parent: Let's Go Pikachu and Eevee
 nav_order: 1
 ---
 
-# 盒式磁带、其密钥和会话
+# 卡带、其密钥和会话
 
 地址是 Let's Go 皮卡丘 1.0.2 的解压缩 `main` 中的偏移量，如 `tools/switch/nso_read.py` 所示：文本 `0..0xd32ba8`、来自 `0xd33000` 的rodata、来自 `0x1527000` 的数据。
 ## 标题是根据什么构建的
@@ -33,7 +33,7 @@ nav_order: 1
     0x004dbbb0  mov  w2, #0x40
     0x004dbbbc  bl   #0x5c1280              LdnJoinSessionSetting passphrase setter
 
-`LdnCreateNetworkJob`（构造函数`0x5ce640`，Sword的偏移量）将密码短语保留在+0xC4，其长度保留在+0x104，并从它们之前构建`nn::ldn::SecurityConfig`
+`LdnCreateNetworkJob`（构造函数`0x5ce640`，剑的偏移量）将密码短语保留在+0xC4，其长度保留在+0x104，并从它们之前构建`nn::ldn::SecurityConfig`
 `nn::ldn::CreateNetwork`（`0x5ce988`，PLT 存根 `0xd31c78`）。
 ## Pia 游戏密钥
 
@@ -58,7 +58,7 @@ nav_order: 1
     0x08  8  AES-GCM nonce
     0x10  16 AES-GCM tag, not truncated
     0x20     ciphertext
- wiki的5.11-5.21布局，Sword的版本4但针对版本字节； `pokeldn/ldn/pia4.py`。
+ wiki的5.11-5.21布局，剑的版本4但针对版本字节； `pokeldn/ldn/pia4.py`。
 ## 消息框架
 
 固定的 22 字节消息头（Pia 5.11-5.12；5.18 及更高版本带有存在标记）。
@@ -76,7 +76,7 @@ nav_order: 1
 `pokeldn/ldn/pia3.py` 通过 pia4 的标头实现它。
 ## 会话密钥
 
-`LocalProtocol` 的派生 `0x5cd560` 是 BDSP 和 Sword 的：从一个 32 位值（`0x57cfc0`，围绕 `0x6C078965` 循环）播种 SEAD xorshift128，四次抽取到 16 个字节，游戏密钥下的 AES-128-ECB `LocalProtocol+0x49c`（启用标志+0x498）。
+`LocalProtocol` 的派生 `0x5cd560` 是 BDSP 和 剑 的：从一个 32 位值（`0x57cfc0`，围绕 `0x6C078965` 循环）播种 SEAD xorshift128，四次抽取到 16 个字节，游戏密钥下的 AES-128-ECB `LocalProtocol+0x49c`（启用标志+0x498）。
 `pokeldn.ldn.pia5.ldn_session_key`。
 
 广告的应用程序数据（Pia 5.9-5.18）以 24 字节标头打开：
@@ -96,7 +96,7 @@ nav_order: 1
 链接代码为NetworkInfo场景id；应用程序数据 +4 处的密码 CRC32 保持为 0，SSID 保持为 `01000000000000000000000000000000`。场景id为`1000a + 100b + 10c + 1`，在选择器中分别选择其索引（皮卡丘0、伊布1、妙蛙种子2、小火龙3、杰尼龟4、波波5、绿毛虫6、小拉达7、胖丁8、地鼠9）。
 
 它是在运行时构建的：`0x891580` 将选择折叠到 `100a + 10b + c`，`0x978080` 计算
-`10 * number + mode`，交换模式 1（模式 2 和 3 来自 `0x9765f4` 的交换机，其功能未读）。该值将 `0x349010` 和 `0x4da710` 传递给会话构造函数 `0x4db1e0`（`u16` at `+0x302`）； `0x4db6ac`放入`LdnCreateSessionSetting+0x60`中，Pia将其复制到
+`10 * number + mode`，交换模式 1（模式 2 和 3 来自 `0x9765f4` 的交换机，其功能未读）。该值将 `0x349010` 和 `0x4da710` 传递给会话构造函数 `0x4db1e0`（`u16` 位于 `+0x302`）； `0x4db6ac`放入`LdnCreateSessionSetting+0x60`中，Pia将其复制到
 `NetworkConfig.intentId.sceneId` 之前的 `nn::ldn::CreateNetwork` (`0x5ce988`)。
 
 相同的构造函数选择搜索游戏机所在的频道：`{1, 6, 11}[scene % 3]`，表
@@ -105,18 +105,18 @@ nav_order: 1
 |编写一个搜索到的游戏机 |广告场景 ID |频道 |
 |---|---|---|
 | 皮卡丘，皮卡丘，皮卡丘 | 1 | 6 |
-| 妙蛙种子, 小火龙, 杰尼龟 | 2341 | 2341 6 |
-| 妙蛙种子, 小火龙, 妙蛙种子 | 2321 | 2321 11 | 11
-| 伊布, 皮卡丘, 地鼠 | 1091 | 1091 11 | 11
-| 皮卡丘, 皮卡丘, 妙蛙种子 | 21 | 21 1 |
+| 妙蛙种子, 小火龙, 杰尼龟 | 2341 | 6 |
+| 妙蛙种子、小火龙、妙蛙种子 | 2321 | 11 |
+| 伊布、皮卡丘、地鼠 | 1091 | 11 |
+| 皮卡丘, 皮卡丘, 妙蛙种子 | 21 | 1 |
 
 仅当搜索游戏机在其自己的频道上通告该游戏机的场景ID时，该搜索游戏机才加入另一个网络。 `bin/lgpe_host.py --code NAMES` 托管在代码的通道上（`--channel auto` 扫描游戏机的网络）； Let's Go 皮卡丘和 Let's Go 伊布加入其中。 `bin/lgpe_join.py` 不发送代码，游戏主机与其进行交易。
 ## 本地协议，测量
 
-会话状态在 Pia 协议 0x24、端口 0 上发出，就像在 BDSP 和 Sword 上一样：wiki 的 5.7-5.45 更新会话消息 (`pokeldn.ldn.local_protocol.parse_update_session`)。 12字节本地头（版本1，类型0x11），序列id，本地网络id，主机变量id，服务变量id和常量id，允许参与字节，八个节点（IPv4地址，端口，迁移排名）：主机`169.254.105.1`排名0，加入方`169.254.105.2`排名1、其余255。
+会话状态在 Pia 协议 0x24、端口 0 上发出，就像在 BDSP 和 剑 上一样：wiki 的 5.7-5.45 更新会话消息 (`pokeldn.ldn.local_protocol.parse_update_session`)。 12字节本地头（版本1，类型0x11），序列id，本地网络id，主机变量id，服务变量id和常量id，允许参与字节，八个节点（IPv4地址，端口，迁移排名）：主机`169.254.105.1`排名0，加入方`169.254.105.2`排名1、其余255。
 
 主体携带主机常量 id 小端 (`000048f120229beb`,
-`station_protocol.ldn_constant_id` 通过 MAC `48:f1:eb:20:9b:22`)； Pia 消息头将其大端字节序作为源 (`eb9b2220f1480000`)，与 Sword 上一样。
+`station_protocol.ldn_constant_id` 通过 MAC `48:f1:eb:20:9b:22`)； Pia 消息头将其大端字节序作为源 (`eb9b2220f1480000`)，与 剑 上一样。
 ## 站协议，用于网状连接
 
 协议 0x14 上的连接请求，然后 0x18 上的网状连接。连接请求处理程序
@@ -131,7 +131,7 @@ nav_order: 1
     [0x10]  inverse connection id   compared against the station's own record at +0xA0
     [0x11]  station location        the 5.11-5.45 layout, unchanged from Sword
     [...]   ack id                  u32, the message size minus four
- Sword 的版本 4 请求（平台字节位于 [2]，移位标志位于 [3]）和 5.29-5.45 布局（协议列表位于 [1]）将每个字段放置在错误的位置。目标常量 id 是游戏机自己的，来自其 MAC；方加入的位置携带其常量ID、变量ID和服务变量ID。
+ 剑 的版本 4 请求（平台字节位于 [2]，移位标志位于 [3]）和 5.29-5.45 布局（协议列表位于 [1]）将每个字段放置在错误的位置。目标常量 id 是游戏机自己的，来自其 MAC；方加入的位置携带其常量ID、变量ID和服务变量ID。
 
 零售 Let's Go 皮卡丘运行完整的版本 9 序列，其中反向连接请求已在 5.27 中删除：
 
@@ -172,7 +172,7 @@ nat_location=0)`。
 然后，主机传输本地协议更新会话 (0x24，用 0x21 确认)、RTT (0x58)、同步时钟 (0x1C) 和克隆 (0x73)。方加入会应答每个请求，并从就座那一刻起发送自己的 RTT 和同步时钟请求。
 ## RTT 协议 (0x58)，版本 3
 
-16 个字节：[0] 处的大端 u32（Sword 上的一个字节），发送者的 19.2 MHz 系统在 [8] 处标记为 u64。响应复制类型 1 的刻度。每个站大约每秒请求一次。
+16 个字节：[0] 处的大端 u32（剑 上的一个字节），发送者的 19.2 MHz 系统在 [8] 处标记为 u64。响应复制类型 1 的刻度。每个站大约每秒请求一次。
 
     00000000 00000000 0000000049845557     request
     00000001 00000000 0000000049845557     the answer to it
@@ -245,7 +245,7 @@ Pia 5.11的头部为24字节（5.29-5.43中为9或13）；两个站上的 32 位
 | 0xaN |时钟，[0x16] 处的 u8 计数，一个 u8 和一个 u16 |时钟和计数，0x1a | `0x51c64c` |
 | 0xbN | 0xbN时钟，u32 参与者位图，位于 [0x16] |时钟和参与者，0x1a | `0x51c66c` (`0x51c680`) |
 | 0xcN |时钟、计数、位图 [0x1A] |时钟和计数和参与者，0x1e | `0x51c68c` |
-| 0xeN |位于 [0xD] 的 zlib 流克隆的状态，确认 | |
+| 0xeN | 位于 [0xD] 的 zlib 数据流 | 克隆方的状态，进行确认 |  |
 | 0xfN | 0xfN [0xD] 处的一个字节，[0xE] 处的 zlib 流 |克隆的状态及其数据 | |
 
 zlib 流膨胀为一条记录：标签 0x20、其长度、u16 克隆 ID，副本为空时为 1，满后为 3：
@@ -295,7 +295,7 @@ b 0x51d450`）服务于其他消息类型。
 |---|---|---|
 |状态变为`0x22`（当`[[proto+0x48]+0x24]`为2至4时）|设置为 `+0x38` | `0x51b060..0x51b06c` |
 |状态变为`0x42` |设置为 `+0x38` | `0x51b140..0x51b150` |
-| | 站点以 `0x22` 或 `0x31` 状态加入 |其位已设置 | `0x51bc64..0x51bc88` |
+| 站点在状态 `0x22` 或 `0x31` 下加入 | 设置其对应位 | `0x51bc64..0x51bc88` |
 |状态为 `0x31` 或 `0x22` 的 10 字节 0x33 |发送者位已清除| `0x51c354..0x51c3b4` |
 | 14 字节 0x41，其中 `[0xa..0xd]` 等于 `[proto+0x3c]`，状态为 `0x42` |发送者位已清除| `0x51c380..0x51c3b4` |
 |车站开出|其位已清除 | `0x51bce0..0x51bce8` |
@@ -309,9 +309,7 @@ b 0x51d450`）服务于其他消息类型。
 0xa2。
 ### 可靠协议上的游戏消息
 
-> 本节已随上游更新，以下内容暂保留英文。
-
-Every message on `0x7c` is a 16-byte header and a body:
+`0x7c` 上的每条消息都由 16 字节头部和消息体组成：
 
 ```
 +0x00  4  kind: the channel id, 1 to 4 in one trade
@@ -323,42 +321,15 @@ Every message on `0x7c` is a 16-byte header and a body:
 +0x10     the body
 ```
 
-`0x116f30(mgr, kind, buf, len, tag, dest)` builds the header at `mgr+0x288`, step `mgr+0x274` plus
-one. Trade senders go through `0x4d94e0` (tag 0, destination 0xff): `0x34945c` (kind 1), `0x34a24c`
-(the offer), `0x838300` and `0x83838c` (the commit). `0x4d9520` takes both from its caller; its
-callers are the battle scene's senders in `0x9dce94..0x9dede8`, one with tag 3.
+`0x116f30(mgr, kind, buf, len, tag, dest)` 在 `mgr+0x288` 构造头部，步数为 `mgr+0x274` 加一。交换发送方经过 `0x4d94e0`（标签 0，目标 0xff）：`0x34945c`（类型 1）、`0x34a24c`（交换提议）、`0x838300` 和 `0x83838c`（提交）。`0x4d9520` 的两个参数均由调用方提供；其调用方是 `0x9dce94..0x9dede8` 中对战场景的发送函数，其中一个使用标签 3。
 
-The receive `0x1171d0` takes the first queued message, from any station, whose step is its
-station's next (`mgr+0x278[station] + 1`, `0x117334..0x117354`), counting every message taken or
-dropped. It drops (`0x11722c`) a message addressed neither to 0xff nor to the local station index
-`mgr+0x1288` (0xfd before a session), or of a kind no channel registered (16-entry table
-`mgr+0x110`, `0x117398..0x1173f8`). A message of another registered kind or tag stays queued and
-blocks every message behind it from any station. Trade receivers (`0x4d9570`) ask for tag 0
-(`0x11746c..0x117478`).
+接收函数 `0x1171d0` 从队列中取出第一条步数等于对应站点下一步的消息，不限来源站点（`mgr+0x278[station] + 1`、`0x117334..0x117354`），并对取出或丢弃的每条消息计数。如果目标既不是 0xff，也不是本地站点索引 `mgr+0x1288`（会话开始前为 0xfd），或类型没有注册通道（16 项表 `mgr+0x110`、`0x117398..0x1173f8`），就会丢弃消息（`0x11722c`）。其他已注册类型或标签的消息会留在队列中，阻塞其后所有站点的消息。交换接收函数（`0x4d9570`）请求标签 0（`0x11746c..0x117478`）。
 
-The kind is a channel id, handed out by `0x116e80` from a per-session counter `mgr+0x270` from 1
-(zeroed with the step counter only at session start, `0x116a10`) and stored at `chan+0x60` by
-`0x4d9450`; with 16 channels registered (`mgr+0x118 > 0xf`) the id is 0. `0x117920` compacts out
-channels whose live count `+0x54` is zero. `0x4d9450`'s five callers: the trade session object
-(`0x3492f8`), the party-offer object (`0x349d88`), the sync save's state 2 (`0x8382a8`), the
-`0x347e10` class (`0x3481fc`), the battle scene (`0x9dce1c`). A trade registers 1, 2, 3 with the
-first three and 4 with the party-offer object the post-trade save re-creates. Each registration also
-announces a clone set (`0x4d94b8`, the thunk `0x11b4c0` into `0x11aec0`), so clone ids differ from
-channel ids.
+类型就是通道 ID，由 `0x116e80` 从每个会话的计数器 `mgr+0x270` 分配，从 1 开始（仅在会话启动时与步数计数器一起清零，`0x116a10`），并由 `0x4d9450` 存入 `chan+0x60`；已注册 16 个通道时（`mgr+0x118 > 0xf`），返回 ID 0。`0x117920` 会移除存活计数 `+0x54` 为零的通道并压紧表。`0x4d9450` 有五个调用方：交换会话对象（`0x3492f8`）、队伍提议对象（`0x349d88`）、同步保存的状态 2（`0x8382a8`）、`0x347e10` 类（`0x3481fc`）以及对战场景（`0x9dce1c`）。交换用前三者注册 1、2、3，再由交换后保存流程重建的队伍提议对象注册 4。每次注册还会通告一个克隆集合（`0x4d94b8`，跳板 `0x11b4c0` 进入 `0x11aec0`），因此克隆 ID 与通道 ID 不同。
 
-Neither bound limits the trades on one seat. The counter is a u32 incremented without a check
-(`0x116ea4..0x116eac`) and the kind is a u32 on the wire, so ids wrap only after 2^32 - 1
-registrations. The 16-entry bound counts live entries: each holds a weak handle (`[chan+0x58]`, made
-by `0x4d98a0`), and `0x117920`, run every frame of an active session from the manager update
-`0x1175d0` (`0x11761c`), erases entries whose channel's strong count `handle+0x54` is zero. The
-commit channel dies with the sync save (`0x838c40`), which dies with its save process (`0x835000`)
-before the dispatcher's state 3 leaves (`0x886670`); the offer channel dies with the party-offer
-object (`0x349dfc`), released after the commit (`0x886c70`) and replaced by the post-trade save
-(`0x3445e0`). A seat holds about four live channels.
+这两个上限都不会限制同一连接中的交换次数。计数器是未经检查递增的 u32（`0x116ea4..0x116eac`），线上类型字段也是 u32，因此只有注册 2^32 - 1 次后 ID 才会回绕。16 项限制统计的是存活项：每项持有弱引用句柄（`[chan+0x58]`，由 `0x4d98a0` 创建）；活动会话中，管理器更新 `0x1175d0`（`0x11761c`）每帧调用 `0x117920`，删除通道强引用计数 `handle+0x54` 为零的项。提交通道随同步保存对象（`0x838c40`）销毁，该对象又随保存进程（`0x835000`）在调度器离开状态 3（`0x886670`）之前销毁；提议通道随队伍提议对象（`0x349dfc`）销毁，该对象在提交后释放（`0x886c70`），并由交换后保存流程替换（`0x3445e0`）。一个连接约有四个存活通道。
 
-Kind 1, body 0x168, the identity: the save's MyStatus block copied to `obj+0x450` (`0x3493f4`),
-sent from state 6 by both stations before either has received anything. UTF-16LE names at body
-offsets:
+类型 1，消息体 0x168，表示身份：将存档的 MyStatus 数据块复制到 `obj+0x450`（`0x3493f4`）。两个站点都在状态 6、尚未收到任何消息时发送。名称以 UTF-16LE 编码，位于以下消息体偏移：
 
 ```
 +0x34  2  0x0002
@@ -366,51 +337,22 @@ offsets:
 +0x52 16  Pokemon name
 ```
 
-`pokeldn.lgpe.reference` ships one, recorded from an emulated save whose trainer is `POKELDN`.
-`bin/lgpe_join.py` sends it by default, the trainer id pair replaced by `--our-trainer`.
+`pokeldn.lgpe.reference` 附带一份身份数据，来自训练家为 `POKELDN` 的模拟存档。`bin/lgpe_join.py` 默认发送这份数据，并用 `--our-trainer` 替换训练家 ID 对。
 
-Kind 2, body 0xe8, the offer, goes the instant the station's published state word reaches 2, and
-again under the next step each time its player changes the offered Pokemon (the selection browses
-the box). A new step is answered; a repeated step is a retransmit and is not.
+类型 2，消息体 0xe8，表示交换提议。站点发布的状态字达到 2 时立即发送；之后每次玩家更换待交换的宝可梦（在盒子中浏览选择），都用下一个步数再次发送。新步数会得到回应；重复步数视为重传，不再回应。
 
-The sender is the party-offer object (constructor `0x349bf0`, 0x278 bytes, at `mgr+0x68`). Its
-update `0x34a210` sends the structure at `+0xa0` whenever `+0x270` is set and `+0x272` clear, then
-clears `+0x270`. `0x34a3d0`, called by the trade UI on a selection change (`0x8f0c04`, `0x8f0c38`,
-`0x8f8fb0`, `0x90b87c`, `0x90b8c0`), packs a Pokemon into `+0xa0` (`0x7294e0`) and sets `+0x270` when
-the status allows (A 0: local state other than 1 or 2; A 1: local state 3 or above 4; A 2: never;
-A 3: the partner leaving, `0x3490c0`). `0x344620` destroys the object after the commit (`0x886c70`)
-and when the link ends (`0x8869f0`); the normal save after a trade re-creates it (`0x8375a4`) on a
-new channel id.
+发送方是队伍提议对象（构造函数 `0x349bf0`，大小 0x278 字节，位于 `mgr+0x68`）。其更新函数 `0x34a210` 在 `+0x270` 已置位且 `+0x272` 未置位时发送 `+0xa0` 处的结构，然后清除 `+0x270`。交换界面在选择变化时调用 `0x34a3d0`（`0x8f0c04`、`0x8f0c38`、`0x8f8fb0`、`0x90b87c`、`0x90b8c0`），将宝可梦打包到 `+0xa0`（`0x7294e0`），并在状态允许时设置 `+0x270`：A 0 要求本地状态不是 1 或 2；A 1 要求本地状态为 3 或大于 4；A 2 始终不允许；A 3 表示对方离开（`0x3490c0`）。`0x344620` 在提交后（`0x886c70`）及连接结束时（`0x8869f0`）销毁对象；交换后的常规保存会用新通道 ID 重建对象（`0x8375a4`）。
 
-Kind 3, body 4, the commit, a u32 sent by the sync save ("The commit and the trade lock" below):
-each station sends a 1, and one sends a 2 after the peer's 1. The station that sends the 2 sends it
-on taking the peer's 1 (state 5, `0x838310`); a 2 received in state 6 commits, any other body is
-ignored (`0x83839c`), so a joiner also answering the 2 with a 2 is tolerated.
-After its commit a station shows a spinner with no button prompt. An incomplete exchange leaves the
-trade lock set.
+类型 3，消息体 4，表示提交：由同步保存流程发送的 u32（见下文“提交与交换锁”）。每个站点先发送 1，其中一方收到对方的 1 后发送 2。发送 2 的站点在取出对方的 1 时发送（状态 5，`0x838310`）；状态 6 收到 2 时提交，其他消息体都忽略（`0x83839c`），因此加入方再用 2 回应 2 也能被接受。提交后，站点显示旋转等待图标，没有按键提示。交换未完成时，交换锁会保持设置状态。
 
-Kind 4, body 0xe8, rides the channel of the party-offer object the normal save re-creates 3000 ms
-after its `SaveThread` (`0x8377ec`, `0x8375a4`), after the trade demo, and carries the next trade's
-selection: first the station's first slot (byte-identical to its step-2 offer), then one per
-selection. A trade is saved before kind 4 goes out; kind 4 opens the next trade.
+类型 4，消息体 0xe8，使用常规保存流程重建的队伍提议对象通道，在交换演出结束、其 `SaveThread`（`0x8377ec`、`0x8375a4`）经过 3000 毫秒后发送，携带下一次交换的选择：先发送站点第一个栏位（与步数 2 的提议逐字节相同），随后每次选择变化发送一条。类型 4 发出前已经保存本次交换；类型 4 开启下一次交换。
 
-Trade r, counted from 0, offers on kind 2 + 2r, commits on 3 + 2r and ends on 4 + 2r, the offer
-channel of trade r + 1 (`0x116e80` hands out ids from a per-session counter; the dispatcher
-re-registers both channels each trade). In the two consecutive trades measured, trade r's party pair
-was clones 2 + 3r and 3 + 3r and its commit clone 4 + 3r; the pair announced after a trade's save
-belongs to the next trade. Hosting, `bin/lgpe_host.py
---next-offer` answers the console's selections in each later trade with the next record. Joining,
-the console host's first kind 4 is its first slot: `bin/lgpe_join.py` answers it and each later
-selection with its next `--offer`, answers the commit on kind 5, and takes kind 6 as that trade's
-end; after its last record it answers nothing.
+从 0 计数的第 r 次交换使用类型 2 + 2r 发送提议、3 + 2r 提交、4 + 2r 结束；最后一个也是第 r + 1 次交换的提议通道（`0x116e80` 用会话计数器分配 ID；调度器每次交换都重新注册两个通道）。实测的两次连续交换中，第 r 次的队伍克隆对为 2 + 3r 和 3 + 3r，提交克隆为 4 + 3r；保存后通告的克隆对属于下一次交换。作为主机时，`bin/lgpe_host.py
+--next-offer` 用下一条记录回应主机在后续每次交换中的选择。作为加入方时，游戏主机发送的第一条类型 4 是其第一个栏位：`bin/lgpe_join.py` 用下一份 `--offer` 回应该消息和之后每次选择，用类型 5 回应提交，并将类型 6 视为本次交换结束；最后一条记录结束后不再回应。
 
-A console host runs each later trade as the first: the next party pair announced before its first
-kind 4, a kind 4 step per selection, the commit clone at its confirmation, the commit on kind 5, and
-the following pair announced before kind 6. `bin/lgpe_host.py --lead` plays a console host's part,
-offering and voting unprompted, for `bin/lgpe_join.py`; `tests/test_esp32.py` trades two records
-each way between the two.
+游戏主机执行后续交换的方式与首次相同：首次类型 4 前通告下一对队伍克隆；每次选择对应一个类型 4 步数；确认时通告提交克隆；用类型 5 提交；类型 6 前通告随后一对克隆。`bin/lgpe_host.py --lead` 为 `bin/lgpe_join.py` 模拟游戏主机，主动发送提议并投票；`tests/test_esp32.py` 在两者之间双向各交换两条记录。
 
-A complete trade, both stations counting their own steps:
+一次完整交换的流程，两个站点分别计算自己的步数：
 
 ```
 step 1  kind 1   identity
@@ -420,13 +362,9 @@ step 6  kind 3   commit, body 2
 step 7  kind 4   the first slot, again under a fresh step per selection
 ```
 
-The body of kinds 2 and 4 is a 232-byte box structure: the generation 7 layout under generation 6
-encryption, encryption constant at +0x00, zero sanity word at +0x04, checksum at +0x06, four 56-byte
-blocks from +0x08 permuted by `((ec >> 13) & 0x1F) % 24` and XORed with a 16-bit LCRNG stream seeded
-with the constant. `pokeldn.lgpe.pb7` round-trips a captured offer byte for byte.
+类型 2 和 4 的消息体是 232 字节的盒子结构：第七世代布局，使用第六世代加密方式。加密常量位于 +0x00，值为零的完整性标记位于 +0x04，校验和位于 +0x06；从 +0x08 开始的四个 56 字节数据块按 `((ec >> 13) & 0x1F) % 24` 重排，再与以加密常量为种子的 16 位 LCRNG 流异或。`pokeldn.lgpe.pb7` 能对捕获的提议完成逐字节一致的往返转换。
 
-The state word is byte 12 of the `f3` state data and walks 0, 1, 2 on every clone a station owns. A
-station that publishes 2 and sends its kind 2 waits for the peer's kind 2.
+状态字位于 `f3` 状态数据的第 12 字节，在站点拥有的每个克隆上依次经过 0、1、2。站点发布 2 并发送类型 2 后，等待对方的类型 2。
 
 ### 是什么控制了游戏自己的第一条消息
 
@@ -521,213 +459,83 @@ then      kind 4 under the next step, every copy republished under it
 游戏机在执行 `0e` 步后播放交换动画，并且在此期间不发送交换发票。以零售Let's Go托管`bin/lgpe_join.py`为例，从该步骤开始：动画在约1.7秒开始，接收到的宝可梦在约15.3秒出现（手按，最多晚2秒），游戏机的4型消防（248字节）在27.0秒到达，玩家在约28.8秒获得控制。
 ### 提交和交换锁
 
-> 本节已随上游更新，以下内容暂保留英文。
+交换锁是存档 MyStatus 数据块中的 u32 秒倒计时。交换保存时先将其设为 600，并在提交交互之前写入存档；交互完成后，再将其改回 0 并提交保存。
 
-The trade lock is a u32 countdown in seconds in the save's MyStatus block. A trade's save sets it to
-600 and commits that before the commit exchange; the exchange completing commits it back to 0.
+MyStatus 数据块对象为 `[[[0x15fad08]]+0x98]+0x58` → `+0x78`，数据位于 `obj+0x58`，大小 0x168 字节（`0x1c9ff0`、`0x1ca000`，虚函数表 `0x153e0b0` 的槽位 5、6），也就是类型 1 的消息体。计数器为 `obj+0xe8`，位于 MyStatus 的 `+0x90`（设置函数 `0x1c9d40`，读取函数 `0x1c9d50`）。在 `savedata.bin` 中，数据块为 `0x1000..0x1168`（训练家名称位于 `0x1038`），计数器位于 `0x1090`：交换中断后保留的存档在此处为 `58 02 00 00`，数据块其余部分没有变化。捕获的每条类型 1 消息在 `+0x90` 都为 0。
 
-The MyStatus block object is `[[[0x15fad08]]+0x98]+0x58` -> `+0x78`, data `obj+0x58`, 0x168 bytes
-(`0x1c9ff0`, `0x1ca000`, slots 5 and 6 of vtable `0x153e0b0`), the kind 1 body. The counter is
-`obj+0xe8`, MyStatus `+0x90` (setter `0x1c9d40`, getter `0x1c9d50`). In `savedata.bin` the block is
-`0x1000..0x1168` (trainer name at `0x1038`) and the counter `0x1090`: a save kept after an
-interrupted trade holds `58 02 00 00` there and no other change in the block. Every captured kind 1
-carries 0 at `+0x90`.
+设置函数的调用方包括：同步保存设置 600（`0x837f90`、`0x837fb0`），应用收到的宝可梦时设置 0（`0x838bec`、`0x838c0c`），以及倒计时（`0x1ca54c`、`0x1ca56c`）；载入存档时写入整个数据块。连接菜单检查 `0x9765f4` 根据连接模式分支：模式 1（交换）读取计数器（`0x976634`），非零时以拒绝消息 `0x0248810f825b1fee` 返回 -1（`0x97663c`）；为零时继续检查数量（消息 `0x0248800f825b1e3b`）。模式 3 在 `[x22+0x62] <= 1` 时拒绝（消息 `0x02487f0f825b1c88`）。
 
-The setter's callers: the sync save with 600 (`0x837f90`, `0x837fb0`), the received Pokemon's
-application with 0 (`0x838bec`, `0x838c0c`), the countdown (`0x1ca54c`, `0x1ca56c`); loading the save
-writes the block. The link menu's check `0x9765f4` switches on the link mode: mode 1 (trade) reads
-the counter (`0x976634`) and, non-zero, returns -1 with refusal `0x0248810f825b1fee` (`0x97663c`);
-zero goes on to a count check (message `0x0248800f825b1e3b`). Mode 3 refuses when
-`[x22+0x62] <= 1` (message `0x02487f0f825b1c88`).
+交换锁随游戏时间倒计时。当 `seconds > 1`（`0x1ca46c`）或 `playtime+0x100` 未置位时（`0x1ca474`），`0x1ca450(playtime, seconds)` 立即返回；否则从计数器减去 `seconds`，最低为 0（`0x1ca500`），并将其加到游戏时间中（`+0x54` 为 u16 小时，`+0x56` 为分钟，`+0x57` 为秒，上限 999:59:59，`0x1ca5a0`）。`0x1ca7e0` 将 `playtime+0x100` 写为 `nn::oe::GetCurrentFocusState() != 3`（后台）。在启用字节 `+0x54` 置位且没有保存线程（`0x1ce8f0`）时，调用方 `0x1462a0` 每调用 20 次执行一次（计数器 `+0x70`）：将 `GetSystemTick` 与基准计时值（`+0x68`）之差转换为整秒，再将其相对已计入秒数（`+0x60`）的增量传给 `0x1ca450`（`0x146314..0x14637c`）；只有计时值倒退时才更新基准（`0x146384..0x1463c0`）。两秒或更大的跳变会被丢弃，因此每次获准执行最多增加一秒。600 的锁定值对应十分钟计入的游戏时间：仅焦点状态 1、2 会计时，后台或游戏关闭期间不会计时（启动时重新读取基准，`0x14628c`）。
 
-The lock counts down with the play time. `0x1ca450(playtime, seconds)` returns at once when
-`seconds > 1` (`0x1ca46c`) or `playtime+0x100` is clear (`0x1ca474`); otherwise it subtracts
-`seconds` from the counter, floored at 0 (`0x1ca500`), and adds them to the play time (`+0x54` hours
-u16, `+0x56` minutes, `+0x57` seconds, capped at 999:59:59, `0x1ca5a0`). `0x1ca7e0` writes
-`playtime+0x100` as `nn::oe::GetCurrentFocusState() != 3` (Background). Its caller `0x1462a0` runs
-every 20th call (counter `+0x70`) while its enable byte `+0x54` is set and no save thread exists
-(`0x1ce8f0`): it converts `GetSystemTick` minus a base tick (`+0x68`) to whole seconds and passes
-the increase over the seconds already counted (`+0x60`) to `0x1ca450` (`0x146314..0x14637c`); the
-base moves only when the tick goes backwards (`0x146384..0x1463c0`). A jump of two or more seconds
-is dropped, so the clock gains at most one second per gated call. A lock of 600 lasts ten minutes
-of counted play time: in focus states 1 and 2, never in the background or while the game is closed
-(base re-read at start, `0x14628c`).
+`0x13c944` 位于 `0x13c850` 中（该函数还执行 `0x145560`、`0x13f0d0`、`0x142cd0`、`0x1427a0`），只能由 `0x13c5a0` 到达，属于大小 0x210 字节任务的槽位 `+0x40`（虚函数表 `0x15379d8`；在初始化 `0x13b650` 中由 `0x13c440` 根据 `0x13bfa0` 构造，存于 `G+0x50`，完成字节为 `+0x204`）。工作循环 `0x20f30` 中的执行器 `0x231a0` 在 `+0x204` 未置位时执行它（`0x23264..0x23288`）。`0x13bfa0` 通过 `0x1ca00` 将任务接入依赖图（`0x13c02c..0x13c120`）；每帧由谁提交依赖图、游戏时间计时因此多久执行一次，尚不清楚。帧周期表 `0xf7eeb8` 有五档，从 16666667 到 83333334 纳秒，由 `0x39600` 索引；帧循环以 33333334 纳秒启动（`0x38ba0..0x38bb8`，虚函数表 `0x1529968`），每隔 `clamp(period / 16666666, 1, 5)` 次垂直同步呈现一帧（`0x29e80..0x29eb4`）。
 
-`0x13c944` is in `0x13c850` (which also runs `0x145560`, `0x13f0d0`, `0x142cd0`, `0x1427a0`), reached
-only from `0x13c5a0`, slot `+0x40` of a 0x210-byte job (vtable `0x15379d8`, built by `0x13c440` from
-`0x13bfa0` in the setup `0x13b650`, stored at `G+0x50`, done byte `+0x204`). The executor `0x231a0`,
-from the worker loop `0x20f30`, runs it while `+0x204` is clear (`0x23264..0x23288`). `0x13bfa0`
-chains the job into a dependency graph with `0x1ca00` (`0x13c02c..0x13c120`); what submits the graph
-each frame, and so how often the play-time tick runs, is unknown. The frame period table `0xf7eeb8`
-holds 16666667 to 83333334 ns in five steps, indexed by `0x39600`; the frame loop starts at
-33333334 ns (`0x38ba0..0x38bb8`, vtable `0x1529968`) and presents every
-`clamp(period / 16666666, 1, 5)` vsyncs (`0x29e80..0x29eb4`).
+`0x347190` 构造三种保存流程之一：0“常规保存”（`0x3474d0`）、1“同步保存”（`0x347670` → `0x347ae0`，0xc8 字节）、2“致命错误”（`0x347810`）。交换采用同步保存。初始化函数 `0x837c70` 在 `seq+0xb8` 创建提交通道对象（`0x4d9030`），将计数器设为 600（`0x837f88`），然后启动 `SaveThread`（`0x1cdc80`）；后者在调用线程中序列化，并在写入完成后提交（`0x1cedd4..0x1cede0`、`nn::fs::CommitSaveData`）。更新函数 `0x838070` 根据 `seq+0xa8`，经跳转表 `0xf867c4` 执行：
 
-`0x347190` builds one of three save sequences: 0 "normal save" (`0x3474d0`), 1 "sync save"
-(`0x347670` -> `0x347ae0`, 0xc8 bytes), 2 "fatal error" (`0x347810`). A trade uses the sync save. Its
-init `0x837c70` creates the commit channel object (`0x4d9030`) at `seq+0xb8`, sets the counter to 600
-(`0x837f88`), and starts `SaveThread` (`0x1cdc80`), which serializes on the calling thread and
-commits once written (`0x1cedd4..0x1cede0`, `nn::fs::CommitSaveData`). Its update `0x838070` runs on
-`seq+0xa8` through jump table `0xf867c4`:
-
-| state | address | what it does |
+| 状态 | 地址 | 行为 |
 |---|---|---|
-| 0 | `0x8380ac` | a recorded network error (`0x4d8a70`) writes result 2 and leaves; otherwise waits for `SaveThread` (`0x1cdf40`), stores at `seq+0xc0` whether this station sends the 2 (`0x838660`), applies the received Pokemon and zeroes the counter in memory (`0x838800`), sets `netmgr+0x121` (`0x4d8b10`), starts `FirstSaveThread` (`0x1ce050`) |
-| 1 | `0x8380d8` | waits for `FirstSaveThread` to write (`0x1ce310`), then draws a delay of `2000 + r % 6000` ms from an MT19937-64 seeded with `GetSystemTick` |
-| 2 | `0x838234` | after the delay, registers the commit channel (`0x8382a8`) |
-| 3 | `0x8382b4` | votes 1 on the commit clone once (`0x4d9690`: `chan+0x64 = 1`, `0x11bc00`), then waits for the channel's gate (`0x4d94d0`) and the clone idle with `[chan+0x74]` 1 |
-| 4 | `0x8382ec` | sends a kind 3 carrying 1 |
-| 5 | `0x838310` | takes the other station's kind 3 (skipping its loopback); a body other than 1 is the error path (`0x83836c`); if `seq+0xc0` is set, sends a kind 3 carrying 2 (a failed send stays in 5 with the peer's 1 consumed) |
-| 6 | `0x83839c` | takes a kind 3 from any station: a 2 clears `netmgr+0x121` (`0x4d8b20`) and signals the commit (`0x1ce3f0`); any other body is ignored |
-| 7 | `0x8383e8` | waits for `FirstSaveThread` to commit (`0x1ce410`), result 0 |
+| 0 | `0x8380ac` | 存在已记录的网络错误（`0x4d8a70`）时写入结果 2 并退出；否则等待 `SaveThread`（`0x1cdf40`），在 `seq+0xc0` 保存本站点是否发送 2（`0x838660`），应用收到的宝可梦并在内存中清零计数器（`0x838800`），设置 `netmgr+0x121`（`0x4d8b10`），启动 `FirstSaveThread`（`0x1ce050`） |
+| 1 | `0x8380d8` | 等待 `FirstSaveThread` 写入（`0x1ce310`），然后从以 `GetSystemTick` 为种子的 MT19937-64 中抽取 `2000 + r % 6000` 毫秒延迟 |
+| 2 | `0x838234` | 延迟结束后注册提交通道（`0x8382a8`） |
+| 3 | `0x8382b4` | 在提交克隆上投票 1 一次（`0x4d9690`：`chan+0x64 = 1`、`0x11bc00`），然后等待通道门控（`0x4d94d0`）以及克隆空闲且 `[chan+0x74]` 为 1 |
+| 4 | `0x8382ec` | 发送消息体为 1 的类型 3 |
+| 5 | `0x838310` | 取出另一站点的类型 3（跳过自身回环）；消息体不是 1 时进入错误路径（`0x83836c`）；若 `seq+0xc0` 已置位，则发送消息体为 2 的类型 3（发送失败时留在状态 5，但对方的 1 已被消费） |
+| 6 | `0x83839c` | 取出任意站点的类型 3：值为 2 时清除 `netmgr+0x121`（`0x4d8b20`）并发出提交信号（`0x1ce3f0`）；其他消息体忽略 |
+| 7 | `0x8383e8` | 等待 `FirstSaveThread` 提交（`0x1ce410`），结果为 0 |
 
-`FirstSaveThread` serializes as it starts (`0x1ce154`), after the counter was zeroed, signals
-`mgr+0x78` once written, waits on `mgr+0x84`, and commits only if the abort byte `mgr+0x100090` is
-clear (`0x1cedf4..0x1cee18`). The error paths (`0x8383b0` for states 2, 3, 5, 6; `0x838520` for a
-wrong body; `0x8380c8` for state 0) write result 2 into the parent (`[x0+0x88]+4`); the first two
-call `0x1ce520`, which sets the abort byte and waits for the thread to end. Every path ends with
-`0x838540(seq, 0)`. The second save is dropped and the save on disk keeps 600.
+`FirstSaveThread` 在启动时序列化（`0x1ce154`），此时计数器已清零；写入后发出 `mgr+0x78` 信号，等待 `mgr+0x84`，仅在中止字节 `mgr+0x100090` 未置位时提交（`0x1cedf4..0x1cee18`）。错误路径（状态 2、3、5、6 对应 `0x8383b0`，错误消息体对应 `0x838520`，状态 0 对应 `0x8380c8`）在父对象中写入结果 2（`[x0+0x88]+4`）；前两条路径调用 `0x1ce520`，设置中止字节并等待线程结束。所有路径都以 `0x838540(seq, 0)` 结束。第二次保存被丢弃，磁盘存档中的计数器仍为 600。
 
-The dispatcher's state 3 (`0x886684`) reads that result: 2 calls `0x345b10` (`0x886690`) and returns
-without advancing. `0x345b10` pushes a fatal-error wrapper (vtable `0x154f1f8`, 0xa8 bytes, `+0x88 =
-0`) on the root process stack (`0x13a6b0`); its `0x346140` builds a save process of type
-`[proc+0x88] != 0 ? 3 : 2` (`0x3461b8..0x3461d0`), both the fatal error sequence, whose init
-`0x836320` shows message `0x191615296121e064` for 2 and `0x977c18bf4135ff42` for 3 (`0x8365f0`,
-through `0x7ed60`) and whose update (`0x836780`) is a bare `ret`. An aborted commit ends on that
-screen, no later save follows, and the save holds 600 at the next boot.
+调度器的状态 3（`0x886684`）读取该结果：结果为 2 时调用 `0x345b10`（`0x886690`），不推进状态就返回。`0x345b10` 将致命错误包装对象（虚函数表 `0x154f1f8`，0xa8 字节，`+0x88 =
+0`）压入根进程栈（`0x13a6b0`）；其 `0x346140` 构造类型为 `[proc+0x88] != 0 ? 3 : 2` 的保存进程（`0x3461b8..0x3461d0`），两者都对应致命错误流程。该流程的初始化 `0x836320` 在类型 2 时显示消息 `0x191615296121e064`、类型 3 时显示 `0x977c18bf4135ff42`（`0x8365f0`，经过 `0x7ed60`），更新函数（`0x836780`）仅包含 `ret`。提交中止后会停在此界面，不会再保存，下一次启动时存档中的计数器仍为 600。
 
-Both ids are labels of `common/message_error.dat` (string at `0xf22dfc`), FNV-1a-64 with basis
-`0xcbf29ce484222645`, the same in all ten languages of update v131072:
+两个 ID 都是 `common/message_error.dat` 的标签（字符串位于 `0xf22dfc`），使用初始基值 `0xcbf29ce484222645` 的 FNV-1a-64；更新版本 v131072 的十种语言中均相同：
 
-| id | label | English | French |
+| ID | 标签 | 英语原文与中文释义 | 法语原文与中文释义 |
 |---|---|---|---|
-| `0x191615296121e064` | `error_fatal_save` | An error occurred. You couldn't trade Pokémon. Press the HOME Button to end the game. | Une erreur s'est produite. L'échange de Pokémon n'a pas pu être effectué. Veuillez appuyer sur le bouton HOME et fermer le jeu. |
-| `0x977c18bf4135ff42` | `erro_fatal_storage` (sic) | Save data in the Nintendo Switch couldn't be recognized. Please turn off the system, and then try again. | L'identification des données de sauvegarde de la console Nintendo Switch a échoué. Veuillez éteindre votre console, la rallumer, puis réessayer. |
+| `0x191615296121e064` | `error_fatal_save` | An error occurred. You couldn't trade Pokémon. Press the HOME Button to end the game.（发生错误，无法交换宝可梦。请按 HOME 键结束游戏。） | Une erreur s'est produite. L'échange de Pokémon n'a pas pu être effectué. Veuillez appuyer sur le bouton HOME et fermer le jeu.（发生错误，无法交换宝可梦。请按 HOME 键关闭游戏。） |
+| `0x977c18bf4135ff42` | `erro_fatal_storage`（原文如此） | Save data in the Nintendo Switch couldn't be recognized. Please turn off the system, and then try again.（无法识别 Nintendo Switch 中的保存数据。请关闭主机后重试。） | L'identification des données de sauvegarde de la console Nintendo Switch a échoué. Veuillez éteindre votre console, la rallumer, puis réessayer.（无法识别 Nintendo Switch 的保存数据。请关闭主机、重新开机后重试。） |
 
-The game has one process stack, rooted at `[G+0x68]` (`G = [0x160d310]`). The runner `0x13a780`
-updates only the top `[root+0x78]` through `0x13a160`: 3 runs the new top in the same frame, 1 pops
-it or swaps in the pending `[root+0x80]`. The wrapper never returns 1 (`0x346140` hands the fatal
-process to the manager `[G+0x60]` through `0x39c20`), so the dispatcher beneath it is never updated
-again.
+游戏只有一个进程栈，根为 `[G+0x68]`（`G = [0x160d310]`）。执行器 `0x13a780` 仅通过 `0x13a160` 更新栈顶 `[root+0x78]`：返回 3 时同一帧执行新的栈顶；返回 1 时弹出栈顶，或换入等待中的 `[root+0x80]`。包装对象从不返回 1（`0x346140` 通过 `0x39c20` 将致命错误进程交给管理器 `[G+0x60]`），因此其下方的调度器不会再得到更新。
 
-The link menu's refusal ids `0x02487f0f825b1c88`, `0x0248800f825b1e3b`, `0x0248810f825b1fee` differ
-pairwise by the FNV prime `0x100000001b3`: FNV-1a-64 hashes of three strings differing only in the
-last byte (times the prime's inverse modulo 2^64 they end `dd58`, `dd59`, `dd5a`). The strings are
-unknown; the text is in the romfs message archives.
+连接菜单的拒绝 ID `0x02487f0f825b1c88`、`0x0248800f825b1e3b`、`0x0248810f825b1fee` 两两相差 FNV 质数 `0x100000001b3`：它们是三个仅最后一个字节不同的字符串的 FNV-1a-64 哈希值（乘以该质数模 2^64 的逆元后，末尾分别为 `dd58`、`dd59`、`dd5a`）。字符串尚不明确；文本位于 romfs 消息归档中。
 
-While `netmgr+0x121` is set, `0x4d8750` records every network error at severity 4
-(`0x4d8760..0x4d877c`), which states 2, 3, 5 and 6 test for (`0x4d8a80`). A recorded error is
-replaced only by a higher severity (`0x4d879c`), so an error above 4 recorded before `+0x121` was set
-fails the test. `+0x121` is set at the end of state 0 (`0x4d8b10` at `0x8384f8`) and cleared by state
-6 on a received 2 (`0x4d8b20` at `0x838494`). No state has a timeout: a quiet peer leaves the
-sequence waiting until the link fails.
+`netmgr+0x121` 置位期间，`0x4d8750` 将所有网络错误记录为严重级别 4（`0x4d8760..0x4d877c`），状态 2、3、5、6 会检查这个级别（`0x4d8a80`）。只有更严重的错误才会替换已有记录（`0x4d879c`），因此在 `+0x121` 置位前记录的高于 4 的错误不会通过此检查。`+0x121` 在状态 0 结束时设置（`0x8384f8` 处的 `0x4d8b10`），由状态 6 收到 2 后清除（`0x838494` 处的 `0x4d8b20`）。没有任何状态设有超时：对方不发送消息时，流程会持续等待，直到连接失败。
 
-The recorders: `0x345790` (code 0xe), `0x3457d0` (0x11), `0x345810` (0xf), `0x345860`, `0x3458a0`,
-`0x345900` (an `nn::err::ErrorCode`), `0x345940` (the serial-code client), `0x3459f0`, `0x345a50`,
-`0x345aa0`. The listener at `mgr+0x60` (vtable `0x154f068`) routes `0x344c30`, `0x344c60`,
-`0x344c70`, `0x344c80` to `0x345790`, `0x344c40` to `0x345900`, `0x344c50` to `0x345860`, `0x344c90`
-to `0x3457d0`. The trade session object (vtable `0x154f608`) forwards slot 9 (`0x349650`, code 0xe),
-slot 10 (`0x3497d0`) and slots 11 to 14 (`0x349880`, `0x3498e0`, `0x349940`, `0x3499a0`; 14 is code
-0x11) to it through `0x3496b0`.
+记录函数包括：`0x345790`（代码 0xe）、`0x3457d0`（0x11）、`0x345810`（0xf）、`0x345860`、`0x3458a0`、`0x345900`（一个 `nn::err::ErrorCode`）、`0x345940`（序列码客户端）、`0x3459f0`、`0x345a50`、`0x345aa0`。`mgr+0x60` 的监听器（虚函数表 `0x154f068`）将 `0x344c30`、`0x344c60`、`0x344c70`、`0x344c80` 路由到 `0x345790`，`0x344c40` 到 `0x345900`，`0x344c50` 到 `0x345860`，`0x344c90` 到 `0x3457d0`。交换会话对象（虚函数表 `0x154f608`）通过 `0x3496b0` 将槽位 9（`0x349650`，代码 0xe）、槽位 10（`0x3497d0`）以及槽位 11 至 14（`0x349880`、`0x3498e0`、`0x349940`、`0x3499a0`；14 对应代码 0x11）转发给监听器。
 
-The link state machine `0x4d9b70` (from `0x349520`) enters state 6 when its state is 5 or less, no
-operation is pending (`[x19+0x20]` null) and the pump `0x1175d0` returns 0 (`0x4d9b98..0x4d9bc8`);
-state 6 (`0x4d9fb0`) calls slot 9. The pump returns 0 when `[x19+0x80]` is null, the transport's
-`+0x48` is not 5 (`0x11c560`), or the session's u16 `+0x1e6` is 1 or less (`0x1176b0..0x1176bc`).
-Only `0x59eab0` writes `+0x1e6`: the sum over the stations in `s+0x178` of byte `+0x415` of each
-state-3 station record (`0x5b5900`, `0x5a9cd0`), filled from connection-response wire byte `0x35`
-(`0x5b962c..0x5b9658`). A retail Let's Go sends 1 there, so the value is the station count. The
-local station counts too: `CreateMeshJob` (`0x581f20`) and `JoinMeshJob` (`0x583b90`) register its
-record through `0x5a9430` in mode 0, which sets state 3 at once (`0x5a9558`, `0x5a9720`), with
-`[mesh+0x12b]` (`0x58e960`; 1 after a mesh reset, `0x58bd20`), and `0x5a3be0` adds the local id
-`[s+0xe0]` to `s+0x178` first (`0x5a3c48`). A two-console session counts 2.
+连接状态机 `0x4d9b70`（来自 `0x349520`）在状态不高于 5、没有待处理操作（`[x19+0x20]` 为空）且泵函数 `0x1175d0` 返回 0 时进入状态 6（`0x4d9b98..0x4d9bc8`）；状态 6（`0x4d9fb0`）调用槽位 9。当 `[x19+0x80]` 为空、传输层的 `+0x48` 不为 5（`0x11c560`），或会话的 u16 字段 `+0x1e6` 不大于 1（`0x1176b0..0x1176bc`）时，泵函数返回 0。只有 `0x59eab0` 写入 `+0x1e6`：它对 `s+0x178` 中各站点的状态 3 记录求和，累加每条记录的字节 `+0x415`（`0x5b5900`、`0x5a9cd0`）；该值来自连接响应的线上字节 `0x35`（`0x5b962c..0x5b9658`）。零售版《Let's Go》在此发送 1，因此结果就是站点数量。本地站点也计入：`CreateMeshJob`（`0x581f20`）及 `JoinMeshJob`（`0x583b90`）通过 `0x5a9430` 以模式 0 注册本地记录，该模式立即设置状态 3（`0x5a9558`、`0x5a9720`），并使用 `[mesh+0x12b]`（`0x58e960`；网状网络重置后为 1，`0x58bd20`）；`0x5a3be0` 先将本地 ID `[s+0xe0]` 加入 `s+0x178`（`0x5a3c48`）。双主机会话的计数为 2。
 
-The recount runs only when `[s+0xd8]` is outside 2 to 6, `[s+0xd4]` is 2 or 4 and
-`0x52abf0(s+0x38)` is false (`0x59eacc..0x59eaf8`); all three pass during a trade. `[s+0xd8]` is the
-session status: 1 connected, 2 lost (`0x5a0490`), 3 starting, 4 to 6 a failure seen by
-SessionStatusCheckJob. `[s+0xd4]` is the session state: 1 once the local network is up
-(`0x5d70bc`), 2 in session, 3 and 4 only during a joint session; both reach 2 and 1 at the end of
-`CreateSessionJob::WaitCreateMesh` (`0x582a20`, `0x582a24`) and of the join's mesh wait (`0x586e74`,
-`0x586e98`). `[s+0x38]` is the `LocalMatchLeaveSessionJob` (factory slot `+0x1b8`, `0x5c7d20`);
-`0x52abf0` is true while a job's state `+8` is 1 to 7, which happens only while the local console
-leaves. A partner's departure reaches the session as event 1 from the mesh's station disconnect
-(`0x58be90` -> `0x58c040` -> `0x58ea20`, case `0x58ebf4`), whose leave handler `0x59dea0` (or
-`0x59f1b0` during host migration) removes the id and recounts (`0x59dfc4`), unless `[s+0x13d]`, set
-only during matching, defers it (`0x59df34`). The count drops to 1, the pump returns 0, and slot 9
-records code 0xe through the listener `[obj+0x98]`, set when the manager stores the trade session
-(`0x343ebc`). The manager update `0x344370` runs every frame from `0x13d9d0` (`0x13da00`), so the
-link machine runs during the sync save: a partner leaving while `netmgr+0x121` is set ends on
-`error_fatal_save`. How long the mesh waits before it declares a silent station gone is unread.
+仅当 `[s+0xd8]` 不在 2 至 6、`[s+0xd4]` 为 2 或 4、且 `0x52abf0(s+0x38)` 为假时重新计数（`0x59eacc..0x59eaf8`）；交换期间三个条件都满足。`[s+0xd8]` 是会话状态：1 已连接、2 已丢失（`0x5a0490`）、3 正在启动、4 至 6 是 SessionStatusCheckJob 检测到的失败。`[s+0xd4]` 是另一会话状态字段：本地网络就绪后为 1（`0x5d70bc`），会话内为 2，联合会话期间才为 3、4；在 `CreateSessionJob::WaitCreateMesh` 结束时（`0x582a20`、`0x582a24`）以及加入方网状网络等待结束时（`0x586e74`、`0x586e98`），两字段分别变为 2、1。`[s+0x38]` 是 `LocalMatchLeaveSessionJob`（工厂槽位 `+0x1b8`，`0x5c7d20`）；任务状态 `+8` 为 1 至 7 时 `0x52abf0` 为真，这只发生在本地主机退出期间。对方离开时，网状网络的站点断开事件 1 传到会话（`0x58be90` → `0x58c040` → `0x58ea20`，分支 `0x58ebf4`）；退出处理函数 `0x59dea0`（主机迁移期间为 `0x59f1b0`）移除 ID 并重新计数（`0x59dfc4`），除非仅匹配期间设置的 `[s+0x13d]` 将其延后（`0x59df34`）。计数降至 1，泵函数返回 0，槽位 9 经监听器 `[obj+0x98]` 记录代码 0xe；管理器存储交换会话时设置该监听器（`0x343ebc`）。管理器更新 `0x344370` 每帧由 `0x13d9d0` 调用（`0x13da00`），因此同步保存期间连接状态机仍在运行：`netmgr+0x121` 置位时对方离开，会停在 `error_fatal_save`。网状网络等待多久才将沉默站点视为离线，尚未分析。
 
-The link machine calls the trade session object (vtable `0x154f618`) at six offsets, each from
-`[x19+0x10]`:
+连接状态机在六个偏移处调用交换会话对象（虚函数表 `0x154f618`），均来自 `[x19+0x10]`：
 
-| offset | function | call | when |
+| 偏移 | 函数 | 调用 | 触发条件 |
 |---|---|---|---|
-| `+0x30` | `0x3495e0` | `0x4da584` in `0x4da4b0` (from `0x4d9cf0`) | state 4 to 5 (`0x4d9cf4`) |
-| `+0x38` | `0x349600` | `0x4d9f2c` | matching succeeded, before `0x116890` |
-| `+0x40` | `0x349620` | in `0x4da5e0` (from `0x4d9e24`) | state 9 to 10 (`0x4d9e28`) |
-| `+0x48`, slot 9 | `0x349650` | `0x4da084` in `0x4d9fb0` (from `0x4d9bc8`); `0x4da0e0` (from `0x4d9ee0`) | a pump failure; a failed match with `[job+0x300]` clear (`0x4d9e30`) and a zero result or bits 10 to 12 not 1 or 2 (`0x4da114..0x4da128`) |
-| `+0x50`, slot 10 | `0x3497d0` | `0x4da38c` in `0x4da0e0`, from `0x4da294`, two out-arguments | a failed match with `[job+0x300]` clear and bits 10 to 12 of the result 1 or 2 |
-| `+0x70`, slot 14 | `0x3499a0` | `0x4d9efc` | a failed match with `[job+0x300]` set |
+| `+0x30` | `0x3495e0` | `0x4da4b0` 中的 `0x4da584`（来自 `0x4d9cf0`） | 状态 4 转到 5（`0x4d9cf4`） |
+| `+0x38` | `0x349600` | `0x4d9f2c` | 匹配成功，位于 `0x116890` 之前 |
+| `+0x40` | `0x349620` | 位于 `0x4da5e0` 中（来自 `0x4d9e24`） | 状态 9 转到 10（`0x4d9e28`） |
+| `+0x48`，槽位 9 | `0x349650` | `0x4d9fb0` 中的 `0x4da084`（来自 `0x4d9bc8`）；`0x4da0e0`（来自 `0x4d9ee0`） | 泵函数失败；或匹配失败且 `[job+0x300]` 未置位（`0x4d9e30`），结果为零或第 10 至 12 位不是 1、2（`0x4da114..0x4da128`） |
+| `+0x50`，槽位 10 | `0x3497d0` | `0x4da0e0` 中的 `0x4da38c`，来自 `0x4da294`，有两个输出参数 | 匹配失败、`[job+0x300]` 未置位，且结果的第 10 至 12 位为 1 或 2 |
+| `+0x70`，槽位 14 | `0x3499a0` | `0x4d9efc` | 匹配失败且 `[job+0x300]` 已置位 |
 
-Both failed-match paths then set state 6 (`0x4d9ee4`, `0x4d9f14`). For result `0xa46e` (module 110,
-NIFM, description 82), slot 10's out1 is the u32 at `+0x40` of the object in global `0x163ce00`
-(`0x4da2a4..0x4da2c4`; slot 9 instead when the global is null, `0x4da3bc`), written by
-`LoginJob::Logout` (`0x5de3ac..0x5de42c`) from the transport's virtual `+0xb0`. Any other result
-becomes an `nn::err::ErrorCode` in out2 through `0x5298a0` (for `0xe437` a stored code from
-`0x1601e38`, else N / 10000 and N % 10000 of `0x529940(result)`). Slot 10 records a non-zero out1
-through `0x345860`, else the ErrorCode through `0x345900`; the manager repeats the test at
-`0x3443f4..0x34443c`. Slots 11 to 13 have no caller found.
+两条匹配失败路径随后都设置状态 6（`0x4d9ee4`、`0x4d9f14`）。结果为 `0xa46e`（模块 110，NIFM，描述 82）时，槽位 10 的 out1 为全局变量 `0x163ce00` 中对象的 `+0x40` 处 u32（`0x4da2a4..0x4da2c4`；全局变量为空时改调用槽位 9，`0x4da3bc`），由 `LoginJob::Logout`（`0x5de3ac..0x5de42c`）根据传输层虚函数 `+0xb0` 写入。其他结果通过 `0x5298a0` 转换成 out2 中的 `nn::err::ErrorCode`（`0xe437` 使用 `0x1601e38` 保存的代码，否则使用 `0x529940(result)` 的 N / 10000 和 N % 10000）。槽位 10 在 out1 非零时通过 `0x345860` 记录它，否则通过 `0x345900` 记录 ErrorCode；管理器在 `0x3443f4..0x34443c` 重复该检查。尚未找到槽位 11 至 13 的调用方。
 
-`0x838660` decides who sends the 2. With S = {144, 145, 146, 150, 151} (`species - 0x90` in mask
-`0xc7`) and M = {808, 809}: a station offering from S or M and receiving from neither sends it; the
-reverse does not; otherwise the station for which `0x4d9720` is true (`[mgr+0x128c] != 0`) does. So
-a station giving Articuno, Zapdos, Moltres, Mewtwo, Mew, Meltan or Melmetal for an ordinary Pokemon
-sends the 2 in either role.
+`0x838660` 决定谁发送 2。令 S = {144, 145, 146, 150, 151}（掩码 `0xc7` 中的 `species - 0x90`），M = {808, 809}：提供 S 或 M 中的宝可梦、但接收的宝可梦不属于两者的站点负责发送；相反情形不发送；其他情形由 `0x4d9720` 为真的站点发送（`[mgr+0x128c] != 0`）。因此，以急冻鸟、闪电鸟、火焰鸟、超梦、梦幻、美录坦或美录梅塔交换普通宝可梦的站点，无论担任哪一角色，都会发送 2。
 
-The parent block (`[parent+0x88]`, "The trade dispatcher" below) holds the own offered Pokemon's box
-index at `+8` and the arriving Pokemon at `+0x10`. State 0 calls `0x838660` while the box slot still
-holds the own Pokemon (`0x1c0d30`: the object at `box + 0x3f800 + idx*8`, 0x3e9 none, box
-`[[[[0x15fad08]]+0x98]+0x58]+0xb0`), then `0x838800` writes a copy of `[block+0x10]` over that slot
-(`0x838afc bl 0x1c0f30`) and applies the trade's side effects:
+父数据块（`[parent+0x88]`，见下文“交换调度器”）在 `+8` 保存己方待交换宝可梦的盒子索引，在 `+0x10` 保存接收的宝可梦。状态 0 在盒子栏位仍装有己方宝可梦时调用 `0x838660`（`0x1c0d30`：`box + 0x3f800 + idx*8` 处的对象，0x3e9 表示无对象，盒子为 `[[[[0x15fad08]]+0x98]+0x58]+0xb0`），随后 `0x838800` 将 `[block+0x10]` 的副本写入该栏位（`0x838afc bl 0x1c0f30`），并应用交换的附带效果：
 
-- Pokedex registration by `0x1cfe80` (`0x83897c`, again once evolved at `0x838ab0`) on
-  `[[[[0x15fad08]]+0x98]+0x58]+0x88`; `0x1cff60` skips eggs and species 0 or above 809, else sets
-  per-species bits at `obj+0xdc` indexed by `species - 1`. The form is zeroed when
-  `0x1760a0(species, form)` is true.
-- Trade evolution, `0x728250(pkm, partner, &species, &index)`: `0x723220` keeps the species for an
-  egg, or for any species but 64 (Kadabra) when the held item passes the manager's vfunc `+0x28`;
-  otherwise the first evolution entry `0x723340` accepts: method 5 always, 6 when the held item
-  equals the parameter, 7 for Shelmet (616) with Karrablast (588). The arriving copy is passed as
-  both Pokemon (`0x838a44..0x838a4c`), so method 7 never matches. `0x7282c0` applies it: species
-  through `0x7283c0`, form plus one for method `0x22`, held item cleared for methods 6, 19, 20 (mask
-  `0x180040`).
-- Game record 477 when `0x115860` is true, else 476 (`0x1ca840(id, 1)`, `0x838828..0x838840`): the
-  u32 at `obj+0x54+4*id` on `[[[[0x15fad08]]+0x98]+0x58]+0xc8`, capped by `0xf48368[0xf4b760[id]]`;
-  nothing is written while `obj+0x10f8` is set (`0x1ca8f8`) or for an id above 999. `0x115860`
-  returns the byte `0x1614076`, set by `0x1157f0` from `InternetConnectThread` (`0xb2ea98`) and
-  cleared by `0x115830` from its exit and both `InternetDisconnectThread` bodies (`0xb2ebf8`,
-  `0xb2f178`): 476 counts local trades, 477 trades made while the internet connection is up.
+- 通过 `0x1cfe80`（`0x83897c`，进化后还会在 `0x838ab0` 再执行一次）在 `[[[[0x15fad08]]+0x98]+0x58]+0x88` 登记宝可梦图鉴；`0x1cff60` 跳过蛋以及种类编号为 0 或大于 809 的记录，否则在 `obj+0xdc` 设置按种类存储的位，索引为 `species - 1`。`0x1760a0(species, form)` 为真时将形态清零。
+- 连接交换进化 `0x728250(pkm, partner, &species, &index)`：对于蛋，或种类不是 64（勇基拉）且持有物通过管理器虚函数 `+0x28` 检查的宝可梦，`0x723220` 保持种类不变；否则取首个满足条件的进化项 `0x723340`：方法 5 始终满足，方法 6 要求持有物等于参数，方法 7 要求小嘴蜗（616）与盖盖虫（588）交换。传入的两只宝可梦都是接收副本（`0x838a44..0x838a4c`），因此方法 7 永远不会匹配。`0x7282c0` 应用进化：通过 `0x7283c0` 修改种类，方法 `0x22` 将形态加一，方法 6、19、20 清除持有物（掩码 `0x180040`）。
+- `0x115860` 为真时增加游戏记录 477，否则增加 476（`0x1ca840(id, 1)`、`0x838828..0x838840`）：记录是 `[[[[0x15fad08]]+0x98]+0x58]+0xc8` 的 `obj+0x54+4*id` 处 u32，上限由 `0xf48368[0xf4b760[id]]` 给出；`obj+0x10f8` 置位时（`0x1ca8f8`）或 ID 大于 999 时不写入。`0x115860` 返回字节 `0x1614076`，该字节由 `0x1157f0` 根据 `InternetConnectThread` 设置（`0xb2ea98`），由 `0x115830` 的退出流程以及两个 `InternetDisconnectThread` 函数体清除（`0xb2ebf8`、`0xb2f178`）：476 统计本地交换，477 统计互联网连接就绪期间的交换。
 
-`mgr+0x128c` is whether the local station was the session host at session start, written only by
-`0x116890` (`0x59e920(session) & 1` at `0x116a48`) on the link machine's step from state 2 to 4
-(`0x4d9f54`), after matching; a Pia host migration does not re-run it. `0x59e920` returns 1 when
-`[s+0xe0]` (local station, set on create `0x59f864` and join) equals `[s+0xe8]` (session host,
-`0x59f920` on join) and the station `[s + 0x148 + 8*[s+0x142]]` answers true to its vfunc `+0xe0`.
-`mgr+0x1288` also comes from `[s+0xe0]` (`0x116a3c`).
+`mgr+0x128c` 表示会话开始时本地站点是否为会话主机；只有连接状态机在匹配后从状态 2 转到 4（`0x4d9f54`）时，才由 `0x116890` 写入（`0x116a48` 处的 `0x59e920(session) & 1`）。Pia 主机迁移不会再次执行它。当 `[s+0xe0]`（本地站点，在创建 `0x59f864` 和加入时设置）等于 `[s+0xe8]`（会话主机，加入时为 `0x59f920`），且站点 `[s + 0x148 + 8*[s+0x142]]` 的虚函数 `+0xe0` 返回真时，`0x59e920` 返回 1。`mgr+0x1288` 也来自 `[s+0xe0]`（`0x116a3c`）。
 
-For a peer:
+实现对端时需要注意：
 
-- A 2 in the confirmation sub-state gives status 4, which starts the sync save and commits 600: an
-  authority that publishes A 2 owes the whole commit exchange.
-- A peer's first kind 3 carrying anything but 1 aborts with the lock set.
-- A kind 3 sent before the receiver's state 2 registered the commit channel is dropped; the state 3
-  vote holds each station's kind 3 until both have registered.
-- State 1's delay moves a console's kind 3 by up to six seconds (commit clone announced 5.0 s and
-  9.0 s after the host's A 2).
-- Any network error recorded between the end of state 0 and the 2 aborts the commit: the save keeps
-  600 and the console ends on the fatal error screen.
+- 确认子状态中的 A 2 会产生状态 4，从而启动同步保存并将 600 写入存档：发布 A 2 的权威端必须完成整个提交交互。
+- 对方第一条类型 3 的消息体不是 1 时，会中止交换并保留交换锁。
+- 在接收方状态 2 注册提交通道之前发送的类型 3 会被丢弃；状态 3 的投票会让各站点等到双方完成注册后再发送类型 3。
+- 状态 1 的延迟最多会将主机的类型 3 推迟六秒（提交克隆分别在主机 A 2 之后 5.0 秒和 9.0 秒通告）。
+- 状态 0 结束后至收到 2 之前记录的任何网络错误都会中止提交：存档保持 600，主机停在致命错误界面。
 
 ### 交换调度员
 
@@ -767,7 +575,7 @@ obj+0x188  +0x10  the received Pokemon, [obj+0xf0]
 `0xf92c1c`;进程引用 `Pop_BGM_battle_to_field`、`vs_wild` 和 `btl_sky.gfbmdl`），仅在模式 1 和 2 中从调度程序状态 1 到达（`0x886f18` -> `0x95c470` -> `0x95c5c0` -> `0x28cd10` -> `0x28e630` -> `0x9cbba0`）。在模式 3 中，战斗频道永远不会注册。步骤0仅当链路会话对象`[[[0x15faec8]]+0x50]`处于状态8（`0x9dc61c..0x9dc634`）时，创建通道（`0x9dc5c0`）并将其存储在`0x1640eb0`（`0x9dc6f4`）；当 `0x1640eb0` 为空时，`0x9dce10` 不记录任何内容，并且准备状态 `0x9dce30` 在没有通道的情况下返回 1，因此狂野战斗不会记录任何内容。拆卸（`0x9d3df0` -> `0x9dcce0`）会清除指针。
 ### 托管交换可以节省什么
 
-所提供的框结构在发送时保存，未选中。携带这些值的记录在Let's Go皮卡丘的摘要屏幕上读回不变：物种132，经验1,000,000（等级100），隐藏槽中的能力150，针对TID 41234和SID 12345的具有异色xor 0的PID（显示为083154，`(sid << 16 | tid) % 1000000`），自然10，无性别，每个 IV 31 个，每个 AV 200 个（100 级 HP 437，游戏最高），一招，达到等级 30，遇到地点 4（路线 2），语言 2，OT `POKELDN`。偏移量是 PKHeX 的 PB7 地图。
+所提供的框结构在发送时保存，未选中。携带这些值的记录在Let's Go皮卡丘的摘要屏幕上读回不变：种类132，经验1,000,000（等级100），隐藏槽中的特性150，针对TID 41234和SID 12345的具有异色xor 0的PID（显示为083154，`(sid << 16 | tid) % 1000000`），性格10，无性别，每个 IV 31 个，每个 AV 200 个（100 级 HP 437，游戏最高），一招，达到等级 30，遇到地点 4（路线 2），语言 2，OT `POKELDN`。偏移量是 PKHeX 的 PB7 地图。
 ### A 加入方离开
 
 使用 Retour 退出的游戏机在所提供的克隆上发布状态 4，在新计数器下发布参数 0，然后发布参数 3。主机每隔 30 毫秒回答一次，前三个单词为零，尾部单词加 1，参数作为类型 4 副本的第一个单词。然后，游戏机在克隆类型 4 上使用 0x83 释放其克隆，站 0xFD（克隆类型 3 上的克隆 0），重复（大约每 100 毫秒，测量一次），直到 0x84 应答；主机发布自己的主机（在其站下的克隆类型 2 上以及克隆类型 4 上为 0x83）。上次发布后，一旦其克隆协议空闲（[离开前的等待](#the-wait-before-leaving)），游戏机就会在网格协议的可靠端口上发送网格离开请求，在 24 字节可靠标头下：
@@ -793,7 +601,7 @@ obj+0x188  +0x10  the received Pokemon, [obj+0xf0]
 ### 出发前的等待
 
 游戏的拆卸步骤 `0x116bc0`（链接对象更新 `0x4d9b70` 的状态 8）结束克隆会话（`0x51bee0`），然后当克隆协议状态 `& 0xf0` 为 `0x10`（空闲；由`0x5db760` 变为 `obj+0x16f4`)。否则计数为 150 次调用 (`obj+0x16fc`,
-`cmp 0x95` at `0x116d38`) 在通过 `[obj+0x80]` vfunc `0x68` 调用休假之前。两种角色的计数时间均为 2.49 至 2.51 秒。
+`cmp 0x95` 位于 `0x116d38`) 在通过 `[obj+0x80]` vfunc `0x68` 调用休假之前。两种角色的计数时间均为 2.49 至 2.51 秒。
 
 协议通过状态 `0x41` 达到空闲状态，该状态在任何克隆具有未确认的数据令牌时等待（`0x51b0f0`、`0x5180cc`），然后是 `0x42`，该状态发送克隆退出（0x32）并等待每个站的0x41。在其克隆 0 发布后（克隆类型 3 上为 0x83），游戏机大约每 100 毫秒持续发布其克隆类型 2 副本。一个对等点用自己的副本回答每个人都不会确认它们：游戏机不发送 0x32 并在完整计数后离开。一个对等点在克隆类型 1 上回答每个 0xe3，站 0xFD，携带发布者的站和时钟，为每个克隆在克隆类型 2 上获得 0x83，一个 0x32，并在游戏机最后一次发布后 0.11 和 0.29 秒发出离开请求；游戏机主机在上次发布后 0.13 秒发送其迁移开始。 `pokeldn.ldn.clone.Participant` 在对等方的克隆 0 释放后进行确认。
 ### 主机对不包含克隆数据的加入方有何作用

@@ -31,7 +31,8 @@ def main() -> int:
     source = OUT / f"unicorn-{version}"
     if not (source / "src" / "CMakeLists.txt").is_file():
         OUT.mkdir(parents=True, exist_ok=True)
-        subprocess.run([sys.executable, "-m", "pip", "download", f"unicorn=={version}", "--no-binary", ":all:",
+        # Only Unicorn needs source; allow wheels for pip's build dependencies.
+        subprocess.run([sys.executable, "-m", "pip", "download", f"unicorn=={version}", "--no-binary", "unicorn",
                         "--no-deps", "-d", str(OUT)], check=True)
         with tarfile.open(OUT / f"unicorn-{version}.tar.gz") as archive:
             archive.extractall(OUT, filter="data")

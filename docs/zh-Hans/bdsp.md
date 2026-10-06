@@ -32,31 +32,10 @@ has_children: true
 | [交易](bdsp_trade.md) |交换流程、PB8、保存和断开惩罚 |
 ## 未解决
 
-> 本节已随上游更新，以下内容暂保留英文。
-
-- A substituted greeting name on a console's screen
-  ([The name in the greeting](bdsp_protocol.md#the-name-in-the-greeting)). How `StartupSessionJob`
-  fills the own station's record at +0x480 from the startup setting is untraced.
-- Whether a 0x08 to a console that has never recruited a battle faults it on hardware. The code
-  writes through a null model; no 0x08 has reached that path, because those sent went out under
-  sequence ids the reliable window had already seen ([The battle
-  ladder](bdsp_protocol.md#the-battle-ladder)).
-- Whether a retail console that is not the Grand Underground session host adopts a 0x61 from
-  pokeldn; the Underground sessions measured had the console as host, and pokeldn does not host one.
-  The common dispatch and the `UgNetworkManager` handler have no sender filter
-  ([the protocol page](bdsp_protocol.md#the-grand-underground)).
-- What makes a console in the Union Room stop advertising with no change on screen
-  ([Taking a seat](bdsp_session.md#taking-a-seat)).
-- The text of `SS_box_182`, the message `BoxWindow.SetSendPokemon` selects for a flagged Pokemon in
-  a trade, and what `RequestValidateTrade` checks for an online trade
-  ([Duplicate detection](bdsp_trade.md#duplicate-detection)).
-- Where the Unity player takes `Screen.width` from. The 2D grid positions rest on it being the
-  1280 x 720 default that `0x6062e8` keeps when `/Data/rawsettings` +0x1c is 0
-  ([the protocol page](bdsp_protocol.md#the-grand-underground)); another source, such as the
-  player settings in `globalgamemanagers`, has not been excluded.
-- Whether any scene places a `UnionRoomManager` or a `UgNetworkManager` as a component. In code each
-  is created only by one `AddComponent` on a new GameObject (`0x01b35f70`, `UgFieldManager$$StartSession`
-  `0x01cfed48`); no code takes either type as `typeof`, no generic `GetComponent` or `FindObjectOfType`
-  of either exists, and `GameObject.Find` has no Union Room caller. A placed instance would register
-  through its singleton `Awake` with no lookup, so the answer is in the scene bundles: a
-  `MonoBehaviour` whose `m_Script` is either class's `MonoScript`.
+- 在主机画面上显示替换后的问候名称（[问候中的名称](bdsp_protocol.md#the-name-in-the-greeting)）。尚未追踪到 `StartupSessionJob` 如何根据启动设置填写 +0x480 处的本站记录。
+- 向本次进入联合房间后从未发起对战招募的实机发送 0x08，是否会使其发生异常。代码会通过空模型指针写入；此前发送的 0x08 使用了可靠窗口已经见过的序列号，因此尚无消息进入这条路径（[对战交互流程](bdsp_protocol.md#the-battle-ladder)）。
+- 未担任地下大洞窟会话主机的实机是否会接受 pokeldn 发来的 0x61。已测量的地下会话均由游戏主机主持，pokeldn 尚不主持此类会话。公共分发逻辑和 `UgNetworkManager` 处理器都不筛选发送方（[协议页](bdsp_protocol.md#the-grand-underground)）。
+- 什么原因会让联合房间中的主机停止广播，而画面没有变化（[占用席位](bdsp_session.md#taking-a-seat)）。
+- `SS_box_182` 的文本、`BoxWindow.SetSendPokemon` 在交换带标记的宝可梦时选择的消息，以及 `RequestValidateTrade` 在线上交换中检查哪些内容（[重复检测](bdsp_trade.md#duplicate-detection)）。
+- Unity 播放器从哪里取得 `Screen.width`。二维网格位置的计算依赖 1280 × 720 这一默认值；当 `/Data/rawsettings` 的 +0x1c 为 0 时，`0x6062e8` 保留该值（[协议页](bdsp_protocol.md#the-grand-underground)）。尚未排除其他来源，例如 `globalgamemanagers` 中的播放器设置。
+- 是否有场景把 `UnionRoomManager` 或 `UgNetworkManager` 预置为组件。在代码中，两者都只通过一次 `AddComponent` 添加到新 GameObject 上创建（`0x01b35f70`、`UgFieldManager$$StartSession` `0x01cfed48`）；没有代码把任一类型用作 `typeof`，也没有针对它们的泛型 `GetComponent` 或 `FindObjectOfType`，而联合房间没有调用 `GameObject.Find`。预置实例会通过其单例 `Awake` 注册，无需查找。因此答案在场景资源包中：查找 `m_Script` 指向任一类 `MonoScript` 的 `MonoBehaviour`。
