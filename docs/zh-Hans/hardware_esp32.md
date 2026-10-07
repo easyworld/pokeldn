@@ -430,10 +430,11 @@ ESP-IDF v6.1（标签 `v6.1`，提交 `fff9895c82d744c7237be8847347bdd1b07c6643`
 
 S3、C3 和 C6 通过 USB 串行/JTAG 使用相同的 COBS、CRC 和 CREDIT 协议。两个驱动环均为 16 KB。 IDF v6.1的`usb_serial_jtag_write_bytes`将整个帧入队或超时后返回零；作者等待 20 毫秒重试，并在 500 毫秒后没有进展地计算丢弃的消息。 `write_max_us` 包括此等待。读取器在 20 毫秒超时后获取可用字节。 UART 溢出和帧计数器在此路径上保持为零；它们不测量 USB 丢失情况。当 16 KB RX 环已满且不计数时，接收中断会丢弃 64 字节数据包（`usb_serial_jtag.c:144` 忽略 `xRingbufferSendFromISR` 的结果）。 CREDIT 窗口可防止环被填满；那里的损失仅显示为写入超过开发板最后一个信用的字节。
 `POKELDN_ESP32_BAUD` 在所有目标上均被接受，并且仅更改经典 ESP32 的线路速率。
-## 跑步
+## 运行
 
 `POKELDN_RADIO=esp32:<port>` 将各启动器的 `ldn` 调用转交给开发板。`esp32:auto` 选择唯一连接的 USB 串口（`/dev/cu.usbserial-*`、`/dev/cu.SLAB_USBtoUART*`、`/dev/cu.wchusbserial*`、`/dev/cu.usbmodem*`、`/dev/ttyUSB*`、`/dev/ttyACM*`；Windows 上为 USB COM 端口）；若连接了多个则拒绝自动选择，因为打开端口可能重置开发板。每个进程只打开一次端口，DTR 和 RTS 均释放；macOS 上的 CP2102 开发板仍会在打开时复位，因此主持端在切换到 921600 前，会在 5 秒内重试 HELLO。Windows 以独占方式打开 COM 端口：只要本进程或其他进程仍持有句柄，第二次打开就会因 `PermissionError(13, 'Access is
-denied.')` 失败。所以开发板始终不应答 HELLO 时，启动器必须先关闭端口再重试。
+denied.')` 失败。所以开发板始终不应答 HELLO 时，启动器必须先关闭端口再重试。端口仍打开时拔下 USB 设备，下一次读取也会以类似方式失败（`GetOverlappedResult failed` 或 `ClearCommError failed`，即读取结果或串口状态检查失败），此后的每次写入也都会失败；此时启动器会显示 `[esp32] The board disconnected from
+USB`（开发板的 USB 连接已断开）并结束运行。
 
 在 Windows 11 上，使用 Silicon Labs 驱动 11.6.0.420，通过 CP2102 连接经典 ESP32，测得以下结果：
 

@@ -103,7 +103,7 @@ S4_PARTY并在60帧后再次选择。用 `PARTNER_CANCEL_TRADE` 回答 `REQUEST_
 `bin/frlg_trade_join.py` 然后在菜单中取消，因此领导者的第二次取消会结束会话。
 ## 连接中的版本与语言
 
-`IsTryingToTradeAcrossVersionTooSoon` [union_room.c:1499] 仅对既不是《火红》也不是《叶绿》的伙伴触发，并显示消息而不断开连接；《火红》与《叶绿》之间的交换已在实机上验证。`ConvertInternationalString` 对日语名称作特殊处理；法语版《火红》可以接收英语神奇卡片。联合房间的 `Task_SearchForChildOrParent` 会跳过日语候选者 [union_room.c:3726]。神秘礼物使用 `Task_ListenForCompatiblePartners`，其玩家兼容性检查依据序列号和广播名称标志，不采用该语言过滤器。
+`IsTryingToTradeAcrossVersionTooSoon` [union_room.c:1499] 仅对既不是《火红》也不是《叶绿》的伙伴触发，并显示消息而不断开连接；《火红》与《叶绿》之间的交换已在实机上验证。`ConvertInternationalString` 对日语名称作特殊处理；法语版《火红》可以接收英语神奇卡片。联合房间的 `Task_SearchForChildOrParent` 会跳过日语候选者 [union_room.c:3726]。神秘礼物使用 `Task_ListenForCompatiblePartners`，其玩家兼容性检查依据序列号和广播名称标志，不采用该语言过滤器。日语版卡带为神奇卡片和神奇新闻接受的活动编号与其他语言版本不同（见[日语版布局](frlg_rom_map.md#japanese-layout)）。
 
 玩家在神秘礼物的“朋友”列表中选择 pokeldn 后，主机会在 GameData 中发送 ROM 游戏代码。主持端在传送前选择对应卡带的地址和卡片布局。GUI 在基础页面的版本旁显示自动检测到的语言。
 
