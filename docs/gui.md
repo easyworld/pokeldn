@@ -82,7 +82,7 @@ needed for a bug report before clearing them.
 Cleanup includes the app's `session/` working files (captures, serial traces, temporary offers and
 session metadata), `logs/`, and unused generated or imported offers in `pokemon/`. Built offers
 less than a minute old are kept so a build still finishing can save its selection. Offers referenced
-by saved tool settings and queues are kept. Received files and their selected folder, Switch keys,
+by saved tool settings and queues are kept. Received files and their selected folder, the bank, Switch keys,
 selected firmware and settings are preserved, including when they are stored under a cleanup folder.
 Pokemon records and binary dumps outside the app's named temporary offers are kept even after the
 Received folder changes. Generated offers are identified by the builder's timestamp and random suffix.
@@ -120,6 +120,58 @@ a Pokemon PKHeX builds for this save's own trainer (name, ID, secret ID and lang
 Pokemon shows PKHeX's verdict; Check legality runs it over one box, which takes seconds. Keep as a new
 save writes the result through PKHeX, which recomputes every sector checksum, checks that the game's
 own sector test passes and adds it to the library as a new entry; the original is unchanged.
+
+## The bank
+
+The Bank page keeps every Pokemon a trade brings in and trades one into any game that HOME would move
+it to. The records live in `Documents/pokeldn/Bank` (`pokeldn.app.bank`), one record each in its
+game's own format (`.pk3`, `.pb7`, `.pk8`, `.pb8`, `.pa8`, `.pk9`, `.pa9`) with a `.json` beside it.
+Clear local files never touches the folder; with `POKELDN_DATA` set, the bank is `Bank` inside that
+folder instead.
+
+| step | what happens |
+|---|---|
+| a trade completes | the session panel reads each received file with PKHeX and banks a copy; the Received file stays; bytes already in the bank are not banked twice |
+| a Pokemon is banked | its `.json` keeps the species, the summary, PKHeX's verdict, the source file, a SHA-256 of the bytes and a random 63-bit HOME tracker |
+| the page lists the destinations | the helper's `destinations` command tries a move to all seven games and reports each refusal |
+| a destination's trade tool is chosen | the helper's `move` command converts the record, the result joins that tool's offer queue with `"bank": id`, and the app opens the tool |
+| the run's trade N completes | the `[done] trade N complete` line removes the banked Pokemon queued as trade N; at the run's end its queue entry goes too |
+| the run fails or is stopped first | the Pokemon stays in the bank and in the queue |
+
+A move goes through PKHeX's own HOME conversion (`EntityConverter.ConvertToType`, through `PKH`), then
+PKHeX's legality check in the destination game; a move that is not legal there is refused with
+PKHeX's reason. On the way:
+
+- A Pokemon from another game takes the bank's HOME tracker. PKHeX marks one without a tracker
+  invalid (`HomeTrackerUtil.IsRequired`, `HOMETransferSettings.HOMETransferTrackerNotPresent`).
+- The app's trainer becomes its handler, as a save it is moved into would (`IHandlerUpdate`, and
+  `PB8.UpdateHandler`). When the check still finds it invalid with its own trainer as the current
+  handler, the app's trainer is set as the handling trainer; Sword/Shield asks for it.
+- A move that leaves an invalid move gets PKHeX's suggested moveset for the destination.
+- PID, encryption constant, original trainer and IDs are kept. A run that offers a banked Pokemon
+  is built without `--fresh-pid`.
+
+| refusal | source |
+|---|---|
+| nothing goes back to FireRed/LeafGreen or to Let's Go | `EntityConverter.IsConvertibleToFormat` |
+| an egg | HOME's screen for FireRed and LeafGreen; the converter would hatch it |
+| a FireRed/LeafGreen Pokemon holding an item or knowing an HM move | HOME's screen for FireRed and LeafGreen |
+| a species or form absent from the destination | the destination's personal table |
+| no conversion route | PKHeX.Core 26.8.26 converts no Legends Z-A record out to another game |
+
+A record received from a retail Sword and moved to Legends Z-A, with the bank's tracker and its PID
+kept, showed its level and original trainer on a retail Z-A's trade box and completed the trade.
+
+`tests/test_bank.py` moves records between six pairs of games through the real helper and checks
+that the destination's launcher takes them, along with each refusal and the run that takes a traded
+Pokemon out of the bank.
+
+### Unresolved
+
+- Whether Pokemon HOME accepts a Pokemon that carries a tracker the bank made, or one moved by the
+  bank, when it is later deposited there. Nothing has been sent to HOME.
+- Whether HOME's own FireRed/LeafGreen import rules go beyond the eggs, held items and HM moves its
+  screen names.
 
 ## Pokemon sprites
 
@@ -165,16 +217,44 @@ host, for tests (`tests/test_sprites.py`).
 
 At launch the app asks `api.github.com/repos/Decryptu/pokeldn/releases/latest` for the newest stable
 release, in the background with a 5 s timeout. A tag above the app's `pokeldn.__version__` adds an
-Update entry to the sidebar; it opens the release notes or downloads this computer's archive from the
-release (`pokeldn-macos-arm64.zip`, `pokeldn-windows-x64.zip`, `pokeldn-linux-x64.tar.gz`), or the
-release page when none fits. The user replaces the app with the download; settings, keys and received
-Pokemon live outside it.
+Update entry to the sidebar. It opens a dialog with the release notes and either Update now or
+Download.
+
+Update now (`pokeldn.app.update`) installs the release in place:
+
+1. Download this computer's archive (`pokeldn-macos-arm64.zip`, `pokeldn-windows-x64.zip`,
+   `pokeldn-linux-x64.tar.gz`) and the release's `SHA256SUMS` into the data folder's `update/`.
+2. Refuse the archive unless its SHA-256 matches the line `SHA256SUMS` gives for its name.
+3. Unpack it: `ditto -x -k` on macOS, which keeps the bundle's symlinks and modes; `tarfile` with
+   the `data` filter on Linux; `zipfile` on Windows.
+4. Start the new app as a helper, `pokeldn --apply-update NEW TARGET PID VERSION`
+   (`gui/updating.py`). Its small "Updating pokeldn" window touches `update/helper.ready`; the old
+   app quits on that file, or after 15 s without it, so one window is always on screen.
+5. The helper waits for the old app's process to end (120 s), renames the installed app to
+   `.<name>.old` beside it (retrying for 30 s while Windows releases the folder), copies the new app
+   into its place, deletes the old copy and opens the new app. Any failure puts the old app back and
+   opens it. The swap runs whether or not the helper's window came up.
+6. The app that opens reads `update/outcome.json` once: "pokeldn updated to X", or a dialog saying
+   why the old app stayed. Removing the file closes the helper (it gives up after 60 s); the app
+   then removes the unpacked copy once the helper's process has ended, and any `.old` folder.
+
+A download made by the app carries no quarantine attribute (macOS) or Mark of the Web (Windows), so
+neither Gatekeeper nor SmartScreen asks again. `SHA256SUMS` comes from the same GitHub release as the
+archive: the check catches a corrupted or truncated download and does not authenticate the release.
 
 | situation | behaviour |
 |---|---|
 | pre-release or draft, or a tag that is not `vX.Y.Z` | not offered |
 | no network, HTTP error, reply that is not a release | nothing shown at launch; Check now says GitHub did not answer |
 | Settings, Updates off | no request at launch; Check now still asks |
+| no archive for this computer, or no `SHA256SUMS` in the release | Download opens the file or the release page |
+| a source checkout, a macOS app run from Downloads (App Translocation), a folder the user cannot write | Download, with the reason |
+| a session, flash or cleanup running | Update now asks to finish it first |
+| checksum mismatch or a failed download | nothing changes; the dialog offers Download |
+
+Settings, keys and received Pokemon live outside the app and stay. Whether macOS asks for App
+Management permission when the helper replaces an app in `/Applications` is unmeasured; a refusal
+leaves the old app in place and the dialog names the error.
 
 The request carries no user data. GitHub allows 60 unauthenticated requests per hour per address.
 `POKELDN_UPDATE_URL` replaces the endpoint, for tests (`tests/test_app_update.py`).
@@ -274,14 +354,20 @@ bootloader.
 
 | part | size | what keeps it small |
 |---|---|---|
-| Flet viewer (`scripts/build_client.py`) | 33 MB | no optional Flet extension (video, maps, camera, webview and the rest; the app draws core controls only), and on macOS only the build machine's architecture |
+| Flet viewer (`scripts/build_client.py`) | 31 MB, 9.4 MB as the macOS archive | no optional Flet extension (video, maps, camera, webview and the rest; the app draws core controls only), on macOS only the build machine's architecture, Dart symbols split out (`--split-debug-info`), and on macOS an xz archive |
 | Unicorn (`scripts/build_unicorn.py`) | 3 MB | the installed release built from source with the ARM and ARM64 engines only; the wheel's library carries every CPU family (16 MB) |
-| PKHeX helper (`services/pkhex`) | 18 MB | partial trimming: framework code PKHeX.Core never reaches is dropped |
-| Python | | the packer excludes Flet's web server, auth and image extras (`flet_web`, FastAPI, Uvicorn, Pydantic, httpx, Pillow) and pytest |
+| PKHeX helper (`services/pkhex`) | 16 MB | full trimming: framework and PKHeX.Core code the helper never reaches is dropped; EventSource, debugger and hot-reload support are off |
+| Python | 8 MB of modules | the packer excludes Flet's web server, auth and image extras (`flet_web`, FastAPI, Uvicorn, Pydantic, httpx, Pillow), pytest, Pygments and rich's syntax, Markdown and traceback modules, `multiprocessing`, `_pydecimal`, and on macOS the East Asian codecs; macOS libraries lose their local symbols (`strip -x`) |
 
 Trimming turns off reflection-based JSON in .NET; the helper's replies need it, so the project turns it
 back on (`JsonSerializerIsReflectionEnabledByDefault`). Without it every command answers
-`JsonTypeInfo metadata for type 'System.String' was not provided`. Flet's macOS project runs
+`JsonTypeInfo metadata for type 'System.String' was not provided`. The Gen 3 event table is internal to
+PKHeX.Core and read by name; a `DynamicDependency` attribute keeps it through trimming.
+
+The macOS packer writes the viewer as xz under Flet's file name `flet-macos.tar.gz` (9.4 MB instead of
+13.6 MB); flet_desktop 1.0.2 opens that file with mode `r:gz`, so the frozen app hands flet_desktop a
+`tarfile` whose `open` detects the compression (`gui/flet_client.py`). The executable and the PKHeX
+helper are never stripped: both carry an archive after their Mach-O image. Flet's macOS project runs
 `dart run rive_native:setup` on every build; with Rive gone that step fails, so the client build
 replaces it with `exit 0`.
 

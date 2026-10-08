@@ -3,7 +3,9 @@ title: Joining and the Pia layer
 parent: Brilliant Diamond and Shining Pearl
 nav_order: 1
 ---
+
 # 加入BDSP会话，以及加密的内容
+
 ## 广告
 
     local_communication_id  0100000011d90000
@@ -26,10 +28,12 @@ nav_order: 1
 |连接 | `LocalMatchJoinSessionJob` `0x16c36c8`；支票 `0x16b8890` |方加入计算其输入的密码 (`0x1719204`) 的 `crc32`； +0x08 必须为 8，+0x04 处广告的 u32 之外的 CRC 失败，并在 `nn::ldn::Connect` 之前出现 0x6c51 |
 
 主机将该标头写入 `LdnProtocol` `0x16b6a14`：网络 ID、密码的 CRC32、字节 8、会话参数。没有消息将加入方的 CRC 传送到主机：输入错误密码的游戏机不会向主机发送任何内容，并打开自己的房间。超过 8 个字符的密码为 Pia 保留 8 个字符，并将其余的移动到 `INL1` (`IlcaNetSession.SettingSet` `0x2735f14`) 后面的应用程序数据中。
+
 ## 密码
 
     WirelessStrongCryptoKey2021
  使用原始：27 字节，既不填充也不散列（LDN 接受具有明确长度的 16 到 64 字节）。游戏将其交给`nn::ldn::SecurityConfig`中的`nn::ldn::CreateNetwork`；它永远不会到达 Pia 的加密货币。
+
 ## 入座
 
 `bin/bdsp_join.py`扫描、关联并报告参与者表：
@@ -41,6 +45,7 @@ nav_order: 1
 `Connect failed with status code 1` 关联失败；从 ESP32 板来看，大约有两次尝试失败，因此在诊断之前重试。房间里的游戏机可以停止广告，屏幕上没有任何变化。重新进入房间会打开一个新网络（新通道、SSID 和会话参数），密钥派生会实时处理该网络。 LDN 接口上的接收者必须过滤自己的源 IP：广播环回。
 
 未经身份验证的 Pia 会默默地被丢弃，不会出现错误，也不会丢失席位。
+
 ## 电线上有什么
 
 在电台确认之前，主机游戏机向其广播其更新会话
@@ -49,6 +54,7 @@ nav_order: 1
     32ab9864 89 00000000 11bac90d 0000 00 f5a83bd383ce712d 59baa5cbc320cb56 <144 bytes>
     magic    v  dst=0    src      pid  f  nonce (a counter) tag              ciphertext
  版本字节 `0x89` 已加密，版本 9：Pia 5.27-5.45；可靠协议的版本 3 将其范围缩小到 5.31-5.43。标头、消息帧和传输协议位于[Pia 层](pia.md)。 `pokeldn/ldn/pia5.py` 往返 674 个字节相同的捕获数据包。
+
 ## 关键层次结构
 
     cryptoKeyDataSeed  9918bd0fdcfa65779918bd0fdcfa6577    from global-metadata.dat
@@ -60,6 +66,7 @@ nav_order: 1
     crc32(netid||MAC)  0xda291352
     IV (first packet)  da29130df5a83bd383ce712d
  参考捕获的所有 674 个数据包均经过验证，并且对每个明文重新加密可逐字节再现游戏机的密文和标签。
+
 ### 种子生活的地方
 
 `INL1.IlcaNetSessionSetting` 的构造函数设置默认值：
@@ -69,12 +76,14 @@ nav_order: 1
       string   wirelessCryptoKey  <- the "WirelessStrongCryptoKey2021" literal
       ulong    localCommunicationId = 0x0100000011d90000
  字段句柄解析为 `<PrivateImplementationDetails>.33F804682DF9E210AABDC4D939CBCD380EC7517F`，即 16 个字节的 SHA-1。该 blob 位于 `global-metadata.dat` 的字段默认值部分，既不在可执行文件中，也不在 RomFS 中；方法见[逆向工程Switch标题](switch_re.md)。
+
 ### 发布的密钥是种子，派生的
 
     seed (metadata)   9918bd0f dcfa6577 9918bd0f dcfa6577
     published key     9900bd0c dcfa6563 9918bd0f c7fa6577
                         ^^   ^^         ^^         ^^        bytes 1, 3, 7, 12
  游戏覆盖本地通讯版本的第1、3、7、12字节，1.3.0为199（广告中的`app_version`）； `ldn_game_key(seed, 199)` 复制已发布的密钥。
+
 ### 会话密钥
 
 来自 `nn::pia::local::LocalProtocol`：
@@ -84,6 +93,7 @@ nav_order: 1
     rnd   = four consecutive xorshift128 draws (shifts 11, 8, 19) -> 16 bytes, little-endian
     key   = AES-128-ECB(game key at LocalProtocol+0x5bc).encrypt(rnd)
  生成器是SEAD的RNG； `pokeldn/ldn/sead.py` 实现了它。
+
 ### GCM 随机数
 
 IV 由流对象构建，每个网络系列一个：
@@ -98,6 +108,7 @@ IV 由流对象构建，每个网络系列一个：
     IV[3]     = overwritten with (packet.source_variable_id & 0xFF)
     IV[4..11] = the eight-byte header nonce, copied from packet+0x1b
  `0x1719204` 处的 CRC 是基于网络 id（小端，来自广告 +0x00，通过网络对象的 +0x450）和来自站记录的源 MAC 的普通 CRC32 (`0xEDB88320`)。无法从正在解密的数据包中恢复源MAC。
+
 ## 本地协议，已解码
 
 参考捕获的每个数据包都携带相同的消息：
@@ -117,9 +128,11 @@ IV 由流对象构建，每个网络系列一个：
     host migration state  0
  八个九字节节点槽位，房间的八个席位，则一个字节。主机常量id，读取little-endian，通过LDN规则（`mac[2] << 56 | mac[4] << 48 | mac[5] << 40 | mac[3] << 32 |
 mac[1] << 24 | mac[0] << 16`）解包到扫描到的MAC `48:f1:eb:20:9b:22`。 Pia 消息头是大端字节序，本地协议字段是小端字节序，其中的本地地址又是大端字节序。存在字节 0x7F 设置三个位，未命名 Pia 5.27-6.30 中的字段。
+
 ### 确认
 
 20 字节的 ack 位于 [Pia 层](pia.md#the-local-protocol-0x24)。有效的帧是主机自己的：带有数据包 `dst_var` 0 和消息目的地 0 的广播；单播帧未经测试。第一个 ack 停止更新：在捕获中，42 个更新间隔 100 毫秒，而 ack 比最后一个更新晚 34 毫秒。然后游戏机没有发送任何内容，而电台也没有再发送任何内容。
+
 ## 加入网格
 
 三次握手和ack规则位于[Pia层](pia.md#joining-a-mesh)。 BDSP的地址：
@@ -150,6 +163,7 @@ mac[1] << 24 | mac[0] << 16`）解包到扫描到的MAC `48:f1:eb:20:9b:22`。 P
     station 0   the console
     station 1   the client: its own station location and ids, read back
  游戏机在一秒钟内发送 RTT (0x58) 和可靠 (0x7c) 流量。结果 7 表示变量 id 已经是其站之一。
+
 ### 会话协议 (0x94)
 
 `nn::pia::session::SessionProtocol`（1.3.0 `main`，vtable `0x4b5da50`）具有联合会话功能，并且在LDN上是惰性的。 Pia 的会话启动会构建它[`0x157c66c`]，除非设置了设置字节（GOT `0x4c4b850` 后面的+0x38），将其存储在会话+0xC8 中并给它一个
@@ -157,6 +171,7 @@ mac[1] << 24 | mac[0] << 16`）解包到扫描到的MAC `48:f1:eb:20:9b:22`。 P
 `NexMatchJointSessionJob`。
 
 它的窗口是游戏流的 `ReliableSlidingWindow` [构造函数 `0x159dab4`]，具有两个插槽环，协议 0x94，端口 1 (`0x159de54(window, 2, 2, 0x94000001)`)；接收位置为插槽 10 [`0x1581c98`]。在窗口读取 session+0x70 之前没有任何内容，因此有效的可靠 0x94 消息（第一个标记为 `is initialized`，序列低于基数加 2）被确认，然后由其处理程序丢弃。尚未捕获或发送 0x94。
+
 ## 托管
 
 进入联合房间的游戏机在打开自己的房间之前会加入任何有空闲座位的房间（`matchingMode` `IlcaNetSessionInitMode.Random`，`localRandomMatchmakeHostWaitTime` 25，
@@ -183,6 +198,7 @@ mac[1] << 24 | mac[0] << 16`）解包到扫描到的MAC `48:f1:eb:20:9b:22`。 P
 主机所在站位置无公网地址且NAT字段为零，36字节；加入方都有 40。主机的站条目具有索引和加入顺序 0，加入方为 1。
 
 方加入根据已确认的加入响应大约每秒发送一次同步时钟 (0x1C) 请求；主机以请求的滴答声和网格时钟（以毫秒为单位）进行应答。当屏幕显示“communication en cours”时，同步时钟请求未得到答复的方会反复取消身份验证并重新关联。在第一次请求后大约十秒就出发了；超时未读。应答后，它发送 `NetJoinData` 并请求 0x04 和 0x23，就像零售主机所做的那样，从那里房间是对称的：接近、问候和[交换](bdsp_trade.md) 与游戏机作为加入方一样运行。
+
 ## 离开
 
 离开房间的游戏机运行 Pia 的网状离开作为加入方，并将其主机迁移离开作为主机。两者都在网状协议的可靠窗口（0x18 端口 1）上打开，在序列为 1 的可靠标头下，并且都等待在端口 0 上不可靠发送的答案。零售 Pia 将每个答案发送两次，第二次在其自己的数据包中。网格调度程序是 `0x0154ac94`（跳转表
@@ -207,13 +223,13 @@ mac[1] << 24 | mac[0] << 16`）解包到扫描到的MAC `48:f1:eb:20:9b:22`。 P
 已答复（`08 00` 两次和 `04`），零售加入方离开在其离开请求后 0.06 秒发送了一个断开连接请求，并在其后 0.15 秒取消身份验证。已应答（`48 01`，更新会话确认，0x13 上的离开），发送了离开房间的零售主机
 0x13 迁移开始（2 次运行）后 0.11 和 0.45 秒并关闭它。
 
+0x13 阶段由 `LocalDestroyNetworkJob::WaitUntilAllClientsDisconnection` `0x016b95b8` 实现。距上次发送（`job+0x68`）超过 301 毫秒时重新发送 0x13，并在以下任一条件先满足时结束：请求的取消字节置位，转到 `WaitForCancel` `0x016b9330`；`0x016b014c` 返回的在场站点数量为 1（`0x016b9614`）；距前一状态 `WaitUntilAllClientsReceiveUpdateSessionMessage` `0x016b936c` 超过 10000 毫秒，其时间存于 `job+0x70`（`0x016b9644`）。后两者进入 `StartDestroyNetwork` `0x016b950c` 并关闭网络。站点离开会使此阶段在下次更新时结束；站点留在网络中则等待完整的 10 秒。前一状态在 `[[protocol+0x4f0]+0x5c]` 置位（`0x016b0888`）或经过 10001 毫秒后结束。
+
 `pokeldn.bdsp.session.answer_departure` 构建了两个答案； `bin/bdsp_host.py` 应答离开加入方及其断开连接请求，`bin/bdsp_connect.py` 应答迁移开始、确认每个后续更新会话并在 0x13 上离开网络（`--no-leave-on-host-migration` 保持）。
 
 离开交换框不会发送离开消息：框的关闭回调 `TradeSelectPokeModel$$CheckComplete` [1.3.0 main 0x1c26810] 发送 `NetDataCurrentFlowCancelData{0}` (0x25, `SendCancel` 0x1c26bf0) 和
 `UnionTradeManager$$Cancel` [0x1c33780] 发送 `NetCharacterStateData{0}`，两者都在一个数据包中，无需等待合作伙伴。
-### 未解决
 
-- 什么提前结束本地协议 0x13 阶段。
 ## 测量方法
 
 - 仅当协议计数与其自身匹配时，游戏机才应答连接请求；扫描计数得到 9。未注册的协议需要版本 0，因此版本 1 会失败，二分法会读取任何协议的版本。

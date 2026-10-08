@@ -36,6 +36,15 @@ def translate(value: str) -> str:
     if name_error:
         return "名称错误：" + translate(name_error[1])
     patterns = (
+        (r"pokeldn cannot write to (.+)\.", r"pokeldn 无法写入 \1。"),
+        (r"the download is (\d+) bytes", r"下载文件大小为 \1 字节"),
+        (r"the archive holds no (.+)", r"压缩包中缺少 \1"),
+        (r"SHA256SUMS does not list (.+)", r"SHA256SUMS 中未列出 \1"),
+        (r"(.+) does not match its SHA-256 in SHA256SUMS", r"\1 与 SHA256SUMS 中的 SHA-256 校验和不一致"),
+        (r"PKHeX has no transfer route \((.+)\)\.", r"PKHeX 没有可用的传送路径（\1）。"),
+        (r"(.+) already has (\d+) Pokemon queued\.", r"\1 的队列中已有 \2 只宝可梦。"),
+        (r"Their Pokemon was refused: (.+)", r"对方的宝可梦被拒绝：\1"),
+        (r"Your partner's app refused your Pokemon: (.+)", r"对方的应用拒绝了你的宝可梦：\1"),
         (r"Adds ([\d,]+) to the player's money, up to ([\d,]+)", r"为玩家增加 \1 金钱，上限为 \2"),
         (r"Sword and Shield have no item above (\d+)\.", r"剑／盾不存在编号大于 \1 的物品。"),
         (r"Sword and Shield have no item (\d+)\.", r"剑／盾不存在编号为 \1 的物品。"),
@@ -116,6 +125,8 @@ class DisplayService(Service):
                 found[key] = [translate(line) for line in found.get(key, ())]
         if "encounter" in reply:
             reply["encounter"] = translate(reply["encounter"])
+        for route in reply.get("games", {}).values():
+            route["reason"] = translate(route.get("reason", ""))
         return reply
 
 
@@ -175,6 +186,19 @@ def event_text(value: str) -> str:
     for source, target in (("(Galar)", "（伽勒尔）"), ("Master Ball", "大师球"), (" (an egg)", "（蛋）")):
         result = result.replace(source, target)
     return result
+
+
+def summary_text(value: str) -> str:
+    """Display a stored or remote summary without translating the player's nickname."""
+    parts = []
+    for part in value.split(" · "):
+        if part.startswith(("'", "“")) and part.endswith(("'", "”")):
+            parts.append(part)
+        elif part.startswith("holding "):
+            parts.append("携带 " + translate(part.removeprefix("holding ")))
+        else:
+            parts.append(event_text(part))
+    return " · ".join(parts)
 
 
 def translate_app_log(line: str) -> str:

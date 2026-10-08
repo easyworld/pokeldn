@@ -18,11 +18,13 @@ has_children: true
 | [同步框架](swsh_protocol.md) |消息 ID、内容、持有者、路由、队列 |
 | [交易](swsh_trade.md) |交换屏幕、盒子状态机、确认梯 |
 | [神秘礼物](swsh_gift.md) |神秘礼物菜单的本地无线分支|
+
 ## 来源
 
 ID、偏移量和地址来自 盾 的 `main` 或空气，除非某个部分指定了客户端。
 `pokeldn/swsh/trade.py` 中的 `SYNC_ANSWERS` 是 `andyjusa/nxldn-lab` 对游戏机到游戏机捕获的读取（消息 97 和 60000 与 pokeldn 的字节逐字节匹配）。四个客户端讲LAN模式，
 `kwsch/PokePiaSWSH`、`lincoln-lm/swsh-lan-client`、`andyjusa/nxldn-lab`、`Slashcash/PSD`，从Pia站握手上去；没有一个涵盖 LDN 或主机迁移。
+
 ## 字段脚本
 
 `bin/script/amx/*.amx`（1.3.2 中的 953）是具有 64 位单元的 Pawn 3.x：魔术 `0xF1E1`，版本 10，标志 `0x1C`（紧凑代码，睡眠，无检查）。紧凑编码：每字节 7 位，高位组在前，符号位于第一个字节的第 6 位。非分支单参数操作码也打包为
@@ -35,10 +37,11 @@ ID、偏移量和地址来自 盾 的 `main` 或空气，除非某个部分指�
  绑定表是 `.data` 中的 `(name, function)` 对，每个模块一个（吸气剂，例如
 `0x014aea00`)：777 个名称，使用了 513 个哈希值中的 512 个。商品：`ItemAdd` (`0x014acea0`)、`ItemSub` (`0x014acf40`)、`ItemGetNum`、`ItemAddCheck`、`ItemGetCategory`、`GetPocketNumberFromItemNumber_`。变量：`WorkGet`/`WorkSet`（散列的 64 位密钥）、`TempWorkGet`/`TempWorkSet`（指示在脚本恢复之前 UI 填充）。每个参数的调用是 `PUSH`，从右到左，然后
 `SYSREQ.N native, bytes`。
+
 ## 未解决
 
-- [玩家资料](swsh_protocol.md#the-player-profile)：虚表 `0x25614c0` 背后的功能（活动记录类别 11，`0x00dedf3c`；采样状态 3 或 4）。采样状态 3、4、6 目前仅通过设置它们的函数命名。`a_wr0301` 对应冠之雪原旷野区域的判断来自编号；在那里采集一条信标即可确认。
-- [对战竞技场](swsh_protocol.md#the-battle-stadium-block)：什么代码写入队伍描述符的 `+0`、`+4`、`+6`（包含已验证队伍的存档可显示它们）。`v1/validate` 回复的 0x100 字节是否在 `0x014f808c` 复制到 `[x19+0xb0]+0x76` 之后到达 `match+0x98`；其状态为 1，最多包含六个 u32。
-- 《剑》与《盾》的差异：二进制分析基于《盾》，实机测试使用《剑》；[会话常量](swsh_session.md#taking-a-seat) 在两者间一致。关于《剑》检查卡片版本掩码位 0 的判断，来自《盾》中把版本 44（`0x2C`）用于 `0x007d4270` 的 `0x2D` 的代码，以及 PKHeX 的 `RestrictVersion`（1 为《剑》，2 为《盾》，3 为两者）。
-- [神秘礼物](swsh_gift.md#what-the-menu-refuses)：类别 1 的礼物若包含游戏中不存在的宝可梦种类，构造函数会将其标为损坏；实机显示什么仍待确认。
-- [提供的记录](swsh_trade.md#the-offered-record)：尚未继续追踪在 `0x011e3458` 读取的加密常量，也未追踪 375 处使用计算长度的 `memcmp` 调用；这些调用均不在 pml、交换或盒子代码中。
+- [玩家档案](swsh_protocol.md#the-player-profile)：宝可梦露营会话中，角色采样状态 3 和 4 各代表哪种角色（`StateCreateSession`、`StateConnect`）。`a_wr0301` 表示王冠雪原野外区域是根据编号推断的；在该区域采集一个信标可确认。
+- [对战竞技场](swsh_protocol.md#the-battle-stadium-block)：`match+0x98` 的写入方。队伍描述符的 `+0` 到 `+7` 是从租借队伍回复 `[job+0x88]+0x38` 复制的一个 u64（`0x014f7fd0`）；`v1/validate` 回复在 `0x014f8094` 覆盖其签名。
+- 《剑》和《盾》的差异：二进制分析来自《盾》，实机为《剑》；[会话常数](swsh_session.md#taking-a-seat)适用于两者。《剑》检查卡片版本掩码位 0 的结论来自《盾》代码：条件为 `1 << (v == 0x2D)`，`0x007d4270` 的 31 处调用中有 11 处同时比较 `0x2C` 和 `0x2D`；PKHeX 的 `RestrictVersion`（1 为剑、2 为盾、3 为两者）也支持此结论。两份实机《剑》快照在 MyStatus `+0xA4` 处包含 `0x2C`。《剑》自身的 `0x007d4270` 和通信 ID 常量尚未读取。
+- [神秘礼物](swsh_gift.md#what-the-menu-refuses)：种类不在游戏中的类型 1 礼物会被构造函数标为损坏，实机对此显示什么尚未确认。
+- [提出交换的记录](swsh_trade.md#the-offered-record)：375 处使用计算长度的 `memcmp` 调用尚未追踪，它们均不在 pml、交换或盒子代码中。

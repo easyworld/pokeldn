@@ -7,6 +7,7 @@ nav_order: 3
 # 使用零售剑和盾进行交易
 
 从快照交换到保存的剑和盾链接交换。成帧、内容注册和PK8在[同步框架](swsh_protocol.md)上。
+
 ## 顺序
 
     1  the console broadcasts its 3456-byte snapshot on protocol 0x84, port 0
@@ -23,6 +24,7 @@ nav_order: 3
 `pokeldn/ldn/broadcast4.py` 实现了全部四种。
 
 保存后的内容位于[托管交换](#hosting-a-trade)和[主机迁移](#host-migration)下。
+
 ## 交换 RPC
 
 ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错误端口上的答案。
@@ -38,6 +40,7 @@ ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错
 
 - 每个答案发送一次（`--answer-once`）；在计时器上重新得出答案会重新发送提议。
 - 读取器不得引发：可靠窗口上的网格消息（`44 00 01`，[主机迁移](#host-migration)）不是交换消息，并且引发的读取器结束接收任务和交换（`la communication avec l'autre joueur a été interrompue`）。 `trade.py` 中的读者返回 `None`。
+
 ## 主机迁移
 
 离开会话的托管 剑 请求协议 0x18 端口 1 (`nn::pia::mesh::LeaveWithHostMigrationJob`) 上的主机迁移：
@@ -58,6 +61,7 @@ ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错
 |玩家接受后几秒钟，游戏机以 `2-ALZAA-0016` 崩溃之前 |在梯子之前失败的交换，加入方没有发送确认命令|
 
 `bin/swsh_host.py --migrate`通过box命令3和MIGRATION_START结束自己的托管交换；保存后，模拟的 盾 加入方会显示通信中断消息。默认情况下，主机保留会话。
+
 ## 举办交换会
 
 `bin/swsh_host.py` 主持，`pokeldn/swsh/host_trade.py` 作为主持 剑 领先。零售版 French 剑 1.3.2 和仿真版 盾 1.3.2 分别加入并交换。下面的详细信息是从两个模拟 Shields 1.3.2 之间的交换中读取的。
@@ -89,6 +93,7 @@ ping、阻止消息和提议使用端口 0，40030 对端口 1；不会读取错
 ## 交换动画
 
 游戏机在最后一个同步命令 40 (`3`) 之后播放交换动画，期间没有交换消息。加入 `bin/swsh_host.py` 的零售剑在同步命令后 1.2 秒开始动画，并在大约 24 秒时给予玩家控制权。它不会发送任何应用程序消息，直到玩家退出盒子（盒子命令 3）。
+
 ## 一个交易日连续交易
 
 一个会话可连续进行多次交换。交换状态 9 发送事件 7（成功）或 8（失败），在 `0x010ca360` 写入状态 0，玩家回到盒子界面。内容 30 和 ping 110 存活整个会话（由会话初始化 `0x010c9280` 构造一次）；内容 50、40 及各自的 ping 每次交换都会重建：
@@ -145,6 +150,7 @@ SECONDS` 模拟游戏主机的玩家（先接受，交换后从盒子提供下�
 
     if ([session+0x418]) { if (![session+0x419]) send command 3; [session+0x418] = 0; }
  设置 `0x010c9280` 设置 `+0x418 = 1`、`+0x419 = 0x00dceea0() & 1`（来自玩家列表）：恰好一侧发送命令 3。`--box-open` 在 0x84 ack 处发送盒子命令。
+
 ## 交换状态机
 
 `[session+0x140]`，范围 1..10，表 `0x2067b68`：
@@ -161,9 +167,11 @@ SECONDS` 模拟游戏主机的玩家（先接受，交换后从盒子提供下�
  盒子回调 `0x010ca800` 会丢弃事件，除非状态为 0。状态 2 在委托中结束
 `0x010cc380` (`session+0x2e0`)：合作伙伴的宝可梦到`session+0x70`，一条0x60字节记录(`0x010f5cc0`)，状态3。中止在状态1开始：当内容50的初始化时`0x010d4d90` (`mov w2,
 #0x32`) 失败，其发送的 `0x010d5440` 不执行任何操作，并且调用者设置 `[session+0x144] = 1`，状态 9：通信中断消息。
+
 ## 确认阶梯
 
 内容 40 是一个屏障，每个命令一个梯级。
+
 ### 阶段到状态图
 
 状态为`delegate+0x5c`，仅由init(0)、机器中的四个站点`0x010dae70`和`0x010dbf40`存储。机器将`state - 1`调度到14项表`0x2067ed0`中；状态 2、4、7、9（发送离开的位置）采用默认 `0x010db38c`，尾声，并且仅通过离开
@@ -240,6 +248,7 @@ Vtable组`0x257fe90`：主`0x257fea0`（插槽0中SyncCommand接收`0x010dbc90`�
 | `0x010db998` | `0x010db970`，拆除 | 16 |
 
 内容40的注册器将`w2 = 1`(`0x010da6a8`)存储在`[+0x374]`(`0x010da800`)：离开的站走11、12并结束梯子。
+
 ### 相位是元素的字段
 
 `0x010c0000..0x010e0000` 中没有任何内容存储到 `content+0x17c`。注册商在 `content+0xd0` (`0x010daa4c`) 处构建 40040 元素，添加子元素 (`0x006d4ff0`) 并使用
@@ -277,6 +286,7 @@ Vtable组`0x257fe90`：主`0x257fea0`（插槽0中SyncCommand接收`0x010dbc90`�
     0x006d3060  all high == v   all ready, every pair's [sub+0x8a] == v
  写入仅保留就绪字节（仅接收 `0x006d6a08` 存储 `+0x60`；写入是
 `0x006d35b8 strh w8,[x20,#0x88]!`），因此读取返回 `0xfc18` 直到消息到达；在主机上，该消息是它自己的。发布到达元素的槽 0 (`0x006d5730`)，该槽将每个站的正文排队。一次完成的交换中 40040 上的 149 个客户端消息均携带四字节主体；内容的其他形状见[确认内容的其他消息形态](#shapes-the-confirmation-content-also-sends)。
+
 ### 步体
 
 内容40的elementId 20000上的四字节主体，低半部分为相位，高半部分为最后公布的：
@@ -296,6 +306,7 @@ Vtable组`0x257fe90`：主`0x257fea0`（插槽0中SyncCommand接收`0x010dbc90`�
     04000400   phase 4                     the teardown rung
 
 `trade.parse_sync_step`、`SYNC_LADDER` 和 `sync_announced_phase` 对其进行解码。
+
 ### 命令
 
 10040 上的 `SyncSaveDataHolder{syncCommand{data:N}}`，可靠端口 0。处理程序 `0x010dbc90` 删除无法解析的发送者 `0x006b5850` (`0xfd`)，在 `[arg1+0x14]` 处获取 int32，按站选择 `+0x38` 处的订阅者index，将 int32 传递给中继 `0x010dbe20` 和订阅者的 `+0x18`，然后始终：
@@ -336,6 +347,7 @@ RequestCancel 和 RequestCancelAll 还读取了地图（[下](#the-cancel-and-pr
 | 9、`000018fc` 至 `04000400` | `04000400`：交换|
 
 `--confirm-commands 0,1,2,3,0,1,2,3,0,1,2,3` 每个新机身都会弹出一个，包括 `000018fc`；队列不能枯竭。 `answer_rpc` 身体呼应，半动也不动； `--confirm-phase N` 写入低半部分。
+
 ### 取消和继续消息
 
 30040，`SequenceDataHolder`（[协议页](swsh_protocol.md#the-30000-holder)），存储在`[content+0x2b8]`（`0x010da9b8`），监听器`content+0x68`（`0x010da9b4`， `0x010da9bc`；虚表`0x02580030`，`0x010dc238`）：
@@ -357,6 +369,7 @@ RequestCancel 和 RequestCancelAll 还读取了地图（[下](#the-cancel-and-pr
 `RequestForcedProceed` 在没有 `syncCommand`（模拟屏蔽）的情况下推进共享阶段。它不会取代确认命令：随后的命令是这些请求的梯形图在保存之前停止在“通讯”处。
 
 作业队列 `content+0x310`（条目 `+0x350`，计数 `+0x358`）从泵 (`0x010db7d4`) 在 `0x010ddf40` 中运行；返回 true 的作业将被删除。提交将其清空。
+
 ### 形状确认内容也发送
 
 40040 个没有 OwnerId 且正文除四个字节之外的信封：
@@ -365,6 +378,7 @@ RequestCancel 和 RequestCancelAll 还读取了地图（[下](#the-cancel-and-pr
     elementId 1,     no owner, 4 bytes   00000000        after a syncCommand{data:0}
     no elementId,    no owner, 4 bytes   00000000  then  01000000
  该对的接收`0x006d6490`丢弃两个字节的（`cmp x2,#4`）；它们是共享值（[相位是元素的字段](#the-phase-is-the-elements-field)）。
+
 ## 联盟卡
 
 交换后各游戏机询问是否保留对方的联盟卡，训练家卡为
@@ -408,6 +422,7 @@ Oui 将其原封不动地保存在保存块 `0x28e707f5` 中：来自 `album+0x2
 `0x0158ead4..0x0158eb30`; `GlossIndex` 是 0x178。
 
 `0x0158f5e0` 返回 1 拒绝一张卡，然后将其替换为默认值。在 unicorn 下，它接受 pokeldn 发送的卡（0x177 = 4，0x1B3 = 1，语言 3）和 0x1B6 或 0x1B7 设置；它拒绝 DesignLevel 5、语言 6、GlossIndex 9。 `bin/swsh_host.py --card-set FIELD=VALUE` 编辑发送的卡片（`pokeldn.swsh.league_card` 字段）；新鲜的 `trainer_id` 使游戏机再次询问。
+
 ## 提供的记录
 
 与零售剑交易的内置皮卡丘保留了每个请求的提议选项。返回的PK8具有有效的校验和并通过PKHeX合法性； PID、初训家 ID、IV 和 EV 与即将发出的提议相匹配。
@@ -422,6 +437,8 @@ Oui 将其原封不动地保存在保存块 `0x28e707f5` 中：来自 `album+0x2
 |持有物 |光球，236 |
 |选定的 IV |生命值 31，攻击力 0，速度 31 |
 |努力值 | HP 252，速度 4，其他所有统计数据 0 |
+
+`0x011e3458` 读取的加密常数与队伍索引一起进入宝可梦露营模型键 `[model+0x368]`，用于露营同步，不会进入交换或盒子代码。
 
 20030的提议是快照的队伍槽位`--offer-slot`，已就地编辑，因此显示的队伍与提议一致；身份重写首先运行并且 `party_matches_trainer` 成立。
 `pokeldn.swsh.pokemon.build_from` 重写校验和，在新的加密常量下重新洗牌，并保留每个未命名的字节（色带、内存、met 数据、处理程序记录）。
@@ -457,6 +474,7 @@ French 剑 1.3.2 对已编辑记录的作用：
 |种类 152（缺席）|存储：皮卡丘的模型、姓名字段、黑色精灵球图标、成长组 0 和零种族值；仅当前HP（0x8A）和处理程序块（0xA8, 0xC2, 0xC3, 0xC8, 0xCB-0xCC) 改变 |
 
 未测量：其他不存在的种类绘制了什么，以及该名称是否是名称字段或查找失败。
+
 ## 已完成交换的命令行
 
 `swsh_connect.py --preset trade` 携带交换所需的标志；覆盖预设后给出的标志。让游戏机搜索本地链路交换（Y-Comm、链路交换、本地、两条消息上的 A）并运行：
@@ -467,12 +485,14 @@ French 剑 1.3.2 对已编辑记录的作用：
 
 `--offer-file FILE` 将 `.pk8` 放入提供的队伍槽位，其 OT 移至快照的训练家处。如此重复，它会在会话中的每个交换中排队一个记录；最后一个服务于以后的交换，在带有 `--fresh-pid` 的新 PID 下，并且交换 N 用 `-N` 写入 `--save-offered`。游戏机提供的交换，其阶梯尚未完成，使会话持续到 `--grace` 秒 (300) 过去
 `--hold`。没有队伍统计数据的存储格式交易记录；游戏机根据经验计算等级。
+
 ## 处罚，干净利落地结束比赛
 
 链路处于活动状态的交换超时是失败的交换，并将游戏机锁定在交换之外（`msg_ui_live_comm_app_alert_00`，`/bin/message/French/common/live_comm.dat` 的第 331 行）。 `main.bin` 中的文本名称没有持续时间并且标签不存在；锁的长度未被读取。 `04000400` 后 15 秒切断链接，在保存过程中，显示通信错误 `2-ALZAA-0016`，不采取交换锁定并立即开始新的本地搜索。
 
 一旦梯子启动，`bin/swsh_connect.py --abort-on-stall SECONDS` 就会断开链接，并且几秒钟过去了，没有新的身体。它处于第 4 阶段，无声拆卸梯级 (`stall_abort()`，
 `final_phase_seen`、`LADDER_FINAL_PHASE`），因此在保存过程中链接永远不会被切断。
+
 ## 验证已完成的交换
 
 收到的宝可梦在0xC4处带有`CurrentHandler` 1，在

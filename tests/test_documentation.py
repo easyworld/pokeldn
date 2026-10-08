@@ -126,13 +126,6 @@ def test_the_site_base_url_matches_the_repository():
 def _standalone(script):
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     command = [sys.executable, script, "--help"]
-    if Path(script) == Path("scripts/pack_app.py"):
-        # This builder has no --help option. Check its imports without building;
-        # retain a direct launcher's sys.path so the repository bootstrap is exercised.
-        command = [sys.executable, "-c",
-                   "import runpy, sys; from pathlib import Path; "
-                   "sys.path[0] = str(Path(sys.argv[1]).resolve().parent); "
-                   "runpy.run_path(sys.argv[1], run_name='__launcher_import_check__')", script]
     # Native tools may emit a different encoding; import-error names remain ASCII.
     return subprocess.run(command, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", env=env, cwd=Path.cwd(), timeout=120)

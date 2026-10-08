@@ -8,6 +8,7 @@ nav_order: 2
 
 在 Pia 有效负载内部，BDSP 运行类型化协议。 `Dpr.NetworkUtils.NetDataParser` 中
 `TeamLumi/opendpr` 是该游戏的反编译 C# 娱乐版本，列出了每条消息：一个 `ANetData<T>`，其中一个单字节 `DataID` 围绕着一个普通结构体 `T`。
+
 ## 框架
 
     0x0  1  data id
@@ -45,6 +46,7 @@ nav_order: 2
 `UnionStateController.unionMatchWaitDataList` (`isAddPlayer = 1`, `hostIndex` 0);空列表是二十零字节。一个站用`NetDataStandbyWaitData`（0x59，相同的四个字节）添加自己：在`59 0004 01 00 01 03`（站1，法语）之后，被`ReciveMatchWaitData` [0x01e539b0]接受，下一个0x22是`22 0014 01 00 01 03` 和十六个零。 `isAddPlayer = 0` 将其删除。屏幕没有变化。
 
 编组器不会清除其缓冲区：固定字段携带超过其值的堆残留（[交换页](bdsp_trade.md)）。 id 按半字节分组；无低半字节达到 0xA。
+
 ## 正在播出的内容
 
 房间里的一台游戏机发送了 65 条中的 4 条（接收器丢弃环回广播）：
@@ -60,6 +62,7 @@ nav_order: 2
 0x15。交换消息位于[交换页面](bdsp_trade.md)。
 
 0x23 可以位于存在字节 0x00（计数的 1505 个副本）后面，并且只能由将 0x00 作为消息的步行读取（[消息帧](pia.md#message-framing)）。每个 TCP（超过 8000 个）都是一个格式良好的消息，其长度恰好等于其字节数。
+
 ## 游戏机重复的消息
 
 `NetJoinData`是玩家的到来，`JoinData`的整体：
@@ -95,6 +98,7 @@ nav_order: 2
 
 在请求后 30 到 130 毫秒内测量，房间内有一个角色的工作站有 5 个在可靠流上得到应答；当没有选择宝可梦时，则不是0x13（返回`SendPokeData`）。基础游戏的处理程序 [base main 0x01fd4600] 回答相同的六个，然后命名为 0x22
 `NetDataTradeStandbyData`。请求到达其答案所使用的流：可靠流上的 0x23 全部为 4333，不可靠流上的 0x04 全部为 55。
+
 ### 压缩
 
 可靠标头的标志 0x10 标记 zlib 流。发送者根据大小决定：
@@ -107,6 +111,7 @@ nav_order: 2
     0x15a1398   otherwise: header |= 0x10, send the compressed bytes
  所有 55 个标记的游戏机消息与 Python 的字节相同
 `zlib.compressobj(5, zlib.DEFLATED, 12, 5)` 具有同步刷新，然后完成，并且 10955 个未标记的没有一个在其下收缩。连接和单记录 0x22 列表是原始的；全零 0x22 列表（原始读取看起来像 `NetBonusStart`）、记录（0x14）和球囊（0x15）收缩。接收器永远不需要压缩； `bin/bdsp_connect.py` 在旗帜上充气。
+
 ### 其他不透明消息的发送者
 
 来自1.3.0中每个`ANetData<T>.SendReliableData`的调用者：
@@ -120,6 +125,7 @@ nav_order: 2
 | 0x38 | `NetDataBattleMatchingSelectPokemon` | `BattleMatchingManager$$SendSelectPokemonData` |
 | 0x42 | `NetPlayerNameData` | `UgNetworkManager$$SendOnJoinNewPlayer`，`SendPlayerNameData` |
 | 0x54 | `NetSecretBaseUpdate` |没有可靠的发件人； `netdata.py` 命名 |
+
 ### 不可靠的流
 
 它承载着三个信息：
@@ -133,6 +139,7 @@ nav_order: 2
 `room.build_state()` 构建第一个 `room.build_match_wait(False)` 游戏机自己的 0x23 答案。
 
 游戏机重新传输可靠的消息，直到确认信号覆盖该消息（每秒测量五次）；超出其最后序列的 2 个 ack 将被忽略。一旦游戏机确认了客户端自己的数据，`bin/bdsp_connect.py` 将在最后一个序列处进行确认加一。
+
 ## 发送游戏所作用的消息
 
 可靠的序列ID与游戏机自己的发送共享，并且在其确认名称的ID下方的消息被默默地丢弃。每次发送前立即读取 id。
@@ -141,10 +148,12 @@ nav_order: 2
 `--room-pattern fixed` 在第一个请求时停止，为每个连接提供 `--join-wait` 秒（默认 1.0）。
 
 `UnionOpcManager` 在每个连接上调用 `CreateCharacter(joinData)`：四十个连接相当于四十个到达。在一台实机上，创建的角色后面没有会话，会跟随玩家穿过地图，直到游戏重新启动，并且当其站离开网格时，已移动的角色会被移除。不跟踪出发时的移除路径（`OpcManager$$RemoveCharacter` [0x02279ee4] 采用车站索引）。
+
 ## 人物记录
 
 `OpcManager.CharaData` 是
 `{int stationIndex, string assetName, int colorId, int avatarId, int sexId, int cassetVersion}`，由站键入 (`RemoveCharacter(int stationIndex)`)。
+
 ### 模型
 
 `OpcManager.CreateCharaData(ANetData<JoinData>)` 从连接构建记录，`avatarId` 选择出现的人：
@@ -157,6 +166,7 @@ nav_order: 2
 
 `NetDataTranerCardData`（0x05，75 字节：`fashionId`、`bodyType`、`genderid`，...）
 `UnionOpcManager.CreateTranerCard()`；收到的一个在联合房间的屏幕上没有绘制任何内容。
+
 ### 状态字节
 
 `StateData` 是 `{byte state, byte isRecruiment}`、`state` 和 `OpcState.OnlineState`：
@@ -193,6 +203,7 @@ nav_order: 2
 `CreateCharacter` 加载回调 [0x01e49854]，因此在 `Start` 之前到达的答案会丢失；每两秒重复一次该状态，就像游戏机一样。
 
 `OnlinePlayerCharacter$$IsCanTalkState` [0x02277af0]：玩家可以与状态1、3到8以及17到21对话，而不能与状态0、2或9到16对话。
+
 ### 步行
 
 游戏机自己的 `NetPosData` 每 0.410 秒出现一次，跨越 0.935 个单位（`room.POS_PERIOD`，
@@ -202,6 +213,7 @@ nav_order: 2
 
 交易无需步行：实机与客户角色完成了两次交易，而客户角色没有发送任何信息
 `NetPosData`（`--room-walk-steps 0`，交换路径上的默认值）。
+
 ## 正在与人交谈
 
 具有表情的玩家会留在原地，直到有人互动，并且当玩家的状态非零时，玩家自己的 A 按下不会执行任何操作（[游戏机接近](#the-console-approaching)）。游戏机广播表情：
@@ -224,6 +236,7 @@ nav_order: 2
 | 1 |什么都没有，`NetDataSelectData{0}` 或 `{1}` | “抱歉，我有其他计划”，聊天结束 |
 
 放下电台会发出驻留问候语； B 没有可靠地留下一个。
+
 ### 游戏机即将来临
 
 `UnionRoomManager$$MyUpdate`[1.3.0主0x01e49fb0]仅当玩家自身状态为0时处理A按[0x01e4a644]，`UnionWork.isTalking`（静态+0x85）为0，没有菜单或消息窗口打开并且玩家在每个外部`EnterCollision` 圈。它会在 10.0 单位内行走角色，并且玩家的 `talkDistance` (+0x38) 的状态通过 `IsCanTalkState`：
@@ -270,6 +283,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 `SwitchTransitionMessage` [0x01e53bf0]，读取类型的模型（字节表0x03db869b），不进行空测试；对于交换 `TradeJoinStateModel$$OpenSwitchFadeMsg` [0x01c22f50] 以发送者的性别打开消息 9 或 10，发音为 `OPPONENT` (`SpeakerID` 1)，关闭为 `StartFadeOut`。褪色后
 `SwitchTransition` [0x01e5ba70] 发送 18 到 `TransitionTradePoke` [0x01e5c1c0]，它获取并清除目标站，检查 `IsGamerActive` 并发送游戏机的 0x24 [`SendTranerData`
 0x01e5c2b0]：加入方方向交换的开始。一个 0x07 到达一个游戏机，该游戏机自 `UnionStateController` 构建以来从未在交换招聘人员上按过 A，读取 null (0x01e53c4c)；其他过渡类型在其自己的模型上具有相同的形状。
+
 ### 问候语中的名字
 
 问候语、其扬声器标签和战斗阶梯的“正在选择”行通过其电台的 Pia 玩家名称来命名角色：`UnionBaseMsgWindow$$SetTargetDataMessage` [1.3.0 主 0x01f86810] 和
@@ -326,6 +340,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 |韩语 | `펄.` | `다이아몬드.` |
 | 简体中文（simp_chinese） | `帕尔.` | `戴亚.` |
 | 繁体中文（trad_chinese） | `帕爾.` | `戴亞.` |
+
 ### talkState，以及导致游戏崩溃的值
 
 `TalkState` 为 `{CHECK = 0, GREETING = 1, NONE = 2}`；停放的游戏机在 `GREETING` 中等待。
@@ -346,6 +361,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 
 `RecodeMatching$$Open`和`BallDecoMatching$$Open`立即发送游戏机自己的记录（0x14，
 0x15) 并等待；只有合作伙伴的（`StartRecodeTradeFlow`、`StartBallDecoTradeFlow`）写入保存。
+
 ### 录制混音
 
 游戏机通过 Y 菜单（状态字节 5）中的“Échanger des données”进行招募。当客户端走上来并且玩家说“是”时，它会发送 `NetDataTransitionData{5, 0}`，然后是 694 字节
@@ -364,6 +380,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
     ten ints, six bytes      the per-TV branch values, myVersion (0x31), five *IsNotEmpty flags
  未写入字段保存 64 位堆指针。 `RECORD_HEAD.sex` 和 `RANDOM_SEED.sex` 在一条记录中可能不一致（捕获的记录中为 0 和 1）。 `RECORD`、`RANDOM_SEED` 和 `RECORD_HEAD`（命名空间
 `DPData`) 元帅位于包 4，`TvRecode*` 结构位于包 8；在这些字段大小下没有填充结果。
+
 ### 战斗天梯
 
 对战（“Combattre”，招募时状态字节为 3）按以下交互流程进行；招募方主机在每一步都等待加入方（此处为客户端）：
@@ -443,12 +460,12 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 `UgDigFossilePosGroup` 与 `ID` (`List.Find` 0x01cfdcd8) 并读取其 `Grids`
 `CreateDigPointModel` [0x01cfe470] 没有空测试。在 1.3.0 `ugdata` 捆绑包中，35 个区域（508 至 542）中的每一个都有 8 个组（ID 0 至 7），每组有 6 至 26 个单元。仅发送 0..7 的排列：较大的字节会导致游戏机出错。
 
-每个 `UgFieldManager` 在 `StartSession` [0x01cfebb0] 中构建一个新的 `UgNetworkManager`（唯一
-`AddComponent<UgNetworkManager>`、0x01cfed54)并在`OnDestroy`[0x01cff530]中破坏它，因此各重新采用一个表。
+每个 `UgFieldManager` 在 `StartSession` [0x01cfebb0] 中新建一个 `UgNetworkManager`（唯一的 `AddComponent<UgNetworkManager>`，0x01cfed54），并在 `OnDestroy` [0x01cff530] 中销毁它，因此每次都会重新接纳表。没有场景预先放置这两个管理器：1.3.0 RomFS 的 14052 个资源包及根目录文件包含 53861 个 MonoBehaviour，其中没有任何脚本为 `UnionRoomManager` 或 `UgNetworkManager`。两者仅存在于 `globalgamemanagers.assets` 的脚本表，且没有资源包引用该文件。
 
 0x29 `NetDigGroupIdData` 共享 0x61 的结构体和方法。只有 `NetDataParser` 的构造函数 [0x0224a420] 引用它：没有任何内容发送它，并且 `UgNetworkManager$$OnReceiveData` [0x01f7a880] （22 个 id）没有它的分支。
 
 `bin/bdsp_connect.py --inject-file PATH` 可靠地发送文件的每个新 `ID:HEX` 行。
+
 ### 球形胶囊
 
 游戏机通过“Déco Capsule”（状态字节 7）进行招募。它发送 `NetDataTransitionData{7, 0}`，进入状态 21 (`NOW_BALL_DECORATION`)，并将其 143 字节 `NetDataAttachSealNetData` 作为 116 字节 zlib 流发送（测量为 1.8 秒后）。没有得到答复，它显示“quelqu'un a miss fin à la communications”并返回房间；测量的等待时间为 45 秒，并且未找到计时器。使用客户端自己的 143 字节（`bin/bdsp_connect.py --answer-with 0x15:FILE`）进行应答，它应用它们（`BallDecoMatching$$ReceiveBallDecoData`，如下）并返回到房间，状态字节 0；据测量，返回时间不到五秒。从它自己的任务发送答案：从接收器内部，它等待的确认永远不会被读取。
@@ -477,3 +494,5 @@ isFront)` 存储在 +0x30 处。 1.3.0 捆绑包 `/Data/StreamingAssets/AssetAss
 
 网格位置保持在零售规模。 `Initialize` 将世界空间偏移（`Transform$$get_position`、`0x01e90bd0`）除以局部步长，两个轴上均为 75（`fdiv` `0x01e90c10`）。直到根 `Seal` 或 `SealTemplate` 的每个祖先都有局部尺度 1；根 `Canvas` 是一个屏幕空间覆盖，其 `CanvasScaler` 的宽度从 1280 x 720 缩放，并且 `Window` 动画师仅绑定翻译。因子 `Screen.width / 1280` 为 1：+0x1c 处的 1.3.0 `/Data/rawsettings` u32 为 0，这将默认分辨率开关 `0x006062e8` 保持在 1280 x 720 对接和手持（1 遵循操作模式，2 遵循性能模式，3 两者），并且无托管代码调用
 `SetResolution` 或 `Screen` 设置器。
+
+`Screen.width` 是唯一原生屏幕对象（`0x04efe760`）+0x68 处的整数，通过虚表槽 0xa8（`0x002c2c24`）读取。它有三处写入：构造函数 `0x002c257c`（1280 x 720）、启动时唯一的 `SetMode(0)` `0x002c2858`（使用 `0x006062e8` 的值），以及 `SetResolution` `0x002c2888`。后者仅由运行模式和性能模式处理程序 `0x002c2a1c`、`0x002c2af0` 调用，且要求 rawsettings +0x1c 非零。此路径不读取 `globalgamemanagers` 中的玩家设置；托管层的 `Screen.SetResolution` 仅把参数存到 `[obj+8]`，不改变任何状态。

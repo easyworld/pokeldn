@@ -30,12 +30,10 @@ has_children: true
 | [连接与Pia层](bdsp_session.md) |广告、密码、席位、数据包格式、密钥层次结构、网状握手和托管 |
 | [游戏协议](bdsp_protocol.md) | BDSP 说话、联合房间和控制角色的 65 条消息 |
 | [交易](bdsp_trade.md) |交换流程、PB8、保存和断开惩罚 |
+
 ## 未解决
 
-- 在主机画面上显示替换后的问候名称（[问候中的名称](bdsp_protocol.md#the-name-in-the-greeting)）。尚未追踪到 `StartupSessionJob` 如何根据启动设置填写 +0x480 处的本站记录。
-- 向本次进入联合房间后从未发起对战招募的实机发送 0x08，是否会使其发生异常。代码会通过空模型指针写入；此前发送的 0x08 使用了可靠窗口已经见过的序列号，因此尚无消息进入这条路径（[对战交互流程](bdsp_protocol.md#the-battle-ladder)）。
-- 未担任地下大洞窟会话主机的实机是否会接受 pokeldn 发来的 0x61。已测量的地下会话均由游戏主机主持，pokeldn 尚不主持此类会话。公共分发逻辑和 `UgNetworkManager` 处理器都不筛选发送方（[协议页](bdsp_protocol.md#the-grand-underground)）。
-- 什么原因会让联合房间中的主机停止广播，而画面没有变化（[占用席位](bdsp_session.md#taking-a-seat)）。
-- `SS_box_182` 的文本、`BoxWindow.SetSendPokemon` 在交换带标记的宝可梦时选择的消息，以及 `RequestValidateTrade` 在线上交换中检查哪些内容（[重复检测](bdsp_trade.md#duplicate-detection)）。
-- Unity 播放器从哪里取得 `Screen.width`。二维网格位置的计算依赖 1280 × 720 这一默认值；当 `/Data/rawsettings` 的 +0x1c 为 0 时，`0x6062e8` 保留该值（[协议页](bdsp_protocol.md#the-grand-underground)）。尚未排除其他来源，例如 `globalgamemanagers` 中的播放器设置。
-- 是否有场景把 `UnionRoomManager` 或 `UgNetworkManager` 预置为组件。在代码中，两者都只通过一次 `AddComponent` 添加到新 GameObject 上创建（`0x01b35f70`、`UgFieldManager$$StartSession` `0x01cfed48`）；没有代码把任一类型用作 `typeof`，也没有针对它们的泛型 `GetComponent` 或 `FindObjectOfType`，而联合房间没有调用 `GameObject.Find`。预置实例会通过其单例 `Awake` 注册，无需查找。因此答案在场景资源包中：查找 `m_Script` 指向任一类 `MonoScript` 的 `MonoBehaviour`。
+- 游戏机屏幕显示替换后的问候名字（[问候中的名字](bdsp_protocol.md#the-name-in-the-greeting)）。尚未追踪 `StartupSessionJob` 如何根据启动设置填充本站 +0x480 处的记录。
+- 对从未发起对战招募的游戏机发送 0x08 是否会在实机上导致故障。代码会写入空模型；已发送的 0x08 使用了可靠窗口此前已见过的序列号，因此尚未到达此路径（[对战流程](bdsp_protocol.md#the-battle-ladder)）。
+- 实机作为地下大洞窟会话的非主机时，是否接纳 pokeldn 的 0x61；已测量的地下会话均由游戏机担任主机，pokeldn 尚不创建此类会话。通用分发器和 `UgNetworkManager` 处理程序均不筛选发送方（[协议页面](bdsp_protocol.md#the-grand-underground)）。
+- 什么原因会让联合房间中的游戏机在画面不变时停止广播（[入座](bdsp_session.md#taking-a-seat)）。

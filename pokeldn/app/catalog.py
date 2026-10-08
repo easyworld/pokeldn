@@ -1,7 +1,7 @@
 """What the app offers per game: each tool is an entry point, the tested flags it always gets, the
-fields a user fills in, and what to press on the console. Fixed arguments may carry {received}
+fields a user fills in, and what to press on 游戏机上都需要输入。 Fixed arguments may carry {received}
 (the Received folder), {stamp} (the run's time) and {src_var} (a fresh random id)."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -95,6 +95,41 @@ def queued(flag: str = "", help: str = "", **kw) -> Field:
     help = help or '选择种类，由 PKHeX 生成适用于此游戏的合法宝可梦。'
     return offer(flag, help=f'{help}点击“添加交换”加入队列，同一会话将按顺序交换。',
                  queue=QUEUE, **kw)
+
+
+ONLINE_CODE_HELP = ("与交换伙伴约定的八位密码，也需要在游戏机上输入。"
+                    "留空可与此游戏中未设置密码的在线玩家匹配。")
+
+
+def without(fixed: tuple[str, ...], flag: str) -> tuple[str, ...]:
+    """`fixed` with `flag` and its value taken out."""
+    out, skip = [], False
+    for arg in fixed:
+        if skip:
+            skip = False
+        elif arg == flag:
+            skip = True
+        else:
+            out.append(arg)
+    return tuple(out)
+
+
+def online(host: Tool, steps: tuple[str, ...], code: Field) -> Tool:
+    """The host tool trading a partner far away instead of a built offer (docs/online.md). `code`
+    is the room both players enter, the console's own link code where the game has one."""
+    kept = tuple(f for f in host.fields if f.kind != "pokemon" and f is not FRESH_PID
+                 and f.flag not in ("--seconds", code.flag))
+    return Tool(host.key.replace("-host", "-online"), "交换（在线）", host.script,
+                "与远方玩家交换：双方分别为自己的游戏机创建本地交换，"
+                "再通过互联网连接。",
+                ("与交换伙伴约定密码，或留空匹配未设置密码的在线玩家。",
+                 "启动后，等待日志显示“Trading with”和交换伙伴的名字。", *steps,
+                 "对方提出交换后，会显示其宝可梦。双方确认后"
+                 "开始交换。"),
+                (code,) + kept + ((host_seconds("1800", "预留寻找交换伙伴及完成交换的时间。"),)
+                                  if any(f.flag == "--seconds" for f in host.fields)
+                                  or "--seconds" in host.fixed else ()),
+                fixed=without(host.fixed, "--seconds") + ("--online",), doc="online.md")
 
 
 FRLG_PATH = '宝可梦中心二楼 → 第三位接待员 → 直接大厅 → 交换中心'
@@ -333,4 +368,36 @@ ZA = Game("za", '传说 Z-A', "PLZA", "za.md", (
          doc="za.md"),
 ))
 
-GAMES = (FRLG, LGPE, SWSH, BDSP, PLA, SV, ZA)
+def with_online(game: Game, steps: tuple[str, ...], code: Field | None = None) -> Game:
+    """`game` with its online trade after its host tool; `code` replaces the host's own code field's
+    help, or is a new field where the game has no code."""
+    # The display name is localized; the key identifies the host role.
+    host = next(t for t in game.tools if t.key.endswith("-host"))
+    if code is None:
+        code = next(f for f in host.fields if f.kind in ("code", "linkcode"))
+        code = replace(code, help=ONLINE_CODE_HELP if code.kind == "code" else
+                       "与交换伙伴选择相同的三只宝可梦，顺序也必须一致；在此处和"
+                       "游戏机上都需要输入。")
+    at = game.tools.index(host) + 1
+    return replace(game, tools=game.tools[:at] + (online(host, steps, code),) + game.tools[at:])
+
+
+GAMES = (
+    with_online(FRLG, (f"{FRLG_PATH} → 加入组，然后选择 POKELDN。",
+                       "对方的同行宝可梦显示在右侧：选择要送出的宝可梦，然后"
+                       "确认。"),
+                Field("--online-code", "连接密码", "code", help=ONLINE_CODE_HELP)),
+    with_online(LGPE, (LGPE_STEPS, "选择宝可梦并确认。")),
+    with_online(SWSH, ("Y-Comm → 连接交换，通过本地通信输入相同的连接密码；在"
+                       "两条提示消息处按 A，然后在地图上等待。",
+                       "看到 POKELDN 后选择要送出的宝可梦。")),
+    with_online(BDSP, (f"{BDSP_ROOM} pokeldn 的角色将出现。",
+                       "Y → 交流 → 交换宝可梦；接受问候，然后选择宝可梦。"),
+                Field("--password", "连接密码", "code", help="与交换伙伴约定的八位密码，"
+                      "也需要在联合房间的密码提示处输入。留空使用"
+                      "无密码房间，匹配未设置密码的在线玩家。")),
+    with_online(PLA, (*PLA_STEPS, "提出要交换的宝可梦并确认。")),
+    with_online(SV, (SV_SEARCH, "在交换画面提出交换并确认。")),
+    with_online(ZA, ("X → 连接游玩 → 连接交换 → 附近的玩家，输入相同密码并搜索。",
+                     "在交换盒子中选择宝可梦，提出交换，然后确认。")),
+)

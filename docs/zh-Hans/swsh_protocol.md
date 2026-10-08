@@ -3,13 +3,16 @@ title: The sync framework
 parent: Sword and Shield
 nav_order: 2
 ---
+
 # 消息、内容和路由
 
 Pia 之上的发布/订阅框架。消息由 u16 LE id、鉴别器字节、零字节和 protobuf 主体组成。
+
 ## 消息 id 来自哪里
 
 Low ids 来自 `0x01BBFFA0`、`{u64 handler slot, u32 0x402,
 u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，其中 110、120、130）。高id是基数加上偏移量； 20030 或 40040 永远不会作为常量出现，60000 是基数 + 0（41 个位点的 MOVZ）。
+
 ## 内容和持有人
 
 每个内容注册三个持有者（注册商 `0x010ccd90` 内容 30、`0x010da7d0` 40、
@@ -27,6 +30,7 @@ u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，
     strh w24, [x20, #0x160]        40030 / 40040 / 40050
  没有监听器的支架会无声掉落（`0x010d81d0`：`ldr x8,[x0,#0x168]; cbz x8, out`）。安装：内容 30 `0x010ccc94`、`0x010ccca4`、`0x010ccf7c`；内容40 `0x010da6d0`，
 `0x010da9bc`（清除`0x010dab10`）；内容 50 `0x010d50ac`、`0x010d533c`（清除 `0x010d5660`）。没有一个达到 40 或 50 的 20000 碱基持有者：20040 和 20050 是惰性的。
+
 ### 30000持有者
 
 30000+偏移量持有者（`0x010d0980`，vtable GOT `0x02618620` = `0x02528100`，无RTTI）携带
@@ -65,6 +69,7 @@ u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，
     +0x140   the trade state, 1..10            +0x144  the error code
     +0x418   send command 3 on the first frame  +0x419  the role bit that suppresses it
  内容的 init 注册其持有者并铸造其 40000 个 id：在交换（状态 3）和状态 4 决策 `0x01109320` 之后，内容 50 处于交换状态 1（`0x010d4d90`），内容 40 处于状态 6（`0x010da470`）。
+
 ## 路由路径
 
     0x006a9a20   the sync pump, from the trade session update
@@ -80,6 +85,7 @@ u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，
 
 楼梯是 `struct.pack("<HBB", id, discriminator, 0)`，然后是主体，由 `0x006db840` 在 `manager+0x240f0` 构建（`strh w3`，来自 `manager+0x480f0`、`strb wzr` 的鉴别器）并解析为
 `0x006db620`。鉴别器是一个生成计数器，`[content+0x370] = (+1) mod 255`（`0x008b6670`），推入`[manager+0x480f0]`；强制 CancelAccepted 将其置于内容 40 上（`0x006db470`、`0x010dcea4..0x010dcec8`）；注册商将其归零 (`0x010d53a0`)。没有强制CancelAccepted的一次交换的107个有效负载全部为零。
+
 ### 现场阅读报名信息
 
     manager = read_u64(read_u64(main + 0x02616750))     0x006a9a70, the poll's caller
@@ -88,6 +94,7 @@ u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，
     entry i = array + i * 0x10                          0x006db3e4
     id      = holder's vtable slot 7, called at 0x006db740 (`ldr x8, [x8, #0x38]`)
  插槽 7 在此处返回 `[holder+0x160]`；其他地方解码其 `ldrh`。空闲屏幕上为空；就座链接交换增加了两个条目（在座位两秒内可见）； 神秘礼物不添加任何内容。
+
 ### 调度口、端口和发件人
 
 条目为 16 个字节：持有者，种类位于 +8 (`w2`)，标志位于 +9 (`w3`，1 仅适用于 10000+偏移量)：
@@ -98,6 +105,7 @@ u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，
  类型是网状端口：0 表示内容持有者（20030、10050、ping），1 表示 40000 系列 (`0x006daf40(manager, &holder, 1, 0)`)。发送者是一个传输指针（`[sp+0x28]` in
 `0x006db9c0`) 传递到 `0x010d5e40` 并由 `0x006b5850` 解析 (`mesh->GetStationIndex`,
 0xfd 失败）；环回通过 `[[0x2616a30]]+0xf0`。 `Data.ownerId` 在 10050 上不起作用。
+
 ## `Data` 信封
 
 `gflnet.p2p.sync.pb`, `data.proto`:
@@ -142,6 +150,7 @@ u32 id, u64 0}` 的 838 24 字节记录表，ids 1..880（97，ping 持有者，
 | `+0xd0` | `0x006d9ca0`，A | 0x38 |每站一个32位子元素，elementId 10000（`0x006d9d90`）：仲裁哈希|
 | `+0xf0` | `0x006d29b0`，B | 0x40 |在 `+0x38` 处有一个 16 位子元素，elementId 20000，所有者 0：[共享值](swsh_trade.md#the-phase-is-the-elements-field)；每个站一对，elementId 20000 (`0x006d2aa0`)，16 字节 `{stationId, sub}` 条目 |
 | `+0x110` | `0x006d7980` | 0x30 |仲裁哈希遍历列表 |
+
 ### 仲裁哈希值
 
 elementId 10000 上的四个字节，由 `0x006d7b40` 在 `element+0xa8` 构建：
@@ -160,6 +169,7 @@ elementId 10000 上的四个字节，由 `0x006d7b40` 在 `element+0xa8` 构建�
     elementId 20000, host      clock 2278   then 2338 after its pair moved
     crc32 chain                8ffa0f2e     then b3615e90
  时钟可以在发送消息之前更改。与主机的哈希相呼应的方加入完成了与托管剑的交换。
+
 ## 协议 0x84 上的队伍恐惧
 
 `ReliableBroadcastProtocol` 在三个片段中携带 3456 字节的交换快照，直到被确认；第三个是zlib（Pia标志0x10）：1404 + 1404 + 157 raw，最后膨胀到648。
@@ -177,6 +187,7 @@ elementId 10000 上的四个字节，由 `0x006d7b40` 在 `element+0xa8` 构建�
 
 构建器 `0x0110c180`：`0x00784f90`（队伍）、`0x01424f10`（MyStatus）、0x1C8 memcpy（训练家卡）、`0x01124fa0`（个人资料）、可选块的 0x188 memcpy 或一个内存集。 `0x010fcff0`的呼叫者中，链接交换（`0x010967f0`）和密码匹配（`0x00bd80f4`，
 `ChikaMatchingStateSession`) 通行无阻；对战体育场（`0x00b2d7d0`、`StateBtlSpot*Battle`、休闲、排名、竞技）通过一项。接收器 `0x0110cff0` 复制每个电台的两个区域。
+
 ### 战斗体育场街区
 
 0x180字节数据，u64长度。生产者`0x00b2eb60`填写可选（标志`+0`，数据
@@ -224,6 +235,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 `StateBtlSpotCompTop`。 `+0x108`是由`0x00adc8b0`（`str x1,[x0,#0x1ab8]`，标志`+0x1ab0 =
 1`）从`0x00b41b7c`写入`StateBtlSpotCompTop`，u64位于保存块的0x33C0 `0x88F6D6AE`（0x33D0字节，密钥在`0x02072fac`，由`0x01444ac0`读取；前面的密钥`0xEEE5A3F8`是PKHeX的
 `KOfficialCompetition`）。
+
 ### 玩家简介
 
 0xAEC 处的 266 字节，也是 0x1F 处的信标记录（[会话](swsh_session.md#taking-a-seat)）。
@@ -280,9 +292,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 | 5 |什么都没有|
 | 6 | `0x00da09a0`（`0x00da0a04`）来自`0x00cebe00`，`0x00cebea4`，`0x01466d90`在本机`CallRaidBattleMatchingEvent_`（`0x01466d30`，表`0x25aac68`）|
 
-`0x00d97730(player, motion)` 通过 `player->vtable[0x190]` 将运动存储在密钥 `[0x261e8a0]` 下，也可以由本机 `IsPlayerRideBicycleType` 读取（`0x0148b960` -> `0x00da0210`）； Lua 枚举位于
-`0x00e57940` 命名动议 `NORMAL`、`BICYCLE_GROUND`、`BICYCLE_WATER`（`1 | 2<<32` 位于
-`0x00e5793c`）。 `0x25614c0`插槽还启动类型11的活动记录（`0x0111b660`），将其交给`[0x26108d8]`（`0x00fa13c0`）并推送样本。
+`0x00d97730(player, motion)` 通过 `player->vtable[0x190]`，以 `[0x261e8a0]` 为键保存动作；原生 `IsPlayerRideBicycleType`（`0x0148b960` -> `0x00da0210`）也读取该值。`0x00e57940` 的 Lua 枚举将动作命名为 `NORMAL`、`BICYCLE_GROUND`、`BICYCLE_WATER`（`0x00e5793c` 的 `1 | 2<<32`）。`0x25614c0` 槽还启动种类 11 的活动记录（`0x0111b660`），交给 `[0x26108d8]`（`0x00fa13c0`）并提交样本。`0x25614c0` 对象对应宝可梦露营访问：原生 `PokeCampToVisit`（请求 `0x0100`，状态 3）和 `NpcPokeCampToVisit`（`0x0000`，状态 4）均构建它；网络侧请求 `0x0101`（状态 3）和 `0x0001`（状态 4）也相同，映像包含多人露营的 `contents.pokecamp.pb.KwSyncData`。状态 6 是极巨团体战匹配。
 
 `a` 和 `b` 打包到位 0-1 和 2-3 中（`0x01123710`；`0x01123760` 将 `b` 3 读取为 0）。重置
 模式 0 中的 `0x00eb97b0` 从区域键 `[[[0x2617c48]]+0x180]` (`0x00eb97d0..0x00eb9848`) 设置 `a`：
@@ -310,6 +320,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 
 训练家员姓名出现四次（我的状态、训练家员卡、队伍记录、个人资料）；
 `pokeldn/swsh/trade_payload.rewrite` 移动所有四个，并交换屏幕名称该训练家。空的队伍槽位为零； 0x810 处的计数一致。
+
 ## PK8
 
 与 `pokeldn/gen8.py` 中的 BDSP 共享（PKHeX `PK8` 和 `PB8` 均为 `G8PKM`）。剑送来
@@ -325,6 +336,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 - `BLOCK_ORDER[sv]` 命名成为块 *i* 的块：应用它，永远不要反转它。 32 个 `sv` 值中的 16 个是自逆的，并且校验和忽略顺序，因此错误的方向通常读起来很好。   PKHeX 的 `BlockPosition` 条目 24-31 重复 0-7。
 
 检查解码的队伍：昵称与种类匹配；等级（未洗牌尾部）比赛经验；极限训练 0x126 匹配 IV 词 0x8C； MyStatus 的训练家 ID 与每个 PK8 匹配。
+
 ## 交换消息
 
 `net_contents.trade.common.pokemon_trade.protocol_buffers`:
@@ -335,6 +347,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 `MergePartialFromCodedStream` (`0x010d9ee0`) 仅接受标签 0x0a。听者读
 `[Pokemon+0x18]`作为libc++ `std::string`（字节0位0选择+0x10处的堆指针），复制
 0x158。
+
 ### 接收处理程序的两个静默丢弃
 
 `0x010d5e40`:
@@ -347,6 +360,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
     ... invoke it, then content 50's send 0x010d6000
  Content 50的init仅填充`+0x30`和`+0x38`，因此返回大于1的站索引；内容 40 年代
 `0x010dbc90` 的门与 `+0x38`/`+0x40` 相同。游戏机立即用自己的答案回答 10050；没有 10050 返回意味着提议从未到达 `0x010d5e40`。内容 30 的插槽 (`0x010ce080`) 仅拒绝其自己的 id (`[[0x2616a30]]+0xf0`)：无主提议通过盒子阶段并失败内容 50。
+
 ### 内容 40 条留言
 
 `net_contents.trade.common.sync_save.protocol_buffers`:

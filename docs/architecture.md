@@ -13,6 +13,7 @@ formats and timing; shared components belong outside a game directory.
 | `pokeldn/gifts.py` | Shared [Mystery Gift file](gifts.md) envelope, reader, writer and native conversion |
 | `services/pkhex/` | Pinned PKHeX.Core dependency; legal encounter generation and game compatibility checks |
 | `pokeldn/ldn/` | Radio transport, IP, Pia, reliability and channel tables |
+| `pokeldn/online/` | [Online trade](online.md): relays, matching and the encrypted partner channel |
 | `pokeldn/gba/` | GBA wireless link protocols |
 | `pokeldn/gen8.py`, `pokeldn/gen9.py` | Shared Pokémon record codecs |
 | `pokeldn/<game>/` | Game identities, messages, state machines and protocol-specific variations |
@@ -237,8 +238,9 @@ Linux archives contain the portable executable; desktop entries with build-machi
 ## Verification
 
 ```sh
+pip install -r requirements-dev.txt
 dotnet build -c Release services/pkhex -warnaserror
-python -m pytest tests/ -q -W error
+python -m pytest tests/ -q -W error -n auto --dist worksteal
 ```
 
 CI runs these checks on Linux, macOS and Windows. Private research fixtures are optional; a clean

@@ -69,6 +69,12 @@ commands with none lost. Its idle free heap at start is 255196 bytes. A FireRed 
 its ceramic antenna counted 5155 of 5155 host ETH_TX commands on the board, with no bad wire frame
 and no USB resync.
 
+The Seeed Studio XIAO ESP32S3 (ESP32-S3 revision 0.2, 8 MB flash, 8 MB PSRAM) uses its USB-C
+socket for native USB Serial/JTAG and needs its supplied external antenna. BOOT is GPIO0; the yellow
+user LED on GPIO21 (lit while low) shows the LED looks. Over native USB on macOS it carries a
+2,000,000-byte BENCH transfer as 1429 messages with none missing and no bad checksum, at 883 KB/s,
+and takes 5000 of 5000 uplink commands with none lost. Its idle free heap at start is 212416 bytes.
+
 The classic ESP32 measurements below use the ELEGOO ESP32-D0WD-V3 board unless another board is
 named. Completed trades per board are in [Trades by board](#trades-by-board).
 
@@ -92,7 +98,7 @@ healthy board, GET_CONFIGURATION over EP0 failed, and esptool's USB reset got no
 
 The C6 and S3 builds set `CONFIG_ESP_SYSTEM_BBPLL_RECALIB=n`; its Kconfig help allows that for a
 bootloader built with ESP-IDF v5.2 or later, and every merged image carries its own v6.1
-bootloader. The S3 setting is untested on an S3. The C3 has no such option and showed no fault.
+bootloader. A XIAO ESP32S3 with recalibration off answered 300 of 300 opens. The C3 has no such option and showed no fault.
 With recalibration off, 4 of 600 opens on a C6 found no answer once and a working link on the next
 open, after macOS re-enumerated the device ("Device not configured").
 
@@ -520,8 +526,9 @@ None for a kernel interface, which is how every launcher picks its path.
 
 ## The board's LED and buttons
 
-LED patterns drive GPIO2 on classic ESP32 boards and GPIO15, inverted, on the C6 (the XIAO ESP32C6's
-yellow LED). The S3 and C3 firmware leaves LED pins alone. BOOT trace markers use GPIO0 on classic
+LED patterns drive GPIO2 on classic ESP32 boards, GPIO21, inverted, on the S3 (the XIAO ESP32S3's
+yellow user LED, `LED_BUILTIN` in arduino-esp32's XIAO_ESP32S3 variant) and GPIO15, inverted, on the
+C6 (the XIAO ESP32C6's yellow LED). The C3 firmware leaves LED pins alone. BOOT trace markers use GPIO0 on classic
 ESP32 and S3, and GPIO9 on C3 and C6.
 
 The ELEGOO ESP-32 Type-C board (CP2102, ESP32-D0WD-V3) carries an unbranded module with a PCB antenna
@@ -570,7 +577,8 @@ no such moment. `tools/ldn/esp32_led.py --port PORT PATTERN` sets a look; `--dem
 
 ## The screen
 
-An SSD1306 128x64 one-bit OLED on I2C is optional. At boot the firmware probes 0x3C, then 0x3D;
+An SSD1306 128x64 one-bit OLED on I2C is optional. Users report 128x64 SSD1315 and SSD1309 modules
+working with the same firmware. At boot the firmware probes 0x3C, then 0x3D;
 when neither answers it frees the pins and starts nothing. With a screen, a priority-1 task on the
 last core draws a frame every 50 ms and sends it at 400 kHz (1031 bytes, about 23 ms).
 
@@ -579,12 +587,22 @@ last core draws a frame every 50 ms and sends it at 400 kHz (1031 bytes, about 2
 | ESP32 | GPIO21 | GPIO22 | DevKit V1 D21, D22 |
 | ESP32-S3 | GPIO8 | GPIO9 | |
 | ESP32-C3 | GPIO6 | GPIO7 | XIAO D4, D5 |
+| ESP32-C3 | GPIO5 | GPIO6 | the 0.42-inch OLED board's own 72x40 screen, probed second |
 | ESP32-C6 | GPIO22 | GPIO23 | XIAO D4, D5 |
 
 VCC goes to 3V3 and GND to GND. The common four-pin module (GND, VCC, SCL, SDA) carries its own
 3.3 V regulator and 4.7 k pull-ups on SCL and SDA; its address resistor selects 0x3C (silkscreen
 0x78) or 0x3D (0x7A). Its panel maps segment 127 to column 1 and COM0 to row 63, so the firmware sets
 segment remap (`A1`), reversed COM scan (`C8`) and alternative COM pins (`DA 12`).
+
+The ESP32-C3 0.42-inch OLED board (sold as ABRobot and under other names) carries a 72x40 panel on
+GPIO5 and GPIO6, and an LED on GPIO8 that the firmware leaves alone. Driven with the 128x64 INIT, the
+panel shows columns 30..101 and rows 12..51 of the frame: the vendor's example draws at offset
+(30, 12), and Zephyr's `abrobot_sh1106_72x40` overlay sets segment offset 30 and display offset 12.
+A screen found on these pins gets compact scenes drawn into that window: one line of at most 12
+characters over the picture, and sprites at half size, a pixel lit when two of its 2x2 block are.
+`tools/ldn/screen_preview.py --panel 72x40` renders them. The board has not been run with this
+firmware.
 
 Without host commands the screen shows the radio's state: idle, joining or hosting (rings around a
 Poke Ball), and linked, where a cable between a console and a Poke Ball carries one digit per frame
@@ -701,6 +719,21 @@ The receive interrupt drops a 64-byte packet when the 16 KB RX ring is full and 
 from filling; a loss there shows only as bytes written past the board's last CREDIT.
 `POKELDN_ESP32_BAUD` is accepted on all targets and only changes the classic ESP32's line rate.
 
+USB drains faster than the writer encodes, so under a full-rate board-to-host stream the writer
+never sleeps. On USB targets the reader runs at priority 21, above the writer (20); the UART build
+keeps it at 19, where the line rate makes the writer sleep. On a XIAO ESP32S3, a 14-byte ETH_TX
+every 15 ms during an 884 KB/s BENCH (`esp32_bench.py --trickle 300 --flood`):
+
+| reader priority | `read_max_us` | ETH_TX counted |
+|---|---|---|
+| 19, below the writer | 53951079 | 785 of 3055, the rest dropped at the host's 512-frame queue |
+| 21, above the writer | 20493 | 3052 of 3052 |
+
+BENCH stays at 884 KB/s; 5000 uplink ETH_TX take 15.4 s against 13.5 s, none lost. A FireRed joiner
+trade on the raised priority counted 5629 of 5629 ETH_TX. On a XIAO ESP32C6 at priority 21, a
+14-byte ETH_TX every 20 ms during an 820.6 KB/s BENCH read at most 19997 us apart, 221 of 221
+counted; a FireRed host and a Legends Z-A host trade followed with no error on the console.
+
 ## Running
 
 `POKELDN_RADIO=esp32:<port>` puts every launcher's `ldn` calls on the board. `esp32:auto` takes the
@@ -787,6 +820,8 @@ Other boards, with their trades:
 | XIAO ESP32C3 | access point | Sword | trade through the packaged macOS app, legal PK8 |
 | XIAO ESP32C6 (ceramic antenna) | station | FireRed | trade, clean console departure |
 | XIAO ESP32C6 (ceramic antenna) | access point | Sword, Scarlet | trade, valid PK8 records, clean console departure |
+| XIAO ESP32S3 (macOS) | station | FireRed | trade, mutual cancel, clean link close; 5099 of 5099 ETH_TX, no bad wire frame, no USB resync |
+| XIAO ESP32S3 (macOS) | access point | FireRed, Sword | trade, 344-byte PK8, clean console departure; zero lost ETH_TX; the board answers HELLO afterwards |
 | ESP32-S3 (Windows, reported in [PR 2](https://github.com/Decryptu/pokeldn/pull/2)) | station | FireRed | trade |
 
 A FireRed console joining the board's access point lists the network (it accepts the zero-length
@@ -821,10 +856,8 @@ misses a given attempt is unknown.
   Go and LeafGreen trades complete with it. Two sniffed Z-A trades retried 11.9% of the board's
   frames and 11.5% of the console's without QoS data, and 1.3% of each with it; nothing attributes
   the difference to the setting.
-- ESP32-S3 throughput, and S3 trades in the host role or with titles other than FireRed, are
-  unmeasured on a local board.
-- A Scarlet console joined to the board's access point has acknowledged the announcement and never
-  sent its port 2 join. The cause is unknown.
+- A Scarlet console joined to the board's access point once acknowledged the announcement and sent
+  no port 2 join; the gates that can hold it are in [the Scarlet page](sv.md#unresolved).
 - What in the access point's receive path misses 1 to 22% of a station's OFDM first copies, and ACKs
   during a FireRed hold, is unknown; the settings ruled out are in
   [Receive misses on two boards](#receive-misses-on-two-boards).

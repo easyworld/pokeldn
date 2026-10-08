@@ -133,8 +133,19 @@ writer. The job sends Net 0x11 with a new sequence id and `is migrating host` 1 
 up to 4000 ms for every 0x12 (`0x706b34`), then sends `NetStartHostMigrationMessage` (`0x6f7674`)
 every 300 ms until it is the only station or a deadline passes: 4000 ms after a fully acknowledged
 0x11, 2000 ms after one that timed out (`0x706df0`, `0x706e98`). Then it destroys the LDN network,
-and the station still on it inherits the host role. Over fourteen seats of `bin/pla_join.py` the
-first migrating 0x11 came 8.3 to 10.3 s after the seat, repeated for 4.0 s, then the 0x40 for 2.0 s.
+and the station still on it inherits the host role. Over fourteen seats of a `bin/pla_join.py` whose
+Session join request the console dropped (no join response came) the first migrating 0x11 came 8.3
+to 10.3 s after the seat, repeated for 4.0 s, then the 0x40 for 2.0 s.
+
+A station that associates but sends no Session join ends the slot this way. On an emulated console
+hosting a search, with `bin/pla_join.py --join-delay 20`, the WaitMember timer's expiry (`0x2bdb7a0`)
+fired 0.99 s after the seat, and 2 ms later the matchmaking sequence's error handler built the leave
+request (`0x2c27fb8`, called at `0x2c4ee60` when the caught error's type name does not match,
+`0x2c4ee3c`). `Session::LeaveAsync` (`0x72a6dc`) followed at about 1.4 s. `LeaveSessionJob` then
+runs `LeaveMeshWithHostMigrationJob` (`0x72c640 -> 0x734c8c -> 0x73eee4`), which polls for a next host
+until a deadline 8000 ms out (`0x73efb4`); a station with no Session route (route bytes +0x90 and
++0x91 at 0xfd) never qualifies, so the disconnect and the migrating 0x11 come after the 8 s: 10.48 s
+after the seat without breakpoints.
 
 The console creates the mesh as a full mesh host (`CreateSessionJob`, no wait). A joining console
 sends its Session join request to header destination 0, from its own variable id. The host's
@@ -380,7 +391,11 @@ completes once at least two stations' records have arrived and every occupied sl
 (`fmov d1, #10.0` at `0x26c6a94`, measured 10.2 s after the join request) and fails the request with
 `net_contents::p2p::ErrorLeaveAnyone` (vtable `0x416c628`, built by `0x26c6d30`). The failure runs
 `0x13d654c -> 0x13d6384 -> 0x2c43d78 -> 0x2ca0a10 -> Session::LeaveAsync (0x72a6dc)`, then the
-Error 7 dialog. `0x26d4ae8` is in the result callback `0x26d4aa0`, which tests the error against
+Error 7 dialog. The step into `0x2c43d78` is indirect: no instruction references it, and a frame walk
+at its entry gives the return addresses `0x12b37fc`, `0x12b23d0`, `0x2c227c0`, `0x26be9b0`,
+`0x13d63d0`. On an emulated console hosting a search, with a joiner that withheld its data exchange
+record, the failure `0x26c6d30`, `0x13d6384` and `0x2c43d78` ran in that order 11.2 s after the
+seat (the stream opened at 1.17 s), and the type 7 reached the joiner 0.07 s later. `0x26d4ae8` is in the result callback `0x26d4aa0`, which tests the error against
 `gflnet::request::Error::Timeout`, then `ErrorLeaveAnyone` (`0x26d4e04`), then
 `gflnet::npln::NplnResult`; every error passes it. The step starts only on an established session:
 `0x26c564c` returns false unless the station object at `[exchange+0x80]` reports one and an own
@@ -388,7 +403,31 @@ station index other than 0xfd. The only `Error::Timeout` producer is the watcher
 by `0x2bda8cc` in two WaitMember steps of the matchmaking: 25000 ms (`0x2bda24c`, request
 `0x2bcd394`, target 2) and `3000 + rand % 1000` ms (`0x2c491b8`, `0x2c4874c`, the target from the
 matchmaking record). A WaitMember step completes once the session's member count (vfunc `+0xd8`)
-reaches its target byte `+0x88` (`0x2c1a8f0..0x2c1a920`), and nothing extends its timer. A seated
+reaches its target byte `+0x88` (`0x2c1a8f0..0x2c1a920`), and nothing extends its timer. The
+second step's target is the record's `+0x22` halfword (`ldrh w28` at `0x2c48a28`, stored to the
+waiter's `+0x88` at `0x2c48cf4`); it read 2 on an emulated console hosting a search under the code
+00000000. The vfunc
+is `0x2bcbdb4` in all three session-driver vtables (`0x4197120`, `0x4197310`, `0x4197cf0`): it
+returns `[Session+0xe0]`, the size of the Pia Session's member list at `Session+0xd0` (`0x72ab78`).
+The list holds the local station (added at Session start, `0x72ad4c`) and one entry per Session join
+event: on a host the accepted join request (`0x737608`, event at `0x7378bc`), on a joiner each
+station of the type-5 update (`0x738bc0`, `0x738f08`). A station that only associated on LDN or sent
+Net 0x11 is not counted; a leave event (`0x735cb8`) removes it.
+
+A search with no station re-hosts on that timer. On an emulated console hosting a search under the
+code 00000000, every network ended the same way: the WaitMember expiry (`0x2bdb7a0`), the leave
+request at `0x2c4ee60` 0.3 s later, `Session::LeaveAsync` (`0x72a6dc`) 0.3 s after that, then the
+LDN network destroyed and a new one created with a new session id and byte-identical advertise data.
+Over 32 networks with no breakpoint armed, a network was created every 2.43 to 4.33 s (median
+3.23 s), and scans found no network for 0.25 to 0.5 s between two (21 of 21 session ids distinct).
+A joining station therefore has what is left of one network's `3000 + rand % 1000` ms to be counted
+as a member.
+
+On an emulated console hosting a search, with `bin/pla_join.py` joining over IP, the host's
+WaitMember compared a count of 1 against a target of 2 (`0x2c1a904`, w0 1, w8 2) 1.4 s before the
+seat, the joiner's variable id entered the member list (`0x7292f4`) 0.09 s after it, with the join
+response, and the 10.0 s stopwatch started (`0x26c539c`) 1.19 s after it. The two-round data
+exchange then completed and no migrating 0x11 came in the 29 s the seat was held. A seated
 hosting slot therefore ends on the 10.0 s deadline: the stopwatch starts after matchmaking returns,
 and its failure leaves the session with host migration. The completion callback is `[request+0x90] -> 0x26d69e8 -> 0x26d6a88`.
 
@@ -1282,6 +1321,4 @@ console leaves.
 
 ## Unresolved
 
-- What the matchmaking WaitMember counts as a member (session vfunc `+0xd8`): a first migrating
-  0x11 8.3 s after the seat puts the 10.0 s stopwatch start before the seat.
 - What the console does in the 3.6 s between leaving the network and showing the field.

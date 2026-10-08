@@ -3,9 +3,11 @@ title: The Union Room trade
 parent: Brilliant Diamond and Shining Pearl
 nav_order: 3
 ---
+
 # BDSP 交换
 
 零售明亮珍珠与发明的角色进行交易，将宝可梦组装并写入其保存。方法及问候语见[游戏协议](bdsp_protocol.md)。
+
 ## 消息序列
 
     NetDataTransitionData{transitionType: 18}     entering the trade
@@ -24,6 +26,9 @@ onDecide, onConfirm, onComplete, onCancelSelect, ...)` 的 `onDecide`（lambdas 
 
 在本地无线中，仅检查玩家自己的选择是否存在保存的非法标记（`CoreParam$$GetDprIllegalFlag`）； `NetworkManager$$RequestValidateTrade` 仅在以下情况下运行
 `UnionFrontDeskStateController.isGlobal` 已设置。
+
+`RequestValidateTrade` [0x02251cb0] 在客户端不做任何检查。它将各宝可梦的 `CoreParam` 复制到 0x148 字节的请求中，发送给任天堂验证服务器（`IlcaNetServerValidate.CheckRequestAutoAsync` [0x027318c0]）。回复为 `ValidateResultID`（None、InvalidData、SignatureError、ProcessError），签名或处理错误会弹出错误对话框。玩家自己的宝可梦被标记时选择消息 `SS_box_182`，其含义为“由于你的宝可梦存在问题，无法交换宝可梦。”；原英文为“You can't trade Pokémon because there is a problem with your Pokémon.”，法文为“Un problème avec votre Pokémon rend tout échange impossible.”。`SS_box_181` 则说明对方的宝可梦存在同样问题。
+
 ## 交换状态机
 
 `UnionTradeManager.currentState`（+0x88；+0x80 在 1.3.0 中）是
@@ -40,6 +45,7 @@ onDecide, onConfirm, onComplete, onCancelSelect, ...)` 的 `onDecide`（lambdas 
 `targetTradeState`（+0x78；1.3.0 中的+0x84，其中收到的 check-ok 也写入 6）； `isTradeOk` 从未被读取。 `UnionTradeManager.<WaitBoxWindowComplete>d__24` 等待直到`myTradeState`（+0x74，由玩家的`MyReadyOk`设置）和`targetTradeState`都为2（`WAIT`），然后将`currentState`设置为
 SECURIY_TRADE，清除选择模型并发送自己的0x21，其中`tradeState` 0。仅对等方的
 0x21 将游戏机移出 SELECT_WINDOW。
+
 ### 盒子阶段，以及重置回合的消息
 
 `BoxWindow.NetTradePhase`:
@@ -78,6 +84,7 @@ SECURIY_TRADE，清除选择模型并发送自己的0x21，其中`tradeState` 0�
 - 对每个游戏机检查一次回答“OK”。在第一个答案将方框移动到 `LastConfirm` 后回答的副本会重置回合。可靠窗口保留 id 的第一条消息（[Pia 页面](pia.md#what-the-receiver-discards-in-silence)）；在捕获的 12858 个游戏机可靠消息中，322 个重复的 id 是字节相同的副本。接收方丢弃已发送的 ID； `pokeldn.ldn.reliable5.Reassembler` 这样做，`bin/bdsp_connect.py` 使用它。
 - 用 `45 0001 00` 回答游戏机的 `45 0001 01`； `{1}` 退回是客户自己的退回。   切勿在替换宝可梦消失或游戏机重新选择后发送 0x45：它会擦除回合。
 - 在选择窗口中，游戏机最后确认之前的 0x21 表示取消，之后仅计算第一个确认。在游戏机返回其选择窗口之前停止安全状态中继器。
+
 ## 安全阶段
 
 然后 `TradeSecurityController` -> `CreateTradeStateModel` -> `TradeStateModel`，它拥有保存：
@@ -91,6 +98,7 @@ SECURIY_TRADE，清除选择模型并发送自己的0x21，其中`tradeState` 0�
 在安全阶段，宝可梦消息仅触发下一步。 `UnionRoomManager$$RecivePokeData` 中
 SECURIY_TRADE 丢弃解码后的宝可梦并调用 `SetSecurityTradeParam()`，后者将
 `manager.targetPokemonParam`（+0x48，当玩家在全屏视图上确认时设置）到安全控制器。直到玩家确认它为空并且WAIT_POKE永远不会结束。
+
 ### 谁领先：稀有的宝可梦
 
 `CreateTradeStateModel` [1.3.0 main.bin 0x1c24620] 为两个角色构建一个 `TradeParentStateModel`（`TradeChildStateModel` 的覆盖是裸 `ret`）。角色是`tradeParent`（+0x94），
@@ -134,6 +142,7 @@ SECURIY_TRADE 丢弃解码后的宝可梦并调用 `SetSecurityTradeParam()`，�
 `TradeStateModel$$SetTragetPokeData` [0x1c24d70] 以发送游戏机的状态结束，WAIT_POKE。然后儿童游戏机移动到SEND_READYOK并默默等待对等状态 5 或 6，因此回显的客户端WAIT_POKE使其陷入僵局。`room.mirror_trade_state`答案WAIT_POKE和SEND_READYOK， 哪个`ReciveState`扮演任一角色：一个处于其状态的孩子SEND_READYOK（案例 5），一位家长WAIT_READYOK（案例6）。`tests/test_bdsp_trade_states.py`在随机延迟下根据客户端策略运行这两个函数作为模型。
 
 每个可靠序列 ID 发送一条消息：`their_ack_id` 仅当游戏机确认时才移动，因此同一 ID 下的后续消息看起来像是重传并被丢弃。 `bdsp_connect`拥有自己的计数器。
+
 ## 已完成的交换
 
 安全性按顺序声明游戏机作为招募者和家长（游戏机的状态，然后是客户的答案）：
@@ -156,6 +165,7 @@ SEND_READYOK;下一轮从游戏机的下一个 `NetTradePokeData` 开始。
 `SS_box_588`;在游戏机的 SEND_READYOK 之后没有 0x21，在两种角色的 5 个零售交易中的 5 个中（每个角色中有两个在一个协会中排队），游戏机没有发送 0x45 并且没有显示取消。 `TradeSelectPokeModel$$SendReturnSelectPoke` [0x01c27c20] 构建它（`isReturnSelect` = 不是它的参数，为 `tradeTargetIndex` +0x48）；它没有直接的 `bl` 调用者。
 
 交易链在一个关联中，每个交易都从选择窗口循环，没有第二次方法或训练家记录：三笔交易与 `bin/bdsp_connect.py` 连续完成（框屏幕在每笔交易后返回），两笔交易与 `bin/bdsp_host.py` 托管。 `TradeStateModel$$ReturnTradePokeSelectWindow` [0x01c29590]运行`PlayerSave`，然后模型在+0x80处回调；其调用者未被追踪。第二次交换会读回游戏机存储的内容。当玩家选择（框第 5 阶段或以下）时，SEND_READYOK (5) 0x21 着陆会重置该回合，因此游戏机的 SEND_READYOK 之后不会重复。
+
 ## 宝可梦
 
 `NetTradePokeData`携带328字节，Gen 8 `SIZE_STORED`：加密的PB8，[剑／盾页面](swsh_protocol.md#the-pk8)上的格式(`pokeldn/gen8.py`; `pokeldn/bdsp/pokemon.py` PB8视图)。 0x06 处的校验和对解密的主体求和，因此解码构建的宝可梦可以验证它，但错误的块顺序除外，16 位字的总和无法看到。
@@ -174,6 +184,7 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing))：
 名称终止符和 id 之间的十个字节是堆残留（`AllocHGlobal` 不清除；0x14 处的字有所不同）。 `room.build_trade_traner` 逐个字节地携带游戏机自身的剩余部分。
 
 提议是一个真正的宝可梦，但命名字段已更改（`pokemon.build_from`）；游戏机本身的数据、功能区、处理程序记录和语言都是非零的。
+
 ## 游戏机对收到的宝可梦做了什么
 
 由其初训家接收回来，两个字节发生变化：`IsNicknamed`（0x08F第7位，IV32第31位）当名称与游戏语言中的种类名称不同时设置，校验和如下。名称字符串保持不变；种类名称仍然是种类名称。
@@ -187,6 +198,7 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing))：
     0x006..0x007   the checksum
 
 0xC6（PKHeX 的 `HandlingTrainerID`，“未使用？”）保持为零。 PKHeX 的 `IsUntraded` (`Data[0xA8] == 0`) 变为 false。
+
 ### 重复检测
 
 `PokeDupeChecker`（1.3.0中添加）在重复的宝可梦上设置非法标志。标志为解密后的PB8字节0x52的位0（块A+0x4A，`CoreDataBlockA.set_dpr_illegal_flag` `0x027bb040`）； PKHeX 将其读取为 `PB8.IsDprIllegal`。被标记的宝可梦无法进行交易（“Un Probleme avec votre 宝可梦 rend tout echange不可能。”）。
@@ -212,6 +224,7 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing))：
 改为 `NetworkManager.RequestValidateTrade`。 `ClearIllegalFlagAll` 没有调用者，因此标志永远不会被清除。
 
 切勿提供加密常量、PID、训练家 ID、性格和 IV 均与接收保存中的宝可梦匹配的晶灿钻石或明亮珍珠记录。 `bin/bdsp_host.py --fresh-pid`提取新的加密常量和PID，保持异色状态；以这种方式交易到保存原始记录的记录中没有任何标志。
+
 ## 断开连接惩罚
 
 在 `FirstSave` 和 `SecondSave` 之间退出的电台会留下惩罚，并且游戏机拒绝新的本地交换“vous ne pouvez pas faire d'echange en reseau pour le moment”，直到清除：

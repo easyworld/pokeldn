@@ -520,8 +520,8 @@ def test_start_on_another_tool_stops_the_running_session_then_starts(tmp_path, m
     panel = SessionPanel.__new__(SessionPanel)
     panel.__dict__.update(app=FakeApp(), games=SimpleNamespace(values={}, extra={}, visible=False, game=SimpleNamespace(
         name="game", key="swsh")), log=SimpleNamespace(add=lambda line: None, clear=lambda: None),
-        received=SimpleNamespace(), transfer=SimpleNamespace(), run=None, running_tool=None, restart=False,
-        stopping=False, traded=0)
+        received=SimpleNamespace(), transfer=SimpleNamespace(), partner=SimpleNamespace(), run=None,
+        running_tool=None, restart=False, stopping=False, traded=0)
     panel.set_status = panel.refresh = lambda *a, **k: None
     panel.tool = first
     panel._start(None)
@@ -948,3 +948,34 @@ def test_chinese_gift_view_exposes_save_backup_without_compiling_a_gift(tmp_path
     assert "我的存档" in shown
     assert "从 Switch 备份" in shown
     assert "完整存档将按训练家姓名保存在“我的存档”中。" in shown
+
+
+# flet_desktop's own extractall passes no filter.
+@pytest.mark.filterwarnings("ignore:Python 3.14 will:DeprecationWarning")
+def test_flet_unpacks_the_xz_viewer_the_packer_writes(tmp_path, monkeypatch):
+    import tarfile
+    import flet_desktop
+    from gui import flet_client
+    bundle = tmp_path / "view" / "Flet.app"
+    bundle.mkdir(parents=True)
+    (bundle / "App").write_bytes(b"package:flet_drop")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # scripts/pack_flet.py: xz under the name flet_desktop looks for.
+    with tarfile.open(bin_dir / "flet-macos.tar.gz", "w:xz") as archive:
+        archive.add(bundle, arcname="Flet.app")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(flet_desktop, "get_package_bin_dir", lambda: str(bin_dir))
+    monkeypatch.setattr(flet_desktop, "get_artifact_filename", lambda: "flet-macos.tar.gz")
+    monkeypatch.setattr(flet_desktop, "tarfile", tarfile)
+    with pytest.raises(tarfile.ReadError):
+        flet_desktop.ensure_client_cached()
+    flet_client.read_any_compression()
+    cache = flet_desktop.ensure_client_cached()
+    assert (cache / "Flet.app" / "App").read_bytes() == b"package:flet_drop"
+
+
+def test_banked_and_remote_summaries_keep_player_nicknames():
+    from gui.localization import summary_text
+    assert summary_text("Pikachu · level 5 · shiny · 'Eevee'") == "皮卡丘 · 等级 5 · 异色 · 'Eevee'"
+    assert summary_text("皮卡丘 · 等级 5 · “Pikachu”") == "皮卡丘 · 等级 5 · “Pikachu”"

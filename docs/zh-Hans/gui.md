@@ -1,6 +1,7 @@
 ---
 title: Desktop builds
 ---
+
 # 桌面应用
 
 发行版包含 PKHeX，以及 ESP32、ESP32-S3、ESP32-C3 和 ESP32-C6 的合并固件。用户须提供自己的 `prod.keys`。
@@ -44,13 +45,15 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 |调制解调器管理器 1.23 (Ubuntu 24.04) |全部 | `10c4`、`1a86` 或 `303a` 没有忽略规则；其严格过滤器仅通过接口协议 1 至 6 的 `cdc_acm` 端口 (`mm-filter.c`) |
 
 由于 Linux 上没有列出串行端口，主板页面显示为 `/sys/bus/usb/devices` 并命名了一个已知的桥接器，该桥接器的接口下没有 tty，并针对 CH340 进行了 brltty 修复 (`gui/board.py` `bridges_without_port`)。
+
 ## 本地存储
 
 设置、存储显示可回收本地文件占用的空间。清除本地文件要求确认，删除检查中的文件并报告释放了多少空间。在清除之前保存错误报告所需的记录。
 
-清理包括应用程序的 `session/` 工作文件（捕获、串行跟踪、临时提议和会话元数据）、`logs/` 以及 `pokemon/` 中未使用的生成或导入的提议。保留不到一分钟的已构建提议，因此仍在完成的构建可以保存其选择。保留已保存工具设置和队列引用的提议。接收到的文件及其选定的文件夹、开关键、选定的固件和设置都会被保留，包括当它们存储在清理文件夹下时。 即使在“已接收”文件夹发生更改后，宝可梦记录和二进制转储仍会保留在应用程序的命名临时提议之外。生成的提议由构建者的时间戳和随机后缀标识。符号链接被跳过；保留检查后更改的文件。空的子文件夹将被删除。
+清理包含应用的 `session/` 工作文件（抓包、串口跟踪、临时交换提议和会话元数据）、`logs/`，以及 `pokemon/` 中未使用的生成或导入提议。生成时间不足一分钟的提议会保留，以便尚未完成的生成任务保存选择；已保存的功能设置和队列引用的提议也会保留。接收文件及其所选文件夹、宝可梦银行、Switch 密钥、所选固件和设置均保留，即使位于清理目录中也如此。更换接收文件夹后，应用命名的临时提议以外的宝可梦记录和二进制转储仍保留。生成提议根据生成器的时间戳及随机后缀识别。清理跳过符号链接，保留检查后发生变化的文件，并移除空子目录。
 
 在清理之前完成所有活动会话、闪存或开发板检查。清理在后台运行，并推迟新的会话和闪烁，直到完成。报告无法删除的文件并可以重试。宝可梦精灵缓存在高级设置下有自己的清除缓存按钮。
+
 ## 存档管理
 
 《火红／叶绿》神秘礼物工具的“存档”选项卡，经由“神奇卡片 → 朋友”路径备份主机存档或还原存档（[存档备份与还原](frlg_gift.md#save-backup-and-restore)）。存档位于 `Documents/pokeldn/Saves`（`pokeldn.app.saves`），每个 `.sav` 旁有一个 `.json`，记录名称、来源及主机游戏代码。“清理本地文件”不会改动该目录；设置 `POKELDN_DATA` 后，存档库改为该目录中的 `Saves`。
@@ -68,6 +71,43 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 若存档没有完整副本，或 PKHeX 检测到队伍中有不合法的宝可梦，会阻止还原；开启“仍然还原”后方可继续。存档名称默认由训练家与卡带版本组成，只有备份时能确定这些信息。
 
 编辑器可修改训练家名称、性别、金钱、代币和队伍：排序、移除，或添加由 PKHeX 按当前存档训练家信息（名称、ID、秘密 ID、语言）生成的宝可梦。各队伍成员显示 PKHeX 判定；“检查合法性”检查一个盒子，耗时数秒。“另存为新存档”通过 PKHeX 写入结果，重新计算所有扇区校验和，确认通过游戏自身的扇区检查后，作为新条目加入存档库；原文件保持不变。
+
+## 宝可梦银行
+
+银行页面保存各游戏交换接收的宝可梦，并可将其交换到 HOME 允许传送的目标游戏。记录保存在 `Documents/pokeldn/Bank`（`pokeldn.app.bank`），每只使用所属游戏的格式（`.pk3`、`.pb7`、`.pk8`、`.pb8`、`.pa8`、`.pk9`、`.pa9`），旁边附带 `.json` 文件。清理本地文件不会处理此目录；设置 `POKELDN_DATA` 时，银行改为该目录中的 `Bank`。
+
+| 步骤 | 行为 |
+|---|---|
+| 完成交换 | 会话面板通过 PKHeX 读取每个接收文件并存入副本；原接收文件保留，相同字节的数据不会重复存入 |
+| 存入宝可梦 | `.json` 保存种类、摘要、PKHeX 检查结果、源文件、数据的 SHA-256 及随机 63 位 HOME 追踪器 |
+| 页面列出目标游戏 | 辅助程序的 `destinations` 命令尝试传送到全部七个游戏，并报告各项拒绝原因 |
+| 选择目标游戏的交换功能 | 辅助程序的 `move` 命令转换记录，结果以 `"bank": id` 加入该功能的交换队列，应用随后打开此功能 |
+| 本次运行的第 N 次交换完成 | `[done] trade N complete` 日志移除队列中对应第 N 次交换的银行宝可梦；运行结束时移除其队列条目 |
+| 运行提前失败或停止 | 宝可梦保留在银行和队列中 |
+
+传送使用 PKHeX 自身的 HOME 转换（`EntityConverter.ConvertToType`，经由 `PKH`），随后进行目标游戏的合法性检查；不合法的结果会被拒绝，并显示 PKHeX 的原因。传送过程中：
+
+- 来自其他游戏的宝可梦取得银行分配的 HOME 追踪器。缺少追踪器时，PKHeX 将其标为无效（`HomeTrackerUtil.IsRequired`、`HOMETransferSettings.HOMETransferTrackerNotPresent`）。
+- 应用的训练家成为最近持有人，与移入目标存档时相同（`IHandlerUpdate` 及 `PB8.UpdateHandler`）。如果当前持有人是原训练家时仍未通过检查，则把应用训练家设为最近持有人；《剑／盾》要求此设置。
+- 传送后若存在无效招式，采用 PKHeX 为目标游戏推荐的招式配置。
+- 保留 PID、加密常数、原始训练家及 ID。提供银行宝可梦的运行命令不包含 `--fresh-pid`。
+
+| 拒绝原因 | 来源 |
+|---|---|
+| 无法传回《火红／叶绿》或《Let's Go》 | `EntityConverter.IsConvertibleToFormat` |
+| 蛋 | HOME 的《火红／叶绿》导入画面；转换器原本会使其孵化 |
+| 《火红／叶绿》的宝可梦携带道具或学有秘传招式 | HOME 的《火红／叶绿》导入画面 |
+| 目标游戏不存在的种类或形态 | 目标游戏的种族数据表 |
+| 没有转换路径 | PKHeX.Core 26.8.26 尚不能将《传说 Z-A》的记录转出到其他游戏 |
+
+一只实机《剑》交换接收的宝可梦移至《传说 Z-A》后，保留了 PID 并使用银行追踪器；实机 Z-A 的交换盒子正确显示其等级和原始训练家，交换也已完成。
+
+`tests/test_bank.py` 使用真实辅助程序测试六组游戏间传送，检查目标游戏的启动器是否接受记录、各项拒绝原因，以及交换完成后从银行移除宝可梦的行为。
+
+### 尚未解决
+
+- 携带银行生成的追踪器，或由银行传送过的宝可梦，之后存入 Pokémon HOME 时能否被接受。尚未向 HOME 发送任何数据。
+- HOME 自身的《火红／叶绿》导入规则是否还有画面所列蛋、携带道具及秘传招式以外的限制。
 
 ## 宝可梦精灵
 
@@ -97,15 +137,33 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 |设置，宝可梦精灵关闭|缓存已读取，未下载任何内容 |
 
 设置有开关和清空缓存的按钮。 `POKELDN_SPRITE_BASE` 替换精灵主机，用于测试（`tests/test_sprites.py`）。
+
 ## 更新
 
-启动时，应用在后台向 `api.github.com/repos/Decryptu/pokeldn/releases/latest` 查询最新稳定版，超时为 5 秒。标签版本高于应用的 `pokeldn.__version__` 时，侧栏出现“更新”，可打开更新说明，或下载适合本机的发行文件（`pokeldn-macos-arm64.zip`、`pokeldn-windows-x64.zip`、`pokeldn-linux-x64.tar.gz`）；没有匹配文件则打开发行页面。用户以下载内容替换应用；设置、密钥和已接收宝可梦位于应用之外。
+启动时，应用在后台向 `api.github.com/repos/Decryptu/pokeldn/releases/latest` 查询最新稳定版，超时为 5 秒。高于应用 `pokeldn.__version__` 的标签会在侧栏增加更新入口，打开后显示发布说明，以及“立即更新”或“下载”。
+
+立即更新（`pokeldn.app.update`）会在原位置安装发布版本：
+
+1. 将适用于此电脑的压缩包（`pokeldn-macos-arm64.zip`、`pokeldn-windows-x64.zip`、`pokeldn-linux-x64.tar.gz`）和发布版本的 `SHA256SUMS` 下载到数据目录的 `update/`。
+2. 只有压缩包 SHA-256 与 `SHA256SUMS` 中对应名称的记录一致时才接受文件。
+3. 解压：macOS 使用 `ditto -x -k` 保留应用包的符号链接和权限；Linux 使用带 `data` 过滤器的 `tarfile`；Windows 使用 `zipfile`。
+4. 以新应用启动辅助程序：`pokeldn --apply-update NEW TARGET PID VERSION`（`gui/updating.py`）。小型“正在更新 pokeldn”窗口创建 `update/helper.ready`；旧应用看到该文件后退出，未出现时则等待最多 15 秒，确保屏幕上一直有窗口。
+5. 辅助程序等待旧进程结束（120 秒），将现有应用重命名为旁边的 `.<name>.old`（Windows 释放文件夹期间重试最多 30 秒），把新应用复制到原位置，删除旧副本并打开新应用。失败时恢复并打开旧应用；无论辅助窗口是否成功显示，替换都会执行。
+6. 打开的应用读取一次 `update/outcome.json`，显示“pokeldn 已更新到 X”，或说明为何保留旧应用。移除此文件后辅助程序关闭（最多等待 60 秒）；应用随后等待辅助进程结束，清理解压副本及 `.old` 文件夹。
+
+应用下载的文件不带 macOS 隔离属性或 Windows 的 Mark of the Web，因此 Gatekeeper 和 SmartScreen 不会再次询问。`SHA256SUMS` 与压缩包来自同一 GitHub 发布版本：该检查能发现损坏或截断的下载，不验证发布者身份。
 
 | 情况 | 行为 |
 |---|---|
-| 预发布、草稿，或不是 `vX.Y.Z` 格式的标签 | 不提示更新 |
-| 无网络、HTTP 错误、回复不是发行信息 | 启动时不显示；“立即检查”提示 GitHub 未响应 |
-| “设置 → 更新”关闭 | 启动时不请求；“立即检查”仍会查询 |
+| 预发布、草稿或不符合 `vX.Y.Z` 的标签 | 不提供更新 |
+| 无网络、HTTP 错误或回复不是发布版本 | 启动时不显示提示；立即检查会报告 GitHub 未响应 |
+| 设置中关闭更新 | 启动时不请求，立即检查仍可查询 |
+| 没有适用于此电脑的压缩包，或发布版本没有 `SHA256SUMS` | 下载按钮打开文件或发布页面 |
+| 源码运行、从“下载”目录运行的 macOS 应用（App Translocation）、无写入权限的文件夹 | 显示下载按钮和原因 |
+| 会话、刷写或清理正在运行 | 立即更新要求先结束操作 |
+| 校验和不符或下载失败 | 应用不变，对话框提供下载按钮 |
+
+设置、密钥和已接收的宝可梦存放在应用外部并保留。尚未测量 macOS 在替换 `/Applications` 中的应用时是否要求“应用管理”权限；权限被拒绝时保留旧应用，并在对话框显示错误。
 
 请求不包含用户数据。GitHub 对每个地址每小时允许 60 次未认证请求。测试时用 `POKELDN_UPDATE_URL` 替换端点（`tests/test_app_update.py`）。
 
@@ -124,6 +182,7 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 Flet 1.0.2 的桌面客户端不会发生文件丢失。 `scripts/build_client.py` 在已安装的版本中检查 Flet 的源代码，将 `gui/flet_drop` （围绕 [desktop_drop](https://pub.dev/packages/desktop_drop) 的 Flet 扩展）添加到其客户端，并将其构建到
 `gui/client/<platform>`。 `gui/drop.py` 声明匹配的 `FileDrop` 控件。 `gui/main.py` 在构建时运行该客户端，否则运行 Flet 自己的客户端，其中不显示目标；冻结的应用程序总是带有构建的应用程序。该脚本需要Flutter，版本为
 `python -m flet_cli.cli --version --json` 名称（Flet 1.0.2 为 3.44.8）。它将 macOS 客户端的部署目标从 11.0 提高到 12.0：Xcode 27 不会构建任何旧版本。 Linux 客户端是 Flet 的轻量版，因为 Flet 自己的 CI 构建了它。
+
 ## 从源代码运行
 
 对于源开发，请安装 Python 3.13 和 .NET 10 SDK：
@@ -137,6 +196,7 @@ python scripts/build_client.py    # optional: file drops; needs Flutter
 python gui/main.py
 ```
  源签出没有固件映像（`gui/firmware` 是构建输出）。 Board 页面的“下载固件”从带有经典 ESP32 映像和 `SHA256SUMS` 的最新非草稿版本中获取每个已知映像，对照该版本的 `SHA256SUMS` 检查每个映像，并仅在全部匹配时才写入它们。早于芯片的版本没有任何图像。来自较旧版本的映像可以携带较旧的串行协议；然后板检查报告固件已过期。
+
 ## 构建一个桌面应用程序
 
 打包应用时，为 `esp32`、`esp32s3`、`esp32c3`、`esp32c6` 安装 ESP-IDF v6.1 并激活环境，使用独立配置构建全部四个固件镜像：
@@ -169,14 +229,16 @@ python scripts/pack_app.py
 
 应用采用 PyInstaller 单目录构建：macOS 为 `pokeldn.app`，Linux 和 Windows 为包含 `pokeldn` 或 `pokeldn.exe` 以及 `_internal` 的 `pokeldn` 目录。单文件每次启动都把整个软件包（约 180 MB）解压到临时目录；每次运行功能都会重新启动应用自身，因此再次付出解压开销。在 M4 上，单目录应用到达“游戏”页需 0.7 秒，单文件为 2.9 秒；功能进程启动需 0.08 秒，而非 1.5 秒。Flet 打包器在 macOS 上拒绝 `--onedir`；`scripts/pack_app.py` 在 Flet 的 `--onefile` 之后向 PyInstaller 传入该参数，后面的参数优先。软件包的 Python 进程不会向 Dock 注册：若作为前台应用运行，会显示第二个图标并一直跳动至退出。打包器在 `Info.plist` 中设置 `LSBackgroundOnly`，因此只有界面客户端显示 Dock 图标，与单文件启动器一致。
 
-| 组成部分 | 大小 | 缩减体积的方式 |
+| 部分 | 大小 | 缩减方式 |
 |---|---|---|
-| Flet 界面客户端（`scripts/build_client.py`） | 33 MB | 不包含可选 Flet 扩展（视频、地图、相机、网页视图等；应用只使用核心控件）；macOS 仅构建本机架构 |
-| Unicorn（`scripts/build_unicorn.py`） | 3 MB | 从已安装版本的源码构建，仅保留 ARM 和 ARM64 引擎；wheel 自带库包含全部 CPU 架构（16 MB） |
-| PKHeX 辅助程序（`services/pkhex`） | 18 MB | 部分裁剪：移除 PKHeX.Core 不会调用的框架代码 |
-| Python | | 打包器排除 Flet 的网页服务器、认证及图像附加组件（`flet_web`、FastAPI、Uvicorn、Pydantic、httpx、Pillow）和 pytest |
+| Flet 界面客户端（`scripts/build_client.py`） | 31 MB，macOS 压缩包为 9.4 MB | 去除视频、地图、相机、网页视图等可选扩展，仅保留核心控件；macOS 仅保留构建机器的架构，分离 Dart 符号（`--split-debug-info`），并使用 xz 压缩 |
+| Unicorn（`scripts/build_unicorn.py`） | 3 MB | 从已安装版本源码仅构建 ARM 和 ARM64 引擎；wheel 的库包含全部 CPU 架构（16 MB） |
+| PKHeX 辅助程序（`services/pkhex`） | 16 MB | 完整裁剪未使用的框架和 PKHeX.Core 代码；关闭 EventSource、调试器及热重载支持 |
+| Python | 模块共 8 MB | 排除 Flet 的网页服务、认证和图像扩展（`flet_web`、FastAPI、Uvicorn、Pydantic、httpx、Pillow）、pytest、Pygments、rich 的语法、Markdown 和回溯模块、`multiprocessing`、`_pydecimal`，macOS 还排除东亚编码；macOS 库移除本地符号（`strip -x`） |
 
-裁剪会关闭 .NET 基于反射的 JSON，而辅助程序回复需要该功能，因此项目通过 `JsonSerializerIsReflectionEnabledByDefault` 重新启用。否则每个命令都回复 `JsonTypeInfo metadata for type 'System.String' was not provided`。Flet 的 macOS 项目每次构建运行 `dart run rive_native:setup`；移除 Rive 后该步骤失败，因此客户端构建将其替换为 `exit 0`。
+裁剪会关闭 .NET 基于反射的 JSON；辅助程序的回复需要该功能，因此项目通过 `JsonSerializerIsReflectionEnabledByDefault` 重新启用。否则每条命令都会返回 `JsonTypeInfo metadata for type 'System.String' was not provided`。第三世代活动表是 PKHeX.Core 内部类型，按名称读取；`DynamicDependency` 属性使其在裁剪后保留。
+
+macOS 打包器使用 xz 压缩界面客户端，文件名仍为 Flet 使用的 `flet-macos.tar.gz`（9.4 MB，而非 13.6 MB）；flet_desktop 1.0.2 以 `r:gz` 打开它，因此冻结应用向 flet_desktop 提供能由 `open` 自动识别压缩格式的 `tarfile`（`gui/flet_client.py`）。可执行文件和 PKHeX 辅助程序不移除符号：两者的 Mach-O 映像后都附带压缩包。Flet 的 macOS 项目每次构建运行 `dart run rive_native:setup`，移除 Rive 后此步骤会失败，因此客户端构建将其替换为 `exit 0`。
 
 界面客户端每个构建只解压一次到 `~/.flet/client/flet-desktop-full-<version>-<fingerprint>`，Flet 不会删除旧构建目录。冻结应用每次启动，以 `pokeldn-drop` 标记自身目录，移除其他含该标记的目录，或早期 macOS 构建中含 `pokeldn.app` 的目录（`gui/flet_client.py`）；其他 Flet 应用的客户端保留。
 
