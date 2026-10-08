@@ -10,6 +10,14 @@ from pokeldn.app.settings import Settings
 TOOLS = [tool for game in GAMES for tool in game.tools if not tool.unavailable]
 
 
+@pytest.mark.parametrize("game", GAMES, ids=lambda game: game.key)
+def test_online_trade_follows_local_trades_with_localized_names(game):
+    keys = [tool.key for tool in game.tools]
+    online = next(n for n, key in enumerate(keys) if key.endswith("-online"))
+    local = [n for n, key in enumerate(keys) if key.endswith(("-host", "-join"))]
+    assert online == max(local) + 1
+
+
 def test_translated_interface_keeps_auto_adapter_arguments():
     for key in ("frlg-trade-host", "frlg-trade-join"):
         tool = next(t for t in TOOLS if t.key == key)

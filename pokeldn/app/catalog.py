@@ -369,7 +369,7 @@ ZA = Game("za", '传说 Z-A', "PLZA", "za.md", (
 ))
 
 def with_online(game: Game, steps: tuple[str, ...], code: Field | None = None) -> Game:
-    """`game` with its online trade after its host tool; `code` replaces the host's own code field's
+    """`game` with its online trade after its local trades; `code` replaces the host's own code field's
     help, or is a new field where the game has no code."""
     # The display name is localized; the key identifies the host role.
     host = next(t for t in game.tools if t.key.endswith("-host"))
@@ -378,7 +378,7 @@ def with_online(game: Game, steps: tuple[str, ...], code: Field | None = None) -
         code = replace(code, help=ONLINE_CODE_HELP if code.kind == "code" else
                        "与交换伙伴选择相同的三只宝可梦，顺序也必须一致；在此处和"
                        "游戏机上都需要输入。")
-    at = game.tools.index(host) + 1
+    at = max(n for n, t in enumerate(game.tools) if t.key.endswith(("-host", "-join"))) + 1
     return replace(game, tools=game.tools[:at] + (online(host, steps, code),) + game.tools[at:])
 
 

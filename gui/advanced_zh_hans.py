@@ -2165,3 +2165,10 @@ def description(value: str, option: str = "") -> str:
 HELP.update({"copy the console's whole 128 KB save into FILE (.sav); the console's save is not changed [docs/frlg_gift.md, Save backup and restore]": '将游戏机完整的 128 KB 存档复制到 FILE（.sav），不改变游戏机存档。', 'write the .sav FILE onto the console: beside its newest save, every sector read back, then the game loads it and saves; anything short of that keeps the old save': '将 .sav 文件写入游戏机，逐扇区读取校验后加载并保存；失败时保留旧存档。', 'with --save-backup: keep a backup the link cut short here; the next one goes on from it': '配合 --save-backup 使用：在此保留中断的备份，下次从断点继续。', "whose addresses a hook, a stub or a ROM call is built with: BPRF, BPGF, BPRE, BPGE, BPRS, BPGS, BPRD, BPGD, BPRI, BPGI, BPRJ, BPGJ. auto (the default) builds for each and sends the one the console's game code names, before anything address-dependent is sent; another code is refused. A game code serves only that cartridge. Bytes with no build address go to any console either way": '选择生成代码使用的卡带地址。auto 根据游戏机报告的卡带代码自动选择对应语言和版本，不匹配的代码会被拒绝。'})
 
 HELP.update({"trade with a player far away: their console's offer is offered here, and each side confirms only once both consoles have (docs/online.md)": '与远方玩家在线交换：双方分别转发各自游戏机提出的宝可梦，只有两台游戏机都确认后才发送确认。详见 docs/online.md。', 'the room both players enter; default the link code, and no code meets anyone else trading online without one': '双方输入的匹配房间密码；默认使用游戏内的连接密码，留空匹配未设置密码的在线玩家。', 'optional seconds to keep the seat once the console is back on its box after a trade, then hand the console the session and close; by default the host waits for the console to leave': '交换后游戏机返回盒子时，再保持连接指定秒数，随后移交会话并关闭；默认等待游戏机自行离开。'})
+
+HELP.update({
+    "test only: carry the drive on through a withdrawn vote, as the host did before it answered state 2 (docs/lgpe_session.md). Locks a console's save":
+        '仅供测试：在确认已撤回后仍继续推进，复现主机处理状态 2 前的旧行为。会锁住游戏机存档的交换功能，详见 docs/lgpe_session.md。',
+    'host over ldn_mitm for an emulator instead of the radio (docs/ldn.md)':
+        '通过 ldn_mitm 为模拟器担任主机，详见 docs/ldn.md。',
+})

@@ -42,7 +42,18 @@ nav_order: 1
     participant 1: ip=169.254.54.2  mac=58d8122149a2  name=b'POKELDN' <- the client
  游戏机分配IP。联合房间的八个座位是LDN `max_participants`。 LDN 席位位于游戏下方：屏幕上没有显示任何内容，并且它不是 Pia 会话中的席位。
 
-`Connect failed with status code 1` 关联失败；从 ESP32 板来看，大约有两次尝试失败，因此在诊断之前重试。房间里的游戏机可以停止广告，屏幕上没有任何变化。重新进入房间会打开一个新网络（新通道、SSID 和会话参数），密钥派生会实时处理该网络。 LDN 接口上的接收者必须过滤自己的源 IP：广播环回。
+`Connect failed with status code 1` 表示关联失败；ESP32 开发板大约有一半尝试会失败，因此应先重试，再排查原因。重新进入房间会打开新的网络（信道、SSID 和会话参数都会变化），密钥派生会实时处理这些变化。
+
+游戏机可能在房间画面没有变化时停止广播：随机匹配逻辑会关闭它自己的会话，再次匹配。联合房间通过 `NetworkManager$$StartSessionRandomJoin` [1.3.0 main 0x0224f600] 启动会话（`SessionManager$$StartSession` 0x01df89e0，由 `UnionRoomManager$$SetUp` 和 `$$SessionStart` 调用）；所用 `NetworkParam` 的 `Reset` [0x0202ec30] 会将 `matchingMode` 设为 1（随机匹配），并选择本地网络。随机匹配创建或加入会话后（`GameState_JoinProcessAll` -> `ToGameFrontBeforeLocalRandom` [0x02743940]，这是进入游戏状态 20 的唯一路径），每次会话更新都会运行 `INL1.IlcaNetSession$$GameState_GameFrontBefore_LocalRandom` [0x02740640]：
+
+| 站点数量 | 行为 |
+|---|---|
+| 2 或更多 | `GameFrontRnoInit` 清空两个计数器，进入游戏前台阶段 |
+| 1 | 计数器 0 和计数器 1（`gameFront_cnt`）各加一 |
+| 1，计数器 0 超过 `localRandomMatchmakeHostWaitTime + (localRandomMatchmakeHostWaitTimeMask & r)`，计数器 1 不超过 `localRandomMatchmakeTimeUp` | `CleanupRecoveryToLoggedIn` [0x0273a7f0]，游戏状态 9（`GS_LoggedInReturnWaitWorker`）：关闭会话并重新匹配 |
+| 1，计数器 0 超过等待阈值，计数器 1 超过超时阈值 | `GameFrontRnoInit`；游戏机继续担任其会话的主机 |
+
+每次进入状态 20 都会重新抽取随机值 `r`，同时清空计数器 0，保留计数器 1 继续计数。`IlcaNetSessionSetting` 构造函数 [0x01f46fc0] 将等待阈值设为 25、掩码设为 0x7F、超时阈值设为 270，`SessionConnector$$StartSession` [0x0202f2c0] 不会更改这些值。因此，独自在新会话中的游戏机会在 25 到 152 次更新后关闭会话，并反复执行这一过程；累计独处 270 次更新后，才保留最后建立的网络。LDN 接口上的接收方必须过滤自身的源 IP，因为广播会回送给自己。
 
 未经身份验证的 Pia 会默默地被丢弃，不会出现错误，也不会丢失席位。
 

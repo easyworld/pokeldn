@@ -17,17 +17,21 @@ installed on the Switch or Switch 2. Seven games are supported:
 | | FRLG | LGPE | SwSh | BDSP | PLA | SV | PLZA |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Trade | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Online trade, two players far apart | ✓ | ○ | ○ | ○ | ○ | ✓ | ○ |
 | Mystery Gift | ✓ | ∅ | ✓ | ∅ | ∅ | ∅ | ∅ |
 | Link battle | ✓ | ✗ | ✗ | ✗ | ∅ | ✗ | ✗ |
 | Code on the console, save read and write | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
-✓ works on a retail console · ✗ not done · ∅ the game has no such feature over local wireless
+✓ works on a retail console · ○ built and tested offline, untried on a retail console · ✗ not done ·
+∅ the game has no such feature over local wireless
 FRLG FireRed/LeafGreen · LGPE Let's Go Pikachu/Eevee · SwSh Sword/Shield · BDSP Brilliant Diamond/Shining Pearl · PLA Legends Arceus · SV Scarlet/Violet · PLZA Legends Z-A
 
 FRLG supports both versions in English, French, German, Italian, Spanish and Japanese. The added
 editions have offline cartridge-ROM tests; their wireless delivery still needs retail checks.
 
-Every game trades through the ESP32 board. Protocol documentation:
+Every game trades through the ESP32 board. Online trade joins two players far apart: each hosts
+their own console, and the two apps meet through public Nostr relays under a shared code, with no
+server to run ([online trade](docs/online.md)). Protocol documentation:
 [decryptu.github.io/pokeldn](https://decryptu.github.io/pokeldn/).
 
 ---
@@ -92,7 +96,7 @@ Both launchers accept `--gift-file FILE`. Native conversion and the file schema 
   Board requirements and hardware verification are on [ESP32 radio](docs/hardware_esp32.md#supported-boards).
 - Optional: a 128x64 SSD1306, SSD1315 or SSD1309 I2C OLED on the board (classic ESP32: SDA D21, SCL
   D22; ESP32-S3: SDA GPIO8, SCL GPIO9; VCC 3V3), or the 72x40 screen built into the 0.42-inch
-  ESP32-C3 OLED board (ABRobot and its clones; untested on hardware), shows
+  ESP32-C3 OLED board (ABRobot and its clones), shows
   the radio's traffic, the Pokemon each trade sends and receives, and the Mystery Gift card; idle,
   it dims after a minute and turns off after ten, and BOOT wakes it
   ([The screen](docs/hardware_esp32.md#the-screen)).
@@ -257,7 +261,8 @@ later trades.
 ```
 
 Console: Communiquer, Communication locale, Échange, link code Pikachu ×3, wait on the search
-screen. See [Let's Go](docs/lgpe.md).
+screen. For an emulated console over the LAN, use `lgpe_host.py --ip-host --our-ip IP`. See
+[Let's Go](docs/lgpe.md).
 
 ### Sword and Shield
 

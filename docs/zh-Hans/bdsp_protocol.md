@@ -317,9 +317,16 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
     JPN 1, USA 2, FRA 3, ITA 4, DEU 5, ESP 7, KOR 8, SCH 9, TCH 10
  游戏机通过 `IlcaNetBase$$PlatformInitialize2` [0x01e13ce0] 发送自己的 `MessageManager$$get_UserLanguageID` 及其 `CheckNGTrainerName` 检查名称（`SessionConnector$$ResetParam` [0x0202f050]） `PiaPlugin$$RegisterStartupSessionSetting` [0x0227d5a0]，并且站协议的 PlayerInfo writer 将 +0x480 放在字节 0x7A [0x01550e98] 处。法语版游戏机的连接响应（站协议类型2）携带编码1、其名称、字节0x79 0和字节0x7A 3。
 
-语言为发送者的游戏文字语言，保存`CONFIG.msg_lang_id`（PlayerWork +0xac，
-`get_msgLangID` [0x0237e100]); `GameManager.<OnetimeInitializeOperation>` [0x01e0eb44]仅当存储的值在1..10之外时才从系统语言（`GetCurrentIetfCode`）填充。本站记录的+0x480是由`strb w8, [x23, x22]` [0x0154956c]写入`0x015494f0`，从
-`JoinMeshJob::SetupLocalPlayerInfo` [0x0155b988]，在 Pia 会话条目中设置生成器 [0x0156fa08] 填充（条目 +0x80，跨步 0x98）。法语版游戏机在 30 个 PlayerInfo（17 个连接响应，13 个连接请求）中的 30 个中发送了字节 0x7A 3 和字节 0x51 0。
+语言字段取自发送方游戏的文本语言，即存档中的 `CONFIG.msg_lang_id`（PlayerWork +0xac，`get_msgLangID` [0x0237e100]）。只有保存的值不在 1..10 范围内时，`GameManager.<OnetimeInitializeOperation>` [0x01e0eb44] 才会根据系统语言（`GetCurrentIetfCode`）填入该值。本机站点记录的 +0x480 通过四次复制得到 PlayerInfo 的语言字节：
+
+| 步骤 | 代码 | 来源 | 目标 |
+|---|---|---|---|
+| `RegisterStartupSessionSetting` | `0x0156f918`（设置构建器，`0x0156fa08`），`0x0168d4c8` | 插件的玩家数组（步长 0x28） | 框架保存的设置 +0x3220：PlayerInfo +0x18、语言 +0x98、步长 0x98 |
+| `ChangeStateJob::StartupSession` | `0x01690d6c` -> `0x0168c5b8` -> `0x0157d36c` -> 控制器虚函数 2（`LocalMatchMeshLayerController` `0x016c3e70`） | 设置中的首个 PlayerInfo（`0x016c3f48`） | 控制器的玩家列表 +8、语言 +0x88、数量 1 位于 +0x268 |
+| `CreateSessionJob::MeshStartup` `0x015873b0`，`JoinSessionJob::MeshStartup` `0x015884bc` | 控制器虚函数 4（`MeshLayerController` `0x0171a068`）-> `0x01546fa4` | 控制器的列表 | 网状网络对象（`[0x04c4db60]`）+0x128 + n*0x98、语言 +0x80（`0x015472e4`）、数量 +0x388 |
+| `CreateMeshJob::SetupLocalPlayerInfo` `0x0155a764`，`JoinMeshJob::SetupLocalPlayerInfo` `0x0155b988` | `0x015494f0` | 网状网络对象的列表 | 本机站点记录 +0x480 + n（`strb w8, [x23, x22]` `0x0154956c`） |
+
+`ChangeStateJob::StartupSessionBegin`（`0x01690c70`）会直接进入 StartupSession；若框架 +0x7c 为 0，则先经过 `StartupSessionJob`（`0x0168ec7c`，设置位于任务 +0x70）和 `WaitStartupSessionLdnInitialize`（`0x01690e30`）。`StartupSessionJob` 只有一个实际执行的步骤 InitializeLdn（`0x0168ed74`），不会复制 PlayerInfo。法语游戏机发送的 30 个 PlayerInfo（17 个连接响应、13 个连接请求）中，字节 0x7A 均为 3，字节 0x51 均为 0。
 
 `bin/bdsp_connect.py` 和 `bin/bdsp_host.py` 都使用 `pokeldn/bdsp/host.py` 构建 PlayerInfo
 `player_info`（编码1，UTF-8名称，字节0x51 0）并发送`--language`，默认3；桌面应用程序通过其培训语言。 3岁以下，11个字符的名字显示完整。
@@ -407,7 +414,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 
 无论当前打开哪种对话，0x08 都会驱动对战招募模型。两个发送器都写入 0（`UnionBattleContextMenu$$SendRuleSelectState` [0x01f87c60] 为尾调用，以及 `<ShowBattleJoinYesNoWindow>b__0` [0x01f8800c]）。
 
-接收器从不检查模型是否为空：它加载 +0x38 [0x01e52a78]，并在分支 4 中通过该指针调用 `NetStateModel$$SetState` [0x023e2604] 写入。唯一写入 +0x38 的是 `CreateSelectStateModel` [0x01e4bb08]：玩家招募对战时，为状态 3 或 17 创建 `BattleRecruitmentStateModel`（`stateModelType` 为 0；按 A 传入 1 并创建 `BattleJoinStateModel`）。每个 `UnionRoomManager` 只创建一次 `UnionStateController`（`UnionRoomManager$$SetUp`、`.ctor` 0x01e4d01c），连接对战保留两者（`EvDataManager$$UpdateStart` → `UnionRoomManager$$ReturnBattle` [0x01b02a78]，没有构造函数）。每次进入都会新建 `UnionRoomManager`：`EvDataManager$$EvCmdUnionProc` [0x01b35f70] 在传送进房间前把它添加到 `new GameObject("UnionRoomManager")` [0x01b36090]，没有 `DontDestroyOnLoad`。`UnionRoomManager$$Init` [0x01e49e40] 把区域 {484, 491, 492, 493}（`UNION`、`UNION01` 至 `UNION03`）传给 `NetUseManager.SetEnableZone` [0x026cfca0]，后者订阅 `FieldManager` 的区域变化事件；`NetUseManager.OnZoneChange` [0x026cfef0] 在首次进入列表外区域时调用 `Object.Destroy(gameObject)` [0x026d00f0]。离开（`LeaveUnion` [0x01e4e300]，其协程在 [0x01e560e0] 设置过渡区域）正是这样的变化，因此执行 `UnionRoomManager$$OnDestroy` [0x01e4c540] 并调用 `Clear`。所以每次进入时，招募模型最初都为空；若玩家本次尚未招募对战便收到 0x08，就会通过空指针写入。
+接收方从不检查模型是否为空：它加载 +0x38 [0x01e52a78]，分支 4 通过该指针在 `NetStateModel$$SetState` [0x023e2604] 中执行写入。唯一写入 +0x38 的位置是 `CreateSelectStateModel` [0x01e4bb08]：玩家发起对战时，为状态 3 或 17 构建 `BattleRecruitmentStateModel`（`stateModelType` 为 0；按 A 则传入 1 并构建 `BattleJoinStateModel`）。每个 `UnionRoomManager` 只构建一次 `UnionStateController`（`UnionRoomManager$$SetUp`，`.ctor` 0x01e4d01c），连接对战会保留两者（`EvDataManager$$UpdateStart` -> `UnionRoomManager$$ReturnBattle` [0x01b02a78]，不调用构造函数）。每次进入都会构建新的 `UnionRoomManager`：`EvDataManager$$EvCmdUnionProc` [0x01b35f70] 在传送进房间前将其添加到 `new GameObject("UnionRoomManager")` [0x01b36090]，没有设置 `DontDestroyOnLoad`。`UnionRoomManager$$Init` [0x01e49e40] 将区域 {484, 491, 492, 493}（`UNION`、`UNION01` 到 `UNION03`）传给 `NetUseManager.SetEnableZone` [0x026cfca0]，后者订阅 `FieldManager` 的区域变化事件；首次进入列表以外的区域时，`NetUseManager.OnZoneChange` [0x026cfef0] 调用 `Object.Destroy(gameObject)` [0x026d00f0]。离开房间（`LeaveUnion` [0x01e4e300]，其协程在 [0x01e560e0] 设置过渡区域）会触发这种变化，因此会执行 `UnionRoomManager$$OnDestroy` [0x01e4c540] 并调用 `Clear`。所以每次进入时，对战招募模型都从空值开始。如果玩家在此次进入后尚未发起对战，收到的 0x08 就会通过空指针写入：接收方没有空值检查，直接将空模型传入 `BattleRecruitmentStateModel$$ChangeBattleRecruitmentState` [0x01d2aab0]；其分支 4 以该模型尾调用 `NetStateModel$$SetState` [0x023e25f0]，而 `str x2, [x20, #0x18]!` [0x023e2604] 会写入地址 0x18。该构建在此路径上没有生成 IL2CPP 空指针检查，映像也未导入 `nn::os::SetUserExceptionHandler`。
 
 流程表中的 0x08 是在已经招募对战的主机上测得的。客户端已使用过的序列号会被可靠窗口丢弃（[Pia 页](pia.md#what-the-receiver-discards-in-silence)）；向尚未招募对战、正在对话的主机发送的 22 条消息，使用了客户端此前某条 0x64 回复的序列号，因此没有一条进入空指针路径。
 

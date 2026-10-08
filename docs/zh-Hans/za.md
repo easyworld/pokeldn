@@ -172,7 +172,7 @@ SSID 和通道针对每个会话。游戏字节是 ASCII 格式的链接代码�
 | 13 | `0x960d00` | 等待对方的 0xe | 14 |
 | 14 | `0x960de8` | +0x10 == 0 时调用状态 6 委托（`0x963810`），否则调用状态 7 委托（`0x9a0b00`）；随后执行 `0x9637b8` | 0x10 |
 
-本站状态 6 表示交换完成，即双方通过 `0200b901XX` 步骤 3、6、0x0b 和 0x0e。工作器错误字 +0x10 非零时，处理程序 14 选择状态 7 的委托；2.0.2 没有任何代码在此写入非零值，唯一存储操作是在构造函数 `0x966ba4`（`0x966bcc`）和启动函数 `0x965660`（`0x9656a0`）清零。会话更新 `0x95f6e4`（`0x95f738`）读取工作器 +0xc 的中止阶段：1 请求交换对象取消（`0x9636f8` 设置交换对象 +0x44 = 1），使工作器停在步骤 0xf；2 等待交换对象 +0x44 == 3，随后设步骤 14、阶段 3（`0x95f7e0`）。没有代码写入 1，因此中止阶段不会启动，工作器没有路径到达本站状态 7。不能排除通过计算地址写入，模拟器 GDB 接口也没有数据观察点。模拟器游戏机主持并与 `bin/za_join.py` 完成交换时，处理程序 14 执行一次，`x19` 指向工作器，+0x10 = 0，步骤字 +0x08 = `0x0e02`。站点 +0x15 清零时，在 0x0b 前随机等待 2..302 次更新。`0xdd07cc` 的返回值，以及所存半字如何映射到 `b901XX` 字节，尚未追踪。
+双方站点经过 `0200b901XX` 的步骤 3、6、0x0b 和 0x0e 后，本机状态 6 表示交换完成。当工作对象的错误字 +0x10 非零时，处理程序 14 选择状态 7 的委托；但 2.0.2 没有代码向该位置写入非零值，唯一的写入是在构造函数 `0x966ba4`（`0x966bcc`）和启动函数 `0x965660`（`0x9656a0`）中清零。会话更新函数 `0x95f6e4`（`0x95f738`）读取工作对象的中止阶段 +0xc：1 请求交换对象取消（`0x9636f8` 将交换对象 +0x44 设为 1），并将工作对象停在步骤 0xf；2 等待交换对象 +0x44 == 3，然后设置步骤 14 和阶段 3（`0x95f7e0`）。没有代码写入 1，所以中止阶段不会开始，也没有经过该工作对象到达本机状态 7 的路径。从每处读取 session+0xd0 的位置（更新函数 `0x95f608`、`0x95fc80`，构建器 `0x9610c8` 及其新工作对象 `0x961130`、`0x961a74`，重置函数 `0x9645cc`）、构造函数和 `0x960c20` 的每个处理程序出发，对工作对象指针进行寄存器跟踪，并继续追踪每个接收该指针的被调用函数，找到的写入位置包括 +0x09、+0x0c、+0x14、+0x15、+0x18、+0xa0 和 +0xa8，以及两个委托的存储区（+0x20 到 +0x5f、+0x60 到 +0x9f，由各自的管理器 `0x965f54` 和 `0x4177c8` 写入）及上述清零位置；没有通过计算地址进行的写入。该指针只有在存入其持有者时才离开跟踪路径（session+0xd0，`0x961138`；`0x966b68`）；间接调用携带的是委托存储区，其函数体 `0xdfda8c` 和 `0x2dc4b94` 只通过所持有的会话指针写入。模拟运行的游戏机担任主机并与 `bin/za_join.py` 完成交换时，处理程序 14 仅运行一次；工作对象位于 `x19`，+0x10 = 0，步骤字 +0x08 = `0x0e02`。+0x15 未设置的站点会随机等待 2..302 次更新，再发送 0x0b。`0xdd07cc` 的返回值，以及保存的半字如何映射到 `b901XX` 字节，仍未追踪。
 
 《Z-A》在交换提示中选择取消时发送 `0103b9020100`（轮次 1，原因 0）；玩家再次选择后，用主机端先前的提议重新显示提示，无需重发。下一次确认是 `0102b90101`、`0104b90101`。主机端以轮次 0 回应会被忽略（处理函数拒绝低于 +0x152 的轮次），主机停在“Communicating”（通信中）；轮次 1 可完成交换。`pokeldn.za.host` 从主机自身的 `0102`、`0103`、`0104` 获取轮次。
 
@@ -608,8 +608,21 @@ LDN 会话属性将 +0xa6 设置为 `stationAcceptPolicy == 0`（NetworkInfo +0x
 
 | 序列 | 构建器、模式 | 步骤 | 调用方 |
 |---|---|---|---|
-| 转为本地 | `0xc57544`，`0xc575fc` 的 `mov w2, #1` | InitializeSocket、InitializePia、Commit、FinalizeToLocal | 连接交换（`0xc9fe00`）、私人对战（`0x2a49dcc`，以及“BattlePrivate”下的 `0xc570a8`） |
-| 转为互联网 | `0x2a0bb18`，`0x2a0bcbc` 的 `mov w2, #2` | NetworkUse、InitializeSocket、InitializeCurl、EnsureNsaTokenId、CheckNSO、InitializeNplnManager、InitializePia、LoginInternet、SaveNplnUserId、ActivatePenaltyClient、Commit、FinalizeToInternetWithGS | |
+| 转为本地 | `0xc57544`，`0xc575fc` 处的 `mov w2, #1` | InitializeSocket、InitializePia、Commit、FinalizeToLocal | 连接交换（`0xc9fe00`），私人对战（`0x2a49dcc`，以及“BattlePrivate”下的 `0xc570a8`） |
+| 转为互联网 | `0x2a0bab8`，`0x2a0bcbc` 处的 `mov w2, #2` | NetworkUse、InitializeSocket、InitializeCurl、EnsureNsaTokenId、CheckNSO、InitializeNplnManager、InitializePia、LoginInternet、SaveNplnUserId、ActivatePenaltyClient、Commit、FinalizeToInternetWithGS | 连接请求 `0x2a388a4` 经由 `0x2a3928c`（调用方 `0xcac894`、`0x2c66b84`、`0x2c77674`、`0x2cbce04`） |
+
+每个序列都以清理操作 `0xc57c8c` 开始（LogoutInternet、DeactivatePenaltyClient、TerminateNPLNManager、TerminatePia、TerminateCurl），其中 TerminatePia 任务以模式 0 调用重置。网络状态字 `0x6133018` 记录最后提交的序列：
+
+| 值 | 写入位置 |
+|---|---|
+| 0 | 转为本地和转为互联网序列的开头（`0xc57588`、`0x2a0bb3c`）；FinalizeCleanupNetwork（`0xdd0488`），即独立清理操作 `0xc920f0` 的最后一步 |
+| 1 | 转为本地序列的 Commit（`0xc84f48`） |
+| 2 | 第二个互联网序列 `0x2a0ade0` 的 Commit（`0x2a18604`）（NetworkUse、InitializeSocket、InitializeCurl、EnsureNsaTokenId、InitializeNplnManager、SaveNplnUserId、Commit、RecoverNetwork、FinalizeToInternet）；该序列执行清理，但不执行 InitializePia |
+| 3 | 转为互联网序列的 Commit（`0x2a2b14c`，任务由 `0x2a0c398` 经 `0x2a29da8` 构建），位于模式 2 的 InitializePia 之后 |
+
+当字节 `0x3f9bf6a` 为 1，且 `nn::nifm::IsNetworkAvailable` 返回真时，`0x961c80` 返回真。
+
+级别对战的匹配由第三个驱动处理。其页面更新函数 `0x2cc1d18` 在 +0x40 保存状态（跳转表 `0x33a2268`，70 个状态）；状态 0x31 调用“BattleRandom”请求 `0x2a48bf8`（`0x2cc287c`），经由 `0xc8a224` 到达槽位 13（`ldr x0, [x0, #0x38]`，再以 `br` 跳到槽位 `+0x68`，即管理器的当前驱动）。运行 0x2f 到 0x34 或 0x43 到 0x45 的任一状态前，更新函数都会读取 `0x6133018`（`0x2cc1e14`）：值为 1，或 `0x961c80` 为假时，将页面转到状态 4；值不为 3 时也如此（`0x2cc4760`）。状态 10 到 0x2f 和 0x3b 到 0x3e 同样要求该值为 3，否则跳到 `0x2cc5b5c` 并进入状态 6（`0x2cc1d58`）。值 3 表示最后提交的序列安装了模式 2 的驱动。第三个驱动的槽位 13（`0x191fd30`）根据 `gflnet::npln` 结果构建 StartupSession、JoinRandomSession、WaitMember、JoinRandomRecover 和 RandomMatchingCancel 步骤。没有在线服务的模拟游戏机会在开始匹配前，从级别对战返回菜单。
 
 没有调用使用模式 3 构建任务，因此 2.0.2 始终不安装 LAN 驱动。模拟器从游戏第一条指令前启用断点后，启动、地图、连接游玩、连接交换页面及密码提示阶段均未到达设置函数。确认密码 00000000 后以模式 0 进入（返回地址 `0x1912240`），0.6 秒后从 `0x191213c` 以模式 1 进入并构建本地驱动（`0x199eaa0`）；再过 1.0 秒，本地驱动槽 13 运行（`x2` 为 2，`x3` 为 1），当时没有站点，加入端在四分钟后才启动。断点命中后 0.3 秒才重新启用，会漏掉第二次调用。
 
@@ -662,7 +675,3 @@ Net 0x11 是退出主机在 `NetDestroyNetworkJob` 迁移形式下的连接状�
 ## 神秘礼物
 
 2.0.2版神秘礼物提供网络获取、密码获取、查看神秘礼物；没有本地无线路径。
-
-## 未解决
-
-- 级别对战匹配是否运行在第三驱动上。互联网序列安装该驱动（模式 2，见属性更新）；没有在线服务的模拟器游戏机在匹配前就从级别对战返回菜单。

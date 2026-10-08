@@ -33,7 +33,7 @@ has_children: true
 
 ## 未解决
 
-- 游戏机屏幕显示替换后的问候名字（[问候中的名字](bdsp_protocol.md#the-name-in-the-greeting)）。尚未追踪 `StartupSessionJob` 如何根据启动设置填充本站 +0x480 处的记录。
-- 对从未发起对战招募的游戏机发送 0x08 是否会在实机上导致故障。代码会写入空模型；已发送的 0x08 使用了可靠窗口此前已见过的序列号，因此尚未到达此路径（[对战流程](bdsp_protocol.md#the-battle-ladder)）。
-- 实机作为地下大洞窟会话的非主机时，是否接纳 pokeldn 的 0x61；已测量的地下会话均由游戏机担任主机，pokeldn 尚不创建此类会话。通用分发器和 `UgNetworkManager` 处理程序均不筛选发送方（[协议页面](bdsp_protocol.md#the-grand-underground)）。
-- 什么原因会让联合房间中的游戏机在画面不变时停止广播（[入座](bdsp_session.md#taking-a-seat)）。
+- 游戏机屏幕上是否会显示替换后的问候名称（[问候中的名称](bdsp_protocol.md#the-name-in-the-greeting)）。
+- 未发起对战的实机收到 0x08 后会显示什么：代码会写入地址 0x18，既没有空指针检查，游戏模块也没有用户异常处理程序。此前发送的 0x08 使用了可靠传输窗口已接收过的序列号，因此尚未到达该路径（[对战流程](bdsp_protocol.md#the-battle-ladder)）。
+- 非地下大洞窟会话主机的实机是否接受 pokeldn 发来的 0x61；已测量的地下会话均由游戏机担任主机，pokeldn 尚未主持此类会话。公共分发逻辑和 `UgNetworkManager` 处理程序都不筛选发送方（[协议页面](bdsp_protocol.md#the-grand-underground)）。
+- `INL1.IlcaNetSession$$Update` 的调用频率，以便将联合房间的重启等待时间（25 到 152 次更新）和超时阈值（270 次更新）换算成秒（[占据席位](bdsp_session.md#taking-a-seat)）。
