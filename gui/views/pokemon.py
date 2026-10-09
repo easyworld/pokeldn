@@ -667,7 +667,10 @@ class NamePicker:
                 self.dropdown.value = str(self.value) if self.value else (EMPTY if self.optional else None)
                 self.dropdown.hint_text = '搜索'
                 self.dropdown.disabled = False
-            self.dropdown.update()
+            try:
+                self.dropdown.update()
+            except RuntimeError:  # A dynamic editor may have removed this picker while names loaded.
+                pass
         self.app.ui(show)
 
 

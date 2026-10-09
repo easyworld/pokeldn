@@ -36,6 +36,9 @@ def translate(value: str) -> str:
     if name_error:
         return "名称错误：" + translate(name_error[1])
     patterns = (
+        (r"A raid gives at most (\d+) rewards\.", r"一场团体战最多可设置 \1 项奖励。"),
+        (r"Choose an item for reward (\d+)\.", r"请为第 \1 项奖励选择道具。"),
+        (r"Reward (\d+) needs a quantity from 1 to 999\.", r"第 \1 项奖励的数量必须为 1 到 999。"),
         (r"pokeldn cannot write to (.+)\.", r"pokeldn 无法写入 \1。"),
         (r"the download is (\d+) bytes", r"下载文件大小为 \1 字节"),
         (r"the archive holds no (.+)", r"压缩包中缺少 \1"),

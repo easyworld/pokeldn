@@ -3,13 +3,16 @@ fields a user fills in, and what to press on 游戏机上都需要输入。 Fixe
 (the Received folder), {stamp} (the run's time) and {src_var} (a fresh random id)."""
 from dataclasses import dataclass, replace
 
+from pokeldn.sv.raid import REWARD_ROWS
+
 
 @dataclass(frozen=True)
 class Field:
     flag: str | tuple[str, ...]   # "" is positional; a tuple passes the same value to each flag
     label: str
-    kind: str = "text"            # text number choice switch pokemon file builder multi linkcode code (eight
-                                  # digits), or a PKHeX name list: species move item ball
+    kind: str = "text"            # text number choice switch pokemon file builder multi linkcode code
+                                  # (eight digits) raidseed rewards, or a PKHeX name list: species move
+                                  # item ball
     help: str = ""
     default: str | bool = ""
     choices: tuple[tuple[str, str], ...] = ()
@@ -340,6 +343,51 @@ SV = Game("sv", '朱／紫', "SV", "sv.md", (
                 "--session-join", "--answer-migration", "--net-ack", "--ack-flags", "0x00",
                 "--game-channel", "--announce-timeout", "20", "--rtt-delay", "0.3",
                 "--trainer-name", "{ot}", "--offer-out", "{received}/sv-{stamp}.pk9"), doc="sv.md"),
+    Tool("sv-raid-host", "太晶团体战（主机）", "bin/sv_host.py",
+         "创建太晶团体战供游戏机加入，选择团体战、奖励及我方出战宝可梦。",
+         ("选择我方出战宝可梦、团体战，并按需设置奖励。",
+          "启动主机。",
+          "在游戏机上：X → 宝可入口站 → 太晶团体战，通过离线搜索输入连接密码 4970。",
+          "对战开始时我方玩家离开，宝可梦留下协助你战斗。",
+          "对战开始时可能出现通信错误；关闭提示后继续战斗。",
+          "获胜后领取奖励。"),
+         (Field("--raid-pokemon", "我方宝可梦", "pokemon", required=True,
+                help="我方出战宝可梦，由 PKHeX 检查合法性。"),
+          Field("--raid-version", "游戏", "choice", default="violet", group="团体战",
+                choices=(("scarlet", "朱"), ("violet", "紫")),
+                help="相同种子在另一版本可能生成不同的团体战。"),
+          Field("--raid-map", "地区", "choice", default="paldea", group="团体战",
+                choices=(("paldea", "帕底亚"), ("kitakami", "北上乡"), ("blueberry", "蓝莓学园"))),
+          Field("--raid-progress", "剧情进度", "choice", default="4star", group="团体战",
+                choices=(("beginning", "游戏初期"), ("tera", "已解锁太晶团体战"),
+                         ("3star", "3 星团体战"), ("4star", "4 星团体战"),
+                         ("5star", "5 星团体战"), ("6star", "6 星团体战")),
+                help="设置普通结晶可出现的星级。"),
+          Field("--raid-content", "结晶", "choice", default="standard", group="团体战",
+                choices=(("standard", "普通"), ("black", "黑色（6 星）"))),
+          Field("--raid-seed", "团体战种子", "raidseed", default="000F34C3", required=True,
+                group="团体战", help="八位十六进制数字，可通过“查找团体战”搜索种子。"),
+          Field("--raid-reward", "奖励", "rewards",
+                help=f"留空使用团体战默认奖励，或设置最多 {REWARD_ROWS} 项道具奖励。"),
+          host_seconds("600")),
+         fixed=("--channel", "1", "--scene-id", "7", "--max-participants", "4", "--code", "4970",
+                "--scarlet-response", "--session-flags", "0", "--session-packet-id", "1",
+                "--no-session-ack", "--join-seq", "0", "--update-seq", "0", "--update-delay", "0.02",
+                "--rtt-probe", "--clock", "--net-stations", "4", "--record-delay", "0.1",
+                "--record-spacing", "0.003", "--host-player-id", "00000000000000010000000000000000",
+                "--host-player-name", "{ot}", "--trainer-name", "{ot}"),
+         doc="sv_raid.md"),
+    Tool("sv-raid-join", "太晶团体战（加入）", "bin/sv_join.py",
+         "加入游戏机主持的太晶团体战，并留下我方宝可梦协助战斗。",
+         ("在游戏机上：调查太晶团体战结晶 → 大家一起挑战，然后等待玩家。",
+          "选择我方出战宝可梦，然后启动加入端。",
+          "我方玩家加入并准备就绪后，在游戏机上开始对战。",
+          "对战开始时我方玩家离开，宝可梦留下作为伙伴协助战斗。"),
+         (Field("--raid-pokemon", "我方宝可梦", "pokemon", required=True,
+                help="我方出战宝可梦，由 PKHeX 检查合法性。"),
+          join_seconds("240")),
+         fixed=("--seconds", "900", "--name", "POKELDN", "--trainer-name", "{ot}"),
+         doc="sv_raid.md"),
 ))
 
 ZA = Game("za", '传说 Z-A', "PLZA", "za.md", (
@@ -378,7 +426,8 @@ def with_online(game: Game, steps: tuple[str, ...], code: Field | None = None) -
         code = replace(code, help=ONLINE_CODE_HELP if code.kind == "code" else
                        "与交换伙伴选择相同的三只宝可梦，顺序也必须一致；在此处和"
                        "游戏机上都需要输入。")
-    at = max(n for n, t in enumerate(game.tools) if t.key.endswith(("-host", "-join"))) + 1
+    local_trade_keys = {host.key, host.key.removesuffix("-host") + "-join"}
+    at = max(n for n, t in enumerate(game.tools) if t.key in local_trade_keys) + 1
     return replace(game, tools=game.tools[:at] + (online(host, steps, code),) + game.tools[at:])
 
 

@@ -1969,3 +1969,19 @@ LABELS.update({'This is not a FireRed or LeafGreen save PKHeX can read.': '此�
 LABELS.update({'Only the packed app updates itself.': '只有打包后的应用支持自动更新。', 'Move pokeldn to your Applications folder, open it from there, then update.': '请将 pokeldn 移到“应用程序”文件夹，从那里打开后再更新。', 'the download is too large': '下载文件过大', 'the release has no file for this computer or no SHA256SUMS': '发布版本没有适用于此电脑的文件或 SHA256SUMS', 'the copied app has no executable': '复制的应用中没有可执行文件', 'The Pokemon checksum is invalid.': '宝可梦数据校验和无效。', 'Nothing goes back to this game: HOME only takes from it.': '无法传回此游戏：HOME 只允许从此游戏传出。', 'An egg stays in its own game.': '蛋只能保留在当前游戏中。', 'HOME takes a FireRed or LeafGreen Pokemon only without a held item.': '从《火红／叶绿》传出到 HOME 的宝可梦不能携带道具。', 'HOME takes a FireRed or LeafGreen Pokemon only without an HM move.': '从《火红／叶绿》传出到 HOME 的宝可梦不能学有秘传招式。', 'This species or form is absent from that game.': '目标游戏中不存在此种类或形态。'})
 
 LABELS.update({"Online trade": "在线交换", "The bank": "宝可梦银行"})
+
+LABELS.update({
+    "Tera Raids": "太晶团体战",
+    "Lowest overall bulk": "最低综合耐久",
+    "Lowest physical bulk": "最低物理耐久",
+    "Lowest special bulk": "最低特殊耐久",
+    "Weakest offense": "最低攻击能力",
+    "Highest total stats": "最高能力总和",
+    "Enter eight hexadecimal digits.": "请输入八位十六进制数字。",
+    "scarlet": "朱", "violet": "紫",
+    "paldea": "帕底亚", "kitakami": "北上乡", "blueberry": "蓝莓学园",
+    "beginning": "游戏初期", "tera": "已解锁太晶团体战",
+    "3star": "3 星团体战", "4star": "4 星团体战",
+    "5star": "5 星团体战", "6star": "6 星团体战",
+    "standard": "普通", "black": "黑色",
+})

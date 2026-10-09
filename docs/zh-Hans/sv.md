@@ -1,12 +1,14 @@
 ---
 title: Scarlet and Violet
 nav_order: 9
-has_children: false
+has_children: true
 ---
 
 # 朱和紫
 
 宝可梦朱 (`0100a3d008c5c000`) 和紫 (`01008f6008c5e000`) 是原生 Switch 游戏，Pia 链接到 `main`。两者都与扮演两种角色的实机进行交换：`bin/sv_host.py` 主持游戏机的离线链路交换搜索，`bin/sv_join.py` 加入游戏机的网络。零售紫加入主机广告朱的本地通信ID，并且其自己的搜索网络也广告朱的ID（`0x0100a3d008c5c000`，应用程序版本21，场景4）。
+
+两个启动器也支持主持和加入本地太晶团体战（[太晶团体战](sv_raid.md)）。
 
 地址是更新 4.0.0 (`tools/switch/nso_read.py`) 的解压缩 `main` 中的偏移量：文本 `0x0..0x343fc90`、来自 `0x3440000` 的rodata、来自 `0x4383000` 的数据。
 
@@ -650,7 +652,11 @@ Reliable 0x7C（一个站）和BroadcastReliable 0x80（每个站）的端口2�
 `bin/sv_host.py` 回答第一个（`--no-leave-response` 未回答）；
 `tests/test_sv_departure.py` 在unicorn下通过`0x6d7b10`运行答案。
 
-通过搜索托管的游戏机将主机角色交给主机。 `LeaveMeshWithHostMigrationJob` 将会话类型 7 发送到下一个主机，并每秒重新发送一次 (`0x6df050`)，直到类型 8 命名该站 (`0x6ded94`)，在 5 秒后放弃 (`0x6defb8`)。然后，`NetDestroyNetworkJob`以其主机迁移的形式，等待每个客户端收到连接状态更新（最多4秒，`0x6ac68c`），每次发送NetStartHostMigration `01400000`（仅由`0x69d310`写入，仅从`0x6aca54`调用） 300 ms (`0x6aca98`)，直到网络的站计数为 1 (`0x6acaf4`) 或超过截止时间（4 秒，或更新等待超时时为 2 秒，`0x6ac984`），并破坏 LDN 网络。在线更新是 Net 0x11，带有迁移集；在加入方的 Net 0x12 后，45 毫秒后进行了第一个 NetStartHostMigration。客户端在 NetStartHostMigration 上启动哪个作业是无法追踪的； `NetHostMigrationJob` 使用 DisconnectNetwork 或 EmulateDisconnection (`0x6a93c4`) 打开。
+通过搜索主持会话的游戏机会移交主机角色。`LeaveMeshWithHostMigrationJob` 向下一任主机发送 Session 类型 7，每秒重发一次（`0x6df050`），直到类型 8 指定该站点（`0x6ded94`）；5 秒后放弃（`0x6defb8`）。类型 7（写入函数 `0x6d8de0`）共 34 字节：
+
+    07 | host location id (12) | 00 | host IPv4, port | next host's location id (12) | u16
+
+最后的 u16 是任务的 `+0xe0`（`0x6d8ea8`），三个实机样本中取值为 0 或 1。随后，处于主机迁移形式的 `NetDestroyNetworkJob` 等待每个客户端收到连接状态更新（最多 4 秒，`0x6ac68c`），再每 300 毫秒（`0x6aca98`）发送 NetStartHostMigration `01400000`（仅由 `0x69d310` 写入，仅从 `0x6aca54` 调用），直到网络站点数为 1（`0x6acaf4`）或超过截止时间（4 秒；更新等待超时时为 2 秒，`0x6ac984`），然后销毁 LDN 网络。传输中的更新是设置了迁移标志的 Net 0x11；收到加入方的 Net 0x12 后，45 毫秒后发出首条 NetStartHostMigration。客户端收到 NetStartHostMigration 后启动哪个任务，尚未追踪；`NetHostMigrationJob` 以 DisconnectNetwork 或 EmulateDisconnection（`0x6a93c4`）开始。
 
 立即回答类型 7 并占据席位的加入方会从游戏机中抽取 NetStartHostMigration 12 到 14 次，即类型 7 之后的最后 3.5 到 4.1 秒；在 LDN 广播以太类型 `88b7` 后，追踪到单座 7 型后，游戏机的网络出现故障 4.3 秒。在类型 7 之后留下 3.0 秒的加入方会看到游戏机的广告在 0.5 秒内消失，比游戏机自己的 4 秒截止时间早。 `bin/sv_join.py` 在第一次 NetStartHostMigration 时离开席位（`--stay-on-host-migration` 持有该席位）；在类型 7 发送 1 个 NetStartHostMigration 后 0.14 秒，它断开网络。
 

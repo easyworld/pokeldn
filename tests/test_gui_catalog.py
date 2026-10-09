@@ -14,7 +14,8 @@ TOOLS = [tool for game in GAMES for tool in game.tools if not tool.unavailable]
 def test_online_trade_follows_local_trades_with_localized_names(game):
     keys = [tool.key for tool in game.tools]
     online = next(n for n, key in enumerate(keys) if key.endswith("-online"))
-    local = [n for n, key in enumerate(keys) if key.endswith(("-host", "-join"))]
+    local = [n for n, key in enumerate(keys)
+             if key.endswith(("-host", "-join")) and "-raid-" not in key]
     assert online == max(local) + 1
 
 
@@ -99,6 +100,17 @@ def test_one_offer_from_an_older_settings_file_still_builds():
     tool = next(t for game in GAMES for t in game.tools if t.key == "sv-host")
     args = build(tool, {"--trade-offer": {"file": "/tmp/single.pk9"}}, {}, Settings())
     assert args.count("--trade-offer") == 1 and "/tmp/single.pk9" in args
+
+
+def test_raid_rewards_reach_the_host_as_rows_in_their_order():
+    """Duplicates stay separate rows; the raid seed reaches the host as its integer."""
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    rows = [{"item_id": "1125", "quantity": "3"}, {"item_id": "50", "quantity": "10"},
+            {"item_id": "1125", "quantity": "1"}]
+    args = build(tool, {"--raid-pokemon": {"file": "/tmp/host.pk9"}, "--raid-seed": "000F34C3",
+                        "--raid-reward": rows}, {}, Settings())
+    parsed = parser_of(tool.script).parse_args(args)
+    assert parsed.raid_reward == [(1125, 3), (50, 10), (1125, 1)] and parsed.raid_seed == 0xF34C3
 
 
 def test_a_setting_kept_off_the_basic_tab_still_reaches_the_entry_point():
