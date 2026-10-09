@@ -55,6 +55,18 @@ nav_order: 1
 
 每次进入状态 20 都会重新抽取随机值 `r`，同时清空计数器 0，保留计数器 1 继续计数。`IlcaNetSessionSetting` 构造函数 [0x01f46fc0] 将等待阈值设为 25、掩码设为 0x7F、超时阈值设为 270，`SessionConnector$$StartSession` [0x0202f2c0] 不会更改这些值。因此，独自在新会话中的游戏机会在 25 到 152 次更新后关闭会话，并反复执行这一过程；累计独处 270 次更新后，才保留最后建立的网络。LDN 接口上的接收方必须过滤自身的源 IP，因为广播会回送给自己。
 
+会话每个渲染帧更新一次，即每秒 30 次，因此等待时间为 0.83 到 5.07 秒，超时阈值为 9.0 秒；掉帧会延长两者。在 1.3.0 main 中，调用链如下：
+
+| 步骤 | 位置 |
+|---|---|
+| `NetworkManager.<IE_Start>d__28$$MoveNext` 订阅 `NetworkManager$$OnUpdate` | `Sequencer$$SubscribeUpdate` 调用 [0x0202da38] |
+| `SubscribeUpdate` 将回调插入 `Sequencer._orderableList`（静态字段 +0x8） | [0x01a8fed0] |
+| `Sequencer$$Update` 是 Unity 的 `Update`，在检查 `isSuspendUpdate`（静态字段 +0xC8）前，以 `Time.deltaTime` 调用列表中的每个回调一次 | [0x01a906d8]..[0x01a9071c] |
+| 设置了 `[[this+0x30]+0x60]` 时，`NetworkManager$$OnUpdate` 调用 `SessionConnector$$OnUpdate` | [0x02253190] |
+| `SessionConnector$$OnUpdate` 调用 `INL1.IlcaNetSession$$Update` 一次 | [0x02030a38] |
+
+`Sequencer$$Awake` 将 `Application.targetFrameRate` 设为 30 [0x01a8ed68]。1.3.0 的 `globalgamemanagers` 中唯一的画质等级（`Ultra`，Unity 2019.4.27f1）将 `vSyncCount` 设为 2；在 60 Hz 输出下同样得到每秒 30 帧，并使 Unity 忽略 `targetFrameRate`。没有托管代码设置 `vSyncCount` 或画质等级。`TimeManager` 保存的固定时间步长为 1/30 秒。`NetworkManager$$OnUpdate` 唯一的其他调用方是 `SoftwareKeyboard$$Open` [0x01c980c8]。
+
 未经身份验证的 Pia 会默默地被丢弃，不会出现错误，也不会丢失席位。
 
 ## 电线上有什么

@@ -413,3 +413,21 @@ def test_a_team_paste_returns_every_set_in_order(service):
     sets = service.paste("sv", "=== [gen9] Team ===\n\n" + GARCHOMP + "\n\n" + ROTOM + "\n" + GARCHOMP_JA, TRAINER)
     assert [s["species"] for s in sets] == ["Garchomp", "Rotom", "Garchomp"]
     assert all(s["errors"] == [] for s in sets)
+
+
+def test_the_frlg_item_list_names_gen_3_ids(service):
+    """The FRLG gift script carries the game's own item id [pokefirered include/constants/items.h]."""
+    names = {n["id"]: n["name"] for n in service.names("frlg", "items")}
+    assert (names[42], names[50], names[68], names[374]) == ("Black Flute", "Yellow Shard", "Rare Candy", "Sapphire")
+    assert max(names) == 374
+
+
+def test_chinese_frlg_item_names_keep_gen_3_ids(service):
+    localized = pokemon.Service(display_language="zh-Hans")
+    try:
+        names = {n["id"]: n["name"] for n in localized.names("frlg", "items")}
+        assert (names[42], names[50], names[68], names[374]) == (
+            "黑色玻璃哨", "黄色碎片", "神奇糖果", "蓝宝石")
+        assert max(names) == 374
+    finally:
+        localized.close()

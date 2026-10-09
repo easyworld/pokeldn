@@ -180,6 +180,9 @@ else:                      save the stamp, run activation, STAMP_RECEIVED
 
 `NAME` 是训练家名称、空格和种类：`WISHMKR Jirachi`、`CHANNEL Jirachi`、
 `Aura Mew`、`MYSTRY Mew`、`DOEL Deoxys`、`SPACE C Deoxys`、`ROCKS Metang`、`10 ANIV Pikachu`及其他所有`10 ANIV`品种、欧洲`10ANNIV`、 `10JAHRE`、`10ANNI` 和 `10ANIV` 发布。如果事件以多种语言发布，则发送匹配 `--language` 的事件。
+
+这种卡片不依赖特定卡带构建：神秘事件虚拟机的 17 项命令表、其中的 `givepokemon`，以及礼物客户端 `Client_Run` 的 23 个选择分支，在全部十二种卡带上都具有相同布局。`tests/test_frlg_english_cartridges.py` 通过各卡带自身的 `RunMysteryEventScript` 执行卡片脚本（成功时返回状态 2，宝可梦记录进入队伍；队伍已满时返回状态 3，不添加记录）。
+
 ### GB-Link 团队卡
 
 GB-Link Team 的自定义神奇卡片（GB-Link-Switch-LDN `cards/`，GPL-3.0）由神奇卡片和派送员 RAM 脚本组成，脚本携带通过 `callnative` 调用的 THUMB 代码。ARM 源码位于 `vendor/gblink-cards/`；`scripts/gen_team_cards.py` 为五种卡带汇编到 `pokeldn/frlg/data/team_cards.json`，`pokeldn/frlg/gift/team_cards.py` 则按卡片 ID 注册，不添加 `custom-`（`--gift nature-mint`）。使用其未修改的源码和 RAM 地址，生成器可逐字节复现全部 44 个 `BPRE 1.10` 载荷。
