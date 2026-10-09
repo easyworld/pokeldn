@@ -20,6 +20,7 @@ if len(sys.argv) == 6 and sys.argv[1] == "--apply-update":
     from pathlib import Path
     from gui.updating import run
     new, target, pid, version = sys.argv[2:]
+    os.chdir(Path(new).parent)   # an older app started this helper in target; Windows then refuses the rename
     sys.exit(run(Path(new), Path(target), int(pid), version))
 
 # The app's own process never drives a board: an inherited POKELDN_RADIO would open the port as
@@ -39,7 +40,8 @@ from pokeldn.app.paths import ROOT  # noqa: E402
 PAGES = (
     ("games", '游戏', "gamepad"),
     ("board", '开发板', "cpu"),
-    ("bank", "宝可梦银行", "package"),
+    ("bank", '银行', "package"),
+    ("controller", '手柄控制', "joystick"),
     ("docs", '文档', "book-open"),
 )
 SETTINGS = ("settings", '设置', "gear")
@@ -78,6 +80,9 @@ def main(page: ft.Page) -> None:
         if key == "bank":
             from gui.views.bank import BankView
             return BankView(app)
+        if key == "controller":
+            from gui.views.controller import ControllerView
+            return ControllerView(app)
         if key == "docs":
             from gui.views.docs import DocsView
             return DocsView(app)

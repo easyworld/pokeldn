@@ -84,12 +84,12 @@ SoftAP的信标、探测响应和关联响应内置于封闭的环境中。
 
 ## 串行协议
 
-一个框架是`COBS(type | payload | crc32-le(type | payload))`然后是`0x00`； CRC 为 CRC-32/ISO-HDLC (`zlib.crc32`)。 115200 波特率下的经典 ESP32 启动； `BAUD` 开关两端。在 S3 上，
+一个框架是`COBS(type | payload | crc32-le(type | payload))`然后是`0x00`； CRC 为 CRC-32/ISO-HDLC (`zlib.crc32`)。 经典 ESP32 以 115200 波特率启动；`BAUD` 切换两端速率，开发板保持该速率直到重置。在 S3 上，
 `BAUD` 在不改变 USB 传输速率的情况下被确认。 `0x00` 之前的任何内容（包括 ROM 的引导文本）都无法通过校验和并被丢弃。
 
 |类型 |方向 | 厦门 |
 |---|---|---|
-|您好 | `0x01` 主机 |没有任何;回答为 CREDIT 0，然后为 INFO |
+| `0x01` HELLO | 主机 | 无；先回复 CREDIT 0，再回复 INFO。主机发送前先写入 `0x00`，结束错误波特率的 HELLO 在解码器中留下的不完整帧；固件跳过空帧 |
 | `0x02` 波特率 | 主机 | u32 波特率；以旧速率结果，然后切换，等待 UART 耗尽最多 3 秒（在 115200 时，环保持 RX_MGMT 超过一秒）。 1500000 处的第一个 HELLO 有时会丢失（测量到的四个中大约有一个是开放的）； `open_serial` 重试 |
 | `0x03` 频道 | 主机 | u8频道；仅闲置|
 | `0x04` STA_JOIN | 主机 | u8 通道、6 个 BSSID、32 个 SSID（LDN SSID 的十六进制文本）、16 个密钥、6 个站 MAC（零 = 随机）；可选：u8 固定数据速率（AP_START 位 3..5 表），u8 最大 TX 功率为 0.25 dBm（`esp_wifi_set_max_tx_power`，8 至 84，驱动程序上限为 61），u8 标志：1 每帧前有 RTS，2 重试前无 RTS（`esp_wifi_internal_set_rts`）|
@@ -468,7 +468,7 @@ BENCH 仍为 884 KB/s；5000 条上行 ETH_TX 耗时从 13.5 秒变为 15.4 秒�
 
 ## 运行
 
-`POKELDN_RADIO=esp32:<port>` 将各启动器的 `ldn` 调用转交给开发板。`esp32:auto` 选择唯一连接的 USB 串口（`/dev/cu.usbserial-*`、`/dev/cu.SLAB_USBtoUART*`、`/dev/cu.wchusbserial*`、`/dev/cu.usbmodem*`、`/dev/ttyUSB*`、`/dev/ttyACM*`；Windows 上为 USB COM 端口）；若连接了多个则拒绝自动选择，因为打开端口可能重置开发板。每个进程只打开一次端口，DTR 和 RTS 均释放；macOS 上的 CP2102 开发板仍会在打开时复位，因此主持端在切换到 921600 前，会在 5 秒内重试 HELLO。Windows 以独占方式打开 COM 端口：只要本进程或其他进程仍持有句柄，第二次打开就会因 `PermissionError(13, 'Access is
+`POKELDN_RADIO=esp32:<port>` 将各启动器的 `ldn` 调用转交给开发板。`esp32:auto` 选择唯一连接的 USB 串口（`/dev/cu.usbserial-*`、`/dev/cu.SLAB_USBtoUART*`、`/dev/cu.wchusbserial*`、`/dev/cu.usbmodem*`、`/dev/ttyUSB*`、`/dev/ttyACM*`；Windows 上为 USB COM 端口）；若连接了多个则拒绝自动选择，因为打开端口可能重置开发板。每个进程只打开一次端口，DTR 和 RTS 均释放；macOS 上的 CP2102 开发板仍会在打开时复位。未复位的经典开发板会保留上一进程设置的 `BAUD`；电脑依次在 115200、`POKELDN_ESP32_BAUD` 和应用提供的各速率（921600、1500000）发送 HELLO，每轮等待 0.5 秒，共尝试五轮，再切换到所需速率。应用检查开发板时保留探测成功的速率。若开发板停留在 921600，而 HELLO 只使用 115200，就会出现 `no reply 0x81 to command 0x01`。Windows 以独占方式打开 COM 端口：只要本进程或其他进程仍持有句柄，第二次打开就会因 `PermissionError(13, 'Access is
 denied.')` 失败。所以开发板始终不应答 HELLO 时，启动器必须先关闭端口再重试。端口仍打开时拔下 USB 设备，下一次读取也会以类似方式失败（`GetOverlappedResult failed` 或 `ClearCommError failed`，即读取结果或串口状态检查失败），此后的每次写入也都会失败；此时启动器会显示 `[esp32] The board disconnected from
 USB`（开发板的 USB 连接已断开）并结束运行。
 

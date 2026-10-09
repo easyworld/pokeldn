@@ -8,10 +8,10 @@ and ESP32-C6.
 Users provide their own `prod.keys`.
 
 Open the app and choose `prod.keys` in Settings. On the Board page, select the USB board to use
-as the radio and flash its firmware. Choose a game and a tool, prepare a Pokemon or select a file,
+as the radio and install the Wireless firmware. Choose a game and a tool, prepare a Pokemon or select a file,
 then follow the console instructions and press Start. Received Pokemon are saved to the folder
-chosen in Settings; the folder button beside Output opens it. Flash detects the chip and selects
-its bundled image; a custom image is checked against that chip before writing. Connect an S3,
+chosen in Settings; the folder button beside Output opens it. An install detects the chip and selects
+its bundled image; an image from a file is checked against that chip before writing. Connect an S3,
 C3 or C6 through native USB Serial/JTAG. S2 chips are refused.
 
 Mystery Gift tools share one builder: use a preset, build your own, or open a `.pokegift` file;
@@ -177,6 +177,72 @@ Pokemon out of the bank.
   unmeasured here). PKHeX.Core 26.8.26 converts a `.pk3` by the Pal Park lineage, so a bank move from
   FireRed/LeafGreen may differ from the record HOME writes.
 
+## Boards and firmware
+
+The Board page lists every board plugged into this computer. The header of the selected board names
+its firmware and version, says Up to date or Update available, and offers the one action that status
+needs. The Firmware card lists each firmware the app ships (`gui.board.FIRMWARES`: Wireless, then
+Controller); the installed one is marked, a firmware the chip cannot run says so, and any other
+installs after a confirmation. Install from a file takes a pokeldn `.bin`, recognised by the project
+name in its app descriptor.
+
+| board | how the page finds it | where the version comes from |
+|---|---|---|
+| Wireless firmware | its serial port | the HELLO reply |
+| Controller firmware, classic ESP32 | its serial port, after the radio check fails | the status frame on the port |
+| Controller firmware, ESP32-S3 | the USB bus (`0f0d:0092`: `ioreg` on macOS, `/sys/bus/usb/devices` on Linux, `Win32_PnPEntity` on Windows); it has no serial port | the status read over Bluetooth |
+| no pokeldn firmware | its serial port, when nothing answers | none |
+
+The version the app ships is the `version` field of the image's ESP-IDF app descriptor (magic
+`0xABCD5432`, at `0x10020` in a merged image). Update available means that version is newer than
+the board's. An install on a serial port lets esptool reset the chip into its loader; on an S3
+running the Controller firmware it sends the download command over Bluetooth, waits up to 20 s for
+the loader's port, and flashes with `--from-loader`.
+
+## The controller
+
+The Control page presses a Switch's buttons through a board running the controller firmware
+([Controller board](hardware_pad.md)) and plays macros on it. Install the Controller firmware from
+the Board page (ESP32-S3 or classic ESP32), plug the board into the Switch's USB-C port, and press
+Connect: the page reaches the board over Bluetooth LE.
+
+The status line says where the board is: plugged into this computer (it is on this computer's USB
+bus), into the Switch (its USB is configured and it is not on this computer's bus), or into neither.
+The firmware's `mounted` flag says only that some USB host configured the board.
+
+| part | what it does |
+|---|---|
+| the on-screen controller | holding a button holds it on the console; the sticks take eight directions at full tilt, L3 and R3 are their centres |
+| Keyboard | while on, keys tap buttons for the macro's press time: arrows D-pad, X A, Z B, S X, A Y, Q L, W R, 1 ZL, 2 ZR, Enter +, Backspace -, H HOME, C Capture |
+| Record into the macro | each press becomes a step with how long it was held, and the pause before the next press becomes that step's pause |
+| the macro editor | steps that press buttons and sticks, waits, and repeats that nest; a Run once part and a Loop part repeated a number of times or until stopped |
+| Play on the board | compiles the macro, loads it and starts it; the board plays it on its own clock and keeps going if the computer sleeps or disconnects |
+
+A board running the Controller firmware is listed on the Board page while it is plugged into this
+computer; [Boards and firmware](#boards-and-firmware) has how it is found and changed. With no
+controller connected, the Control page says what is plugged in and links the Board page.
+
+Macros live in `Documents/pokeldn/Macros` (with `POKELDN_DATA` set, `Macros` inside that folder), one
+`.pokemacro` file each, written on every edit. Export writes a copy to share; import checks a file
+and copies it in under a free name. The format is in [Controller board, Macros](hardware_pad.md#macros).
+
+When the link drops (the board loses power moving from the computer to the Switch), the page looks
+for the board again until it answers or Stop looking is pressed.
+
+The page talks to `pokeldn.pad.service`, a child process that holds the Bluetooth link on
+`127.0.0.1:47800`. macOS stops a process that opens Bluetooth unless its app declares
+`NSBluetoothAlwaysUsageDescription`; the packaged app does, and only the child stops when one does
+not. The child exits when the app closes its stdin.
+
+On macOS 26, `bluetoothd` gives a background process signed as an app bundle's main executable a
+passive "ThirdPartyApp scan" and delivers it no discoveries, with or without a service UUID filter;
+a bare-signed binary (`Info.plist=not bound`) gets an active scan. The packaged app therefore
+starts the service from `Contents/Helpers/pokeldn-bluetooth`, a copy of its executable signed with
+that identifier, with `_internal` linked to `../Frameworks`; it runs under the app's Bluetooth
+permission. From the main executable, a scan saw 0 devices; from the helper, 19, the board among
+them. An app that finds a service running other code
+(`code` in its status reply) tells it to quit and starts its own.
+
 ## Pokemon sprites
 
 The sprites are the 96x96 PNGs behind `sprites.front_default` and `sprites.front_shiny` of
@@ -234,10 +300,14 @@ Update now (`pokeldn.app.update`) installs the release in place:
 4. Start the new app as a helper, `pokeldn --apply-update NEW TARGET PID VERSION`
    (`gui/updating.py`). Its small "Updating pokeldn" window touches `update/helper.ready`; the old
    app quits on that file, or after 15 s without it, so one window is always on screen.
-5. The helper waits for the old app's process to end (120 s), renames the installed app to
-   `.<name>.old` beside it (retrying for 30 s while Windows releases the folder), copies the new app
-   into its place, deletes the old copy and opens the new app. Any failure puts the old app back and
-   opens it. The swap runs whether or not the helper's window came up.
+5. The helper waits for the old app's process to end (120 s), then on Windows for every process
+   whose executable lies in the installed app (the PKHeX service) and terminates any left after
+   10 s. It renames the installed app to `.<name>.old` beside it (retrying for 30 s while Windows
+   releases the folder), copies the new app into its place, deletes the old copy and opens the new
+   app. Any failure puts the old app back and opens it. The swap runs whether or not the helper's
+   window came up.
+   The helper runs from the unpacked copy's folder: Windows refuses to rename a folder that is any
+   process's working folder, and Explorer starts the app with its own folder as one.
 6. The app that opens reads `update/outcome.json` once: "pokeldn updated to X", or a dialog saying
    why the old app stayed. Removing the file closes the helper (it gives up after 60 s); the app
    then removes the unpacked copy once the helper's process has ended, and any `.old` folder.
@@ -272,7 +342,7 @@ Files dragged from the desktop land on these targets:
 | a trade's Pokemon to offer | a Pokemon file (imported as Or use a Pokemon file does) or a `.txt` of Showdown sets (read as Import paste); further files go to the following trades |
 | Add a trade | one new trade per file, filling untouched trades at the end first, up to the session's limit |
 | the Gift card of a Mystery Gift tool | a `.pokegift`, or a `.wc8` (Sword/Shield) or `.wc3` (FireRed/LeafGreen) card; it switches to Open a file |
-| Flash the firmware | a `.bin`, used as the custom image |
+| the Board page's Firmware card | a pokeldn `.bin`, installed after a confirmation |
 | any path field, the welcome dialog | the file the field asks for; a folder field takes a dropped file's folder |
 
 Flet 1.0.2's desktop client takes no file drops. `scripts/build_client.py` checks out Flet's source
@@ -308,7 +378,8 @@ firmware as out of date.
 ## Build a desktop app
 
 To package an app, install ESP-IDF v6.1 for `esp32`, `esp32s3`, `esp32c3` and `esp32c6` and activate its
-environment. Build all four images with separate configurations:
+environment. Build the four radio images with separate configurations, and the controller image
+(`firmware/pad`, which fetches `espressif/esp_tinyusb` through the component manager):
 
 ```sh
 mkdir -p gui/firmware
@@ -326,23 +397,27 @@ idf.py -B build/esp32c3 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c3.bin"
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" set-target esp32c6
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" build
 idf.py -B build/esp32c6 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c6.bin"
+cd ../pad
+idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" set-target esp32s3
+idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" build
+idf.py -B build merge-bin -o "$POKELDN_IMAGES/pokeldn-pad-s3.bin"
 cd ../..
 python scripts/build_client.py
 python scripts/build_unicorn.py
 python scripts/pack_app.py
 ```
 
-The absolute output paths keep the images in `gui/firmware`. The packer requires all four images,
+The absolute output paths keep the images in `gui/firmware`. The packer requires all five images,
 the client from `scripts/build_client.py` and the Unicorn from `scripts/build_unicorn.py` (needs CMake); the frozen app check verifies all are included and
 that the bundled client carries `flet_drop`. The release workflow builds each target separately
-and supplies all four images to every desktop packer.
+and supplies all five images to every desktop packer.
 
 The app version is `pokeldn.__version__`. It appears in Settings and in the macOS and Windows
 package metadata. Update it and `.github/release-notes.md` together before preparing a release.
-The workflow produces `SHA256SUMS` for the three desktop downloads and four firmware images.
+The workflow produces `SHA256SUMS` for the three desktop downloads and five firmware images.
 Manual workflow runs produce artifacts; `v*` tags publish a release named `pokeldn vX.Y.Z` with
 `.github/release-notes.md` as its body, whose first line must be `# pokeldn X.Y.Z` (the workflow and
-`tests/test_release.py` check it), and with the same eight files every time.
+`tests/test_release.py` check it), and with the same nine files every time.
 Only tags with a hyphen, such as `v0.3.0-rc1`, are marked as pre-releases; GitHub shows the
 newest other release as Latest in the repository sidebar.
 

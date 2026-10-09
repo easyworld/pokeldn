@@ -20,6 +20,8 @@ FIRMWARE = ROOT / "gui" / "firmware" / "pokeldn-radio.bin"
 FIRMWARE_S3 = ROOT / "gui" / "firmware" / "pokeldn-radio-s3.bin"
 FIRMWARE_C3 = ROOT / "gui" / "firmware" / "pokeldn-radio-c3.bin"
 FIRMWARE_C6 = ROOT / "gui" / "firmware" / "pokeldn-radio-c6.bin"
+FIRMWARE_PAD = ROOT / "gui" / "firmware" / "pokeldn-pad-s3.bin"
+FIRMWARE_PAD_ESP32 = ROOT / "gui" / "firmware" / "pokeldn-pad.bin"
 APP_ID = "io.github.decryptu.pokeldn"
 UNICORN = ROOT / "gui" / "unicorn"
 MARKER_UNICORN = "pokeldn-unicorn"
@@ -88,10 +90,10 @@ def clear_cfg(exe: Path) -> None:
 
 def main() -> int:
     argparse.ArgumentParser(description=__doc__).parse_args()
-    firmware = (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6)
+    firmware = (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6, FIRMWARE_PAD, FIRMWARE_PAD_ESP32)
     missing = [str(path) for path in firmware if not path.is_file()]
     if missing:
-        raise SystemExit(f"Missing firmware: {', '.join(missing)}. Build all four images "
+        raise SystemExit(f"Missing firmware: {', '.join(missing)}. Build all six images "
                          "as described in docs/gui.md before packing.")
     client = CLIENT / platform_key()
     if not (client / MARKER).is_file():
@@ -148,7 +150,7 @@ def main() -> int:
                        *console, *onedir,
                        *[f"--hidden-import={s}" for s in scripts],
                        *[f"--exclude-module={m}" for m in platform_excludes()], "--collect-all=esptool", "--collect-submodules=unicorn",
-                       "--collect-all=esp_pylib", "--collect-submodules=pokeldn",
+                       "--collect-all=esp_pylib", "--collect-submodules=pokeldn", "--collect-submodules=bleak",
                        "--collect-submodules=ldn"):
             args.append(f"--pyinstaller-build-args={option}")
         result = subprocess.run(args, cwd=stage, env=dict(os.environ, FLET_VIEW_PATH=str(client))).returncode
@@ -162,11 +164,25 @@ def main() -> int:
             # The Flet viewer is the window; a one-folder Python process never checks in with the Dock and
             # bounces there forever (docs/gui.md). The single-file bootloader ran as background-only.
             info.update(CFBundleShortVersionString=__version__, CFBundleVersion=__version__, LSBackgroundOnly=True)
+            # macOS kills a process that opens Bluetooth without this key: the controller service
+            # (pokeldn.pad.service) runs as this app's child.
+            info["NSBluetoothAlwaysUsageDescription"] = "pokeldn presses buttons on your Switch through the controller board."
             with info_path.open("wb") as dest:
                 plistlib.dump(info, dest)
             strip_local_symbols(expected, {expected / "Contents/MacOS/pokeldn",
                                            expected / "Contents/Frameworks/services/pkhex/dist" / executable.name})
+            # macOS 26 gives a background process signed as the bundle's main executable a passive Bluetooth
+            # scan with no discoveries; a bare-signed copy gets an active one (docs/gui.md, The controller).
+            # The bootloader finds its files in _internal beside it.
+            helpers = expected / "Contents/Helpers"
+            helpers.mkdir(exist_ok=True)
+            helper = helpers / "pokeldn-bluetooth"
+            shutil.copy2(expected / "Contents/MacOS/pokeldn", helper)
+            (helpers / "_internal").symlink_to("../Frameworks")
             subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(expected)], check=True)
+            subprocess.run(["codesign", "--force", "--sign", "-", "--identifier", "pokeldn-bluetooth", str(helper)],
+                           check=True)
+            subprocess.run(["codesign", "--force", "--sign", "-", str(expected)], check=True)
         if result == 0 and sys.platform == "win32":
             clear_cfg(expected / "pokeldn.exe")
         if result == 0 and sys.platform.startswith("linux"):

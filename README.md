@@ -52,7 +52,9 @@ silicon), Windows and Linux. It includes the radio firmware and flashes the boar
 Pokemon to offer with [PKHeX.Core](https://github.com/kwsch/PKHeX), and runs every trade and Mystery
 Gift below with the tested settings. The only file it asks for is `prod.keys`. Its Bank keeps every
 Pokemon a trade brings in and trades one into another game wherever HOME would move it, converted
-and checked by PKHeX ([the bank](docs/gui.md#the-bank)).
+and checked by PKHeX ([the bank](docs/gui.md#the-bank)). Its Control page turns an ESP32-S3 into a
+wired controller for the Switch: press its buttons from the computer, record and edit macros, and
+share them as `.pokemacro` files ([the controller](docs/gui.md#the-controller)).
 
 - macOS: the app is unsigned, so the first launch is blocked. Open it once and close the warning,
   then System Settings, Privacy & Security, scroll down to Security, Open Anyway next to pokeldn,
@@ -222,8 +224,8 @@ news only if it differs from what it holds; `--news-id N` forces a new one.
 writes a `.sav` back: beside the console's own save, every sector read back, then the game loads it
 and saves; anything short of that leaves the console's save as it was. In the app, the Mystery Gift
 tool's Your save tab keeps the backups, names them, imports and exports `.sav` files and edits the
-trainer and party through PKHeX. A backup took about four minutes on a retail French FireRed; the
-restore is proven against the scripted console and has not yet run on a retail Switch. [Save backup and restore](docs/frlg_gift.md#save-backup-and-restore).
+trainer and party through PKHeX. A backup took about four minutes on a retail French FireRed; a
+restore on a retail English FireRed loaded with CONTINUE, a French save included. [Save backup and restore](docs/frlg_gift.md#save-backup-and-restore).
 
 ```bash
 ./.venv/bin/python -u bin/frlg_mg_host.py --live --save-backup backup.sav --save-resume-dir partial
@@ -415,12 +417,27 @@ because Z-A's layout is Scarlet's. See [Legends Z-A](docs/za.md).
 
 ## Credits
 
+pokeldn is a fork of [MercuryEnigma/frlg-ldn-trade](https://github.com/MercuryEnigma/frlg-ldn-trade)
+by [MercuryEnigma](https://github.com/MercuryEnigma), itself a fork of
+[tornadus/frlg-ldn-trade](https://github.com/tornadus/frlg-ldn-trade) by
+[tornadus](https://github.com/tornadus), with contributions from
+[trowgundam](https://github.com/trowgundam).
+
+Contributors to this repository (GitHub does not list contributors on a fork):
+
+- [Gr3nSkyDragon](https://github.com/Gr3nSkyDragon): ESP32-S3 firmware
+- [ismailhasannnnnn](https://github.com/ismailhasannnnnn): Scarlet/Violet Tera Raid hosting and joining
+- [easyworld](https://github.com/easyworld): ESP32 serial reconnects after a high-baud session
+
 - [kinnay](https://github.com/kinnay): the [LDN library](https://github.com/kinnay/LDN) this builds on,
   and the [NintendoClients wiki](https://github.com/kinnay/NintendoClients/wiki)
 - [pokefirered](https://github.com/pret/pokefirered): decompilation of FireRed/LeafGreen, including
   the Switch port
 - [GB-Link Team](https://github.com/GB-Link/GB-Link-Switch-LDN): the custom FireRed/LeafGreen Wonder
   Cards in `vendor/gblink-cards/` (GPL-3.0)
+- [xCyrusBR](https://github.com/xCyrusBR): [TeraLoop-Bridge](https://github.com/xCyrusBR/TeraLoop-Bridge)
+  and [SV-Past-Tera-Raid](https://github.com/xCyrusBR/SV-Past-Tera-Raid), Scarlet/Violet Tera Raid
+  work
 
 ## License
 

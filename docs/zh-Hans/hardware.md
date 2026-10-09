@@ -11,4 +11,5 @@ has_children: true
 - [ESP32 无线收发设备](hardware_esp32.md)：开发板、其固件、串行协议和测量。
 - [切换键](hardware_switch_keys.md)：安全安装`prod.keys`。
 - [适配器](hardware_adapters.md)：Linux Wi-Fi 卡、其配置和故障模式。
+- [手柄开发板](hardware_pad.md)：通过 USB 作为有线手柄的 ESP32-S3，电脑通过蓝牙 LE 控制。
 - [Raspberry Pi 主机](hardware_raspberry_pi.md)：Linux 部署和受监督的神秘礼物运行程序。

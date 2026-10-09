@@ -314,7 +314,7 @@ def test_board_help_is_chinese_and_only_shows_the_platforms_setup(monkeypatch, p
                 yield from texts(child)
 
     shown = "\n".join(texts(view.help_card()))
-    assert "没有看到开发板？" in shown
+    assert "找不到开发板或开发板没有响应？" in shown
     assert ("silabser.inf" in shown) == (platform == "win32")
     assert ("CH341SER.EXE" in shown) == (platform == "win32")
     assert ("sudo usermod -aG dialout $USER" in shown) == (platform == "linux")

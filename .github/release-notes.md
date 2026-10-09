@@ -1,18 +1,16 @@
-# pokeldn 0.16.0
+# pokeldn 0.18.3
 
 This desktop app trades with seven Pokemon game families on a Switch or Switch 2
 through an ESP32 radio connected by USB. Nothing is installed on the console.
 
 ## What is new
 
-- Scarlet/Violet Tera Raids: Tera Raid (Host) opens a raid the console joins, from a seed you pick
-  or one Find a raid searches for by species, stars, Tera type, nature, shiny and IVs, with the
-  seed's rewards or ones you choose; standard and black crystals. Tera Raid (Join) joins a raid the
-  console hosts. Your chosen Pokemon fights as the console's partner.
-- FireRed/LeafGreen Mystery Gift: the item picker names items by the game's own list, so a chosen
-  Rare Candy arrives as a Rare Candy.
+- Controller board: the Board and Control pages no longer stay on "Checking..." after the controller
+  board is unplugged from the Switch while connected. Every Bluetooth request now has a time limit;
+  past it the app drops the link, looks for the board again and offers Check again.
 
-The firmware is unchanged at 1.6.1; boards need no reflash.
+The radio firmware is unchanged at 1.6.1; wireless boards need no update. The controller firmware is
+1.2.0; the Board page offers the update.
 
 pokeldn is an unofficial fan project, not affiliated with Nintendo or The Pokemon Company. It is not
 meant for commercial or promotional use; see the License section of the README.
@@ -27,8 +25,10 @@ meant for commercial or promotional use; see the License section of the README.
 
 Each app includes PKHeX.Core and firmware for classic ESP32, ESP32-S3, ESP32-C3 and ESP32-C6. Python, .NET
 and ESP-IDF are bundled or unnecessary for running the app. Supply your own `prod.keys`.
-The separate `pokeldn-radio*.bin` files are merged firmware images for manual flashing at address
-`0x0`; the app selects the right image for the connected chip. `SHA256SUMS` covers all seven downloads.
+The separate `pokeldn-radio*.bin` (wireless) and `pokeldn-pad*.bin` (controller) files are merged
+firmware images for manual flashing at address `0x0`; the app selects the right image for the
+connected chip. `pokeldn-pad.bin`, the classic ESP32 controller over Bluetooth, is untested on a
+console. `SHA256SUMS` covers all nine downloads.
 
 ## First run
 
@@ -43,7 +43,7 @@ The separate `pokeldn-radio*.bin` files are merged firmware images for manual fl
    links both, says how to install them and names the one missing.
    A board that ships an external antenna, such as the Seeed Studio XIAO ESP32C3 or XIAO ESP32S3,
    needs it attached; larger S3 boards such as the N8R2 and N16R8 have an onboard antenna.
-4. On Board, press Flash. The app checks the board on its own and shows Board ready.
+4. On Board, choose Install beside Wireless. The app checks the board on its own and shows Up to date.
 5. On Games, choose a game and a tool, build an offer or select a Pokemon file, and follow the
    console instructions before starting.
 
@@ -56,6 +56,7 @@ Received Pokemon are saved in `Documents/pokeldn/Received`, with a configurable 
 - Mystery Gift: FireRed/LeafGreen and Sword/Shield.
 - Tera Raids in both roles: Scarlet/Violet.
 - Legal Pokemon preparation with PKHeX.Core, board detection and flashing, and session recordings.
+- An ESP32-S3 as a wired Switch controller, with macros.
 
 ## Platform notes
 

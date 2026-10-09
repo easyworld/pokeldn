@@ -3,7 +3,20 @@
 Species source: https://github.com/kwsch/PKHeX/tree/master/PKHeX.Core/Resources/text/other
 """
 
-LABELS = {'Games': '游戏',
+LABELS = {'Controller board': '手柄开发板',
+ 'Control': '手柄控制',
+ 'Not connected': '未连接',
+ 'Connected': '已连接',
+ 'Looking for the board...': '正在搜索开发板…',
+ 'Board lost: looking for it again...': '开发板已断开，正在重新搜索…',
+ 'Board lost: looking for it again. Is it plugged into the Switch or a USB power source?': '开发板已断开，正在重新搜索。请检查是否已连接到 Switch 或 USB 电源。',
+ 'not a macro file': '不是有效的宏文件',
+ 'this macro needs a newer version of the app': '此宏需要更新版本的应用',
+ 'loops must be a whole number from 0 (until stopped) to 1000000': '循环次数必须为 0 到 1000000 的整数（0 表示直到手动停止）',
+ 'the controller service did not answer': '手柄服务未响应',
+ 'the controller service stopped': '手柄服务已停止',
+ 'the macro has no steps': '宏中没有步骤',
+ 'Games': '游戏',
  'Board': '开发板',
  'Boards': '开发板',
  'Docs': '文档',

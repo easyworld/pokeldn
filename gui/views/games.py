@@ -7,7 +7,7 @@ import flet as ft
 
 from gui import board
 from gui.app import keys_found
-from pokeldn.app import bank, command, online, received, runner
+from pokeldn.app import bank, command, gift_builder, online, received, runner
 from gui import theme as t
 from gui.localization import SERVICE, translate, summary as pokemon_summary, summary_text
 from gui.advanced_zh_hans import description as advanced_description
@@ -335,6 +335,9 @@ class GamesView:
             return
         query = self.search.lower().strip()
         hidden = {f.key: f for f in self.tool.fields if f.hidden}
+        if any(f.kind == "builder" for f in self.tool.fields):   # the Gift card sets these
+            owned = gift_builder.owned_flags(self.tool)
+            flags = [f for f in flags if f.option not in owned]
         rows = []
         # The settings kept off the Basic tab come first.
         for flag in sorted(flags, key=lambda f: f.option not in hidden):
@@ -509,7 +512,7 @@ class SessionPanel:
         state is ok, wait, warn (Start still allowed) or block."""
         status = self.app.board_status()
         board_state = ("ok" if status.ready else "wait" if status.state == "checking" else
-                       "block" if status.state in ("missing", "choose") else "warn")
+                       "block" if status.state in ("missing", "choose", "controller") else "warn")
         items = [
             ("ok", '已添加 Switch 密钥', "", "") if keys_found(self.app.settings.keys) else
             ("block", '添加 Switch 密钥', '请在设置中选择 prod.keys。', "settings"),

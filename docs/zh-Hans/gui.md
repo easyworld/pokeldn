@@ -6,7 +6,7 @@ title: Desktop builds
 
 发行版包含 PKHeX，以及 ESP32、ESP32-S3、ESP32-C3 和 ESP32-C6 的合并固件。用户须提供自己的 `prod.keys`。
 
-打开应用，在“设置”中选择 `prod.keys`。在“开发板”页选择通过 USB 连接的开发板并刷写固件。选择游戏和工具，生成宝可梦或选择文件，然后按照游戏机上的操作步骤点击“开始”。接收到的宝可梦保存在“设置”中选择的文件夹，点击“输出”旁的文件夹按钮可打开。刷写时会检测芯片并选择对应的内置固件；写入自定义固件前也会检查芯片是否匹配。S3、C3 和 C6 请使用原生 USB Serial/JTAG 接口；不支持 S2。
+打开应用，在“设置”中选择 `prod.keys`。在“开发板”页选择通过 USB 连接的开发板并安装“无线”固件。选择游戏和工具，生成宝可梦或选择文件，然后按照游戏机上的操作步骤点击“开始”。接收到的宝可梦保存在“设置”中选择的文件夹，点击“输出”旁的文件夹按钮可打开。安装时会检测芯片并选择对应的内置固件；写入自定义固件前也会检查芯片是否匹配。S3、C3 和 C6 请使用原生 USB Serial/JTAG 接口；不支持 S2。
 
 神秘礼物工具共用礼物制作界面：可以选择预设、自行制作或打开 `.pokegift` 文件；剑／盾还支持 `.wc8` 卡片。无需连接开发板，点击“保存礼物文件”即可导出 `.pokegift`，也可根据扩展名导出火红／叶绿的 `.wc3` 或剑／盾的 `.wc8`。[神秘礼物文件](gifts.md#desktop-app)介绍了表单、卡带版本及原生格式转换。
 
@@ -110,6 +110,43 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 - HOME 自身的《火红／叶绿》导入规则是否还有画面所列蛋、携带道具及秘传招式以外的限制。
 - HOME 为从 Switch 版《火红／叶绿》导入的宝可梦显示的来源图标，究竟由哪个记录字段保存。通过 Pokémon Bank 转移的卡带宝可梦没有该图标（依据玩家截图，本项目尚未测量）。PKHeX.Core 26.8.26 通过伙伴公园迁移链转换 `.pk3`，因此银行从《火红／叶绿》转出的记录可能与 HOME 写入的记录不同。
 
+## 开发板和固件
+
+“开发板”页列出连接到此电脑的全部开发板。所选开发板顶部显示固件名称、版本，以及“已是最新版本”或“有可用更新”，并提供相应操作。“固件”卡片按 `gui.board.FIRMWARES` 的顺序列出“无线”和“手柄”：标记已安装项，注明芯片不支持的固件，其余项可在确认后安装。“从文件安装”接受 pokeldn `.bin`，依据应用描述符中的项目名称识别。
+
+| 开发板 | 检测方式 | 版本来源 |
+|---|---|---|
+| 无线固件 | 串口 | HELLO 回复 |
+| 经典 ESP32 手柄固件 | 无线检测失败后通过串口检测 | 串口状态帧 |
+| ESP32-S3 手柄固件 | USB 总线（`0f0d:0092`：macOS 使用 `ioreg`，Linux 使用 `/sys/bus/usb/devices`，Windows 使用 `Win32_PnPEntity`）；没有串口 | 通过蓝牙读取状态 |
+| 未安装 pokeldn 固件 | 串口，无响应时判断 | 无 |
+
+应用携带的版本来自镜像 ESP-IDF 应用描述符的 `version` 字段（魔数 `0xABCD5432`，合并镜像中位于 `0x10020`）。“有可用更新”表示此版本高于开发板上的版本。串口安装由 esptool 重置芯片进入下载模式；运行手柄固件的 S3 通过蓝牙接收 download 命令，最多等待 20 秒出现下载端口，再以 `--from-loader` 刷写。
+
+## 手柄控制
+
+“手柄控制”页通过运行手柄固件的开发板控制 Switch 按键并运行宏（见[手柄开发板](hardware_pad.md)）。在“开发板”页为 ESP32-S3 或经典 ESP32 安装手柄固件。S3 连接到 Switch 的 USB-C 接口，点击“连接”后，应用通过蓝牙 LE 连接开发板；经典 ESP32 保持 USB 连接到电脑，并作为 Pro 手柄与 Switch 配对。
+
+状态行显示开发板连接到电脑、Switch，还是两者都未连接。应用先检查电脑 USB 总线，再判断已配置 USB 且不在电脑总线上的设备是否连接到 Switch；固件的 `mounted` 只表示某个 USB 主机已配置设备。
+
+| 部分 | 功能 |
+|---|---|
+| 屏幕手柄 | 按住按键即在主机上保持按下；摇杆支持八个方向的最大倾斜，L3 和 R3 位于中心 |
+| 键盘控制 | 开启后，以宏的默认按住时长轻按按键：方向键控制十字键，X → A，Z → B，S → X，A → Y，Q → L，W → R，1 → ZL，2 → ZR，Enter → +，Backspace → -，H → HOME，C → 截图 |
+| 录制到宏 | 每次按键成为步骤，记录按住时长；下次按键前的间隔成为此步骤的操作后间隔 |
+| 宏编辑器 | 支持按键、摇杆、等待和嵌套重复；“运行一次”只执行一次，“循环”重复指定次数或直到手动停止 |
+| 在开发板上运行 | 编译、加载并启动宏；开发板按自身时钟运行，电脑睡眠或断开后继续执行 |
+
+运行手柄固件的开发板在连接到此电脑时显示于开发板页。检测和切换方式见[开发板和固件](#boards-and-firmware)。未连接手柄时，页面说明当前连接情况，并提供开发板页入口。
+
+宏保存在 `Documents/pokeldn/Macros`（设置 `POKELDN_DATA` 时为该目录内的 `Macros`），每个宏一个 `.pokemacro` 文件，每次编辑都会保存。导出生成可分享的副本；导入先检查文件，再以不冲突的名称复制到库中。格式见[手柄开发板：宏](hardware_pad.md#macros)。
+
+连接断开时，例如开发板从电脑移动到 Switch 期间断电，页面会持续重新搜索，直到开发板响应或点击“停止搜索”。
+
+页面通过子进程 `pokeldn.pad.service` 持有蓝牙连接，服务地址为 `127.0.0.1:47800`。macOS 要求应用声明 `NSBluetoothAlwaysUsageDescription`，否则终止使用蓝牙的进程；打包应用已声明，仅未声明的子进程会停止。应用关闭其标准输入后，子进程退出。
+
+macOS 26 的 `bluetoothd` 对签名为应用包主可执行文件的后台进程使用被动“ThirdPartyApp scan”，不返回发现结果，无论是否设置服务 UUID 过滤。未绑定 Info.plist 的独立签名二进制文件（`Info.plist=not bound`）则获得主动扫描。因此打包应用从 `Contents/Helpers/pokeldn-bluetooth` 启动服务：这是以独立标识签名的可执行文件副本，`_internal` 链接到 `../Frameworks`，沿用应用蓝牙权限。主程序扫描发现 0 个设备，辅助程序发现 19 个，其中包含开发板。若应用发现现有服务运行其他版本代码（状态回复中的 `code`），则要求其退出并启动自身版本。
+
 ## 宝可梦精灵
 
 精灵是 `sprites.front_default` 和 `sprites.front_shiny` 后面的 96x96 PNG
@@ -149,7 +186,7 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 2. 只有压缩包 SHA-256 与 `SHA256SUMS` 中对应名称的记录一致时才接受文件。
 3. 解压：macOS 使用 `ditto -x -k` 保留应用包的符号链接和权限；Linux 使用带 `data` 过滤器的 `tarfile`；Windows 使用 `zipfile`。
 4. 以新应用启动辅助程序：`pokeldn --apply-update NEW TARGET PID VERSION`（`gui/updating.py`）。小型“正在更新 pokeldn”窗口创建 `update/helper.ready`；旧应用看到该文件后退出，未出现时则等待最多 15 秒，确保屏幕上一直有窗口。
-5. 辅助程序等待旧进程结束（120 秒），将现有应用重命名为旁边的 `.<name>.old`（Windows 释放文件夹期间重试最多 30 秒），把新应用复制到原位置，删除旧副本并打开新应用。失败时恢复并打开旧应用；无论辅助窗口是否成功显示，替换都会执行。
+5. 辅助程序等待旧进程结束（120 秒）；Windows 上还会等待所有从安装目录启动的进程（包括 PKHeX 服务），并在 10 秒后终止残留进程。随后将现有应用重命名为旁边的 `.<name>.old`（Windows 释放文件夹期间重试最多 30 秒），把新应用复制到原位置，删除旧副本并打开新应用。失败时恢复并打开旧应用；无论辅助窗口是否成功显示，替换都会执行。辅助程序从解压副本目录运行：Windows 不允许重命名被任何进程用作工作目录的文件夹，而资源管理器会以应用自身目录启动应用。
 6. 打开的应用读取一次 `update/outcome.json`，显示“pokeldn 已更新到 X”，或说明为何保留旧应用。移除此文件后辅助程序关闭（最多等待 60 秒）；应用随后等待辅助进程结束，清理解压副本及 `.old` 文件夹。
 
 应用下载的文件不带 macOS 隔离属性或 Windows 的 Mark of the Web，因此 Gatekeeper 和 SmartScreen 不会再次询问。`SHA256SUMS` 与压缩包来自同一 GitHub 发布版本：该检查能发现损坏或截断的下载，不验证发布者身份。
@@ -200,7 +237,7 @@ python gui/main.py
 
 ## 构建一个桌面应用程序
 
-打包应用时，为 `esp32`、`esp32s3`、`esp32c3`、`esp32c6` 安装 ESP-IDF v6.1 并激活环境，使用独立配置构建全部四个固件镜像：
+打包应用时，为 `esp32`、`esp32s3`、`esp32c3`、`esp32c6` 安装 ESP-IDF v6.1 并激活环境，使用独立配置构建四个无线固件镜像及手柄镜像（`firmware/pad`，通过组件管理器获取 `espressif/esp_tinyusb`）：
 
 ```sh
 mkdir -p gui/firmware
@@ -218,15 +255,19 @@ idf.py -B build/esp32c3 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c3.bin"
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" set-target esp32c6
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" build
 idf.py -B build/esp32c6 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c6.bin"
+cd ../pad
+idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" set-target esp32s3
+idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" build
+idf.py -B build merge-bin -o "$POKELDN_IMAGES/pokeldn-pad-s3.bin"
 cd ../..
 python scripts/build_client.py
 python scripts/build_unicorn.py
 python scripts/pack_app.py
 ```
 
-绝对输出路径使镜像保留在 `gui/firmware`。打包器要求全部四个镜像、`scripts/build_client.py` 构建的客户端，以及 `scripts/build_unicorn.py` 构建的 Unicorn（需要 CMake）；冻结应用自检确认它们均已包含，且随包客户端支持 `flet_drop`。发布工作流分别构建各目标，再向每个平台的桌面打包器提供全部四个镜像。
+绝对输出路径使镜像保留在 `gui/firmware`。打包器要求全部五个镜像、`scripts/build_client.py` 构建的客户端，以及 `scripts/build_unicorn.py` 构建的 Unicorn（需要 CMake）；冻结应用自检确认它们均已包含，且随包客户端支持 `flet_drop`。发布工作流分别构建各目标，再向每个平台的桌面打包器提供全部五个镜像。
 
-应用版本为 `pokeldn.__version__`，显示在设置及 macOS、Windows 软件包元数据中。准备发布前，与 `.github/release-notes.md` 一起更新。工作流为三种桌面下载和四个固件镜像生成 `SHA256SUMS`。手动运行只生成构建产物；`v*` 标签发布名为 `pokeldn vX.Y.Z` 的版本，以 `.github/release-notes.md` 为正文；其首行必须为 `# pokeldn X.Y.Z`（工作流和 `tests/test_release.py` 均检查），每次提供相同的八个文件。只有包含连字符的标签（例如 `v0.3.0-rc1`）标记为预发布；GitHub 在仓库侧栏将最新的其他发行版显示为 Latest。
+应用版本为 `pokeldn.__version__`，显示在设置及 macOS、Windows 软件包元数据中。准备发布前，与 `.github/release-notes.md` 一起更新。工作流为三种桌面下载和五个固件镜像生成 `SHA256SUMS`。手动运行只生成构建产物；`v*` 标签发布名为 `pokeldn vX.Y.Z` 的版本，以 `.github/release-notes.md` 为正文；其首行必须为 `# pokeldn X.Y.Z`（工作流和 `tests/test_release.py` 均检查），每次提供相同的九个文件。只有包含连字符的标签（例如 `v0.3.0-rc1`）标记为预发布；GitHub 在仓库侧栏将最新的其他发行版显示为 Latest。
 
 应用采用 PyInstaller 单目录构建：macOS 为 `pokeldn.app`，Linux 和 Windows 为包含 `pokeldn` 或 `pokeldn.exe` 以及 `_internal` 的 `pokeldn` 目录。单文件每次启动都把整个软件包（约 180 MB）解压到临时目录；每次运行功能都会重新启动应用自身，因此再次付出解压开销。在 M4 上，单目录应用到达“游戏”页需 0.7 秒，单文件为 2.9 秒；功能进程启动需 0.08 秒，而非 1.5 秒。Flet 打包器在 macOS 上拒绝 `--onedir`；`scripts/pack_app.py` 在 Flet 的 `--onefile` 之后向 PyInstaller 传入该参数，后面的参数优先。软件包的 Python 进程不会向 Dock 注册：若作为前台应用运行，会显示第二个图标并一直跳动至退出。打包器在 `Info.plist` 中设置 `LSBackgroundOnly`，因此只有界面客户端显示 Dock 图标，与单文件启动器一致。
 

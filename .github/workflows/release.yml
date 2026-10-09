@@ -41,8 +41,35 @@ jobs:
           name: firmware-${{ matrix.target }}
           path: ${{ matrix.file }}
 
+  # The controller firmware (docs/hardware_pad.md): an S3 over USB, a classic ESP32 over Bluetooth.
+  pad:
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v6.1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: esp32s3
+            file: pokeldn-pad-s3.bin
+          - target: esp32
+            file: pokeldn-pad.bin
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and merge the image
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          cd firmware/pad
+          idf.py set-target ${{ matrix.target }}
+          idf.py build
+          idf.py merge-bin -o "$GITHUB_WORKSPACE/${{ matrix.file }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: firmware-pad-${{ matrix.target }}
+          path: ${{ matrix.file }}
+
   app:
-    needs: firmware
+    needs: [firmware, pad]
     strategy:
       fail-fast: false
       matrix:
@@ -83,12 +110,20 @@ jobs:
         with:
           name: firmware-esp32c6
           path: gui/firmware
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware-pad-esp32s3
+          path: gui/firmware
+      - uses: actions/download-artifact@v8
+        with:
+          name: firmware-pad-esp32
+          path: gui/firmware
       - name: Install
         run: python -m pip install -r gui/requirements.txt
       # Both builds are pure functions of these inputs; a hit skips Flutter and CMake entirely.
       - name: Restore the Flet client
         id: client
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             gui/client/*
@@ -96,7 +131,7 @@ jobs:
           key: flet-client-${{ runner.os }}-${{ hashFiles('requirements.txt', 'gui/requirements.txt', 'gui/flet_client.py', 'scripts/build_client.py', 'gui/flet_drop/**') }}
       - name: Restore the ARM-only Unicorn
         id: unicorn
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             gui/unicorn/lib
