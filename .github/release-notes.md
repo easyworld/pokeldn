@@ -1,75 +1,52 @@
 # pokeldn 0.19.0
 
-This desktop app trades with seven Pokemon game families on a Switch or Switch 2
-through an ESP32 radio connected by USB. Nothing is installed on the console.
+这款桌面应用通过 USB 连接的 ESP32 无线开发板，与 Switch 或 Switch 2 上的七组宝可梦游戏进行交换，无需在游戏机上安装任何内容。
 
-## What is new
+## 更新内容
 
-- GTS: list a banked Pokemon against a wanted species on public relays. Another app trades for it
-  while either app is open; the two apps never need to be open together.
-- Bank: an Edit button changes a banked Pokemon's nickname, level (upward only), moves and held
-  item, and refuses an edit that would make it not legal. Refusal reasons are shorter and list each
-  problem once. A FireRed or LeafGreen Pokemon is now refused for Let's Go.
-- Controller board: a classic ESP32 now pairs with a Switch Lite as a Bluetooth Pro Controller and
-  its presses reach the console.
-- Windows: a copy installed in a folder the user cannot write, such as Program Files, now updates
-  itself after asking for administrator permission, and the old unpacked copy is removed.
+- GTS：在公共中继服务器上挂牌银行中的宝可梦，并指定想要的种类。两端应用可以在各自打开时处理交换，无需同时在线。
+- 银行：新增“编辑”按钮，可修改宝可梦的昵称、等级（只能提高）、招式及携带道具；导致宝可梦不合法的修改将被拒绝。拒绝原因更加简洁，每个问题仅列出一次。《火红／叶绿》的宝可梦现在无法传送到《Let's Go》。
+- 手柄开发板：经典 ESP32 现在可作为蓝牙 Pro 手柄与 Switch Lite 配对，并将按键操作发送到游戏机。
+- Windows：应用安装在用户没有写入权限的目录（例如 Program Files）时，现在可请求管理员权限后自动更新，并移除旧的解压副本。
 
-The radio firmware is unchanged at 1.6.1; wireless boards need no update. The controller firmware is
-1.3.0; the Board page offers the update.
+无线固件仍为 1.6.1，无线开发板无需更新。手柄固件已更新到 1.3.0，可在“开发板”页面更新。
 
-pokeldn is an unofficial fan project, not affiliated with Nintendo or The Pokemon Company. It is not
-meant for commercial or promotional use; see the License section of the README.
+pokeldn 是非官方的爱好者项目，与任天堂及宝可梦公司无关，不用于商业或推广用途；详情见 README 的许可证部分。
 
-## Downloads
+## 下载
 
-| Computer | File |
+| 电脑平台 | 文件 |
 |---|---|
-| macOS, Apple silicon | `pokeldn-macos-arm64.zip` |
-| Windows, x64 | `pokeldn-windows-x64.zip` |
-| Linux, x64 | `pokeldn-linux-x64.tar.gz` |
+| macOS，Apple 芯片 | `pokeldn-macos-arm64.zip` |
+| Windows，x64 | `pokeldn-windows-x64.zip` |
+| Linux，x64 | `pokeldn-linux-x64.tar.gz` |
 
-Each app includes PKHeX.Core and firmware for classic ESP32, ESP32-S3, ESP32-C3 and ESP32-C6. Python, .NET
-and ESP-IDF are bundled or unnecessary for running the app. Supply your own `prod.keys`.
-The separate `pokeldn-radio*.bin` (wireless) and `pokeldn-pad*.bin` (controller) files are merged
-firmware images for manual flashing at address `0x0`; the app selects the right image for the
-connected chip. `SHA256SUMS` covers all nine downloads.
+各平台应用均包含 PKHeX.Core，以及经典 ESP32、ESP32-S3、ESP32-C3 和 ESP32-C6 的固件。所需组件已随包提供或无需额外安装，因此运行应用时无需另行安装 Python、.NET 或 ESP-IDF。请自行准备 `prod.keys`。
+单独提供的 `pokeldn-radio*.bin`（无线）和 `pokeldn-pad*.bin`（手柄）是合并后的固件镜像，手动刷写时使用地址 `0x0`；应用会为连接的芯片选择正确镜像。`SHA256SUMS` 包含全部九个下载文件的校验和。
 
-## First run
+## 首次运行
 
-1. Extract the archive for your computer. On Windows, run `pokeldn.exe` inside the extracted `pokeldn` folder.
-   - macOS: the app is unsigned, so the first launch is blocked. Open it once and close the warning,
-     then open System Settings, Privacy & Security, scroll down to Security and press Open Anyway next
-     to pokeldn, then confirm with your password. Later launches open normally.
-   - Windows: if SmartScreen stops the app, choose More info, then Run anyway.
-2. Choose `prod.keys` when prompted.
-3. Connect one supported board with a USB data cable. S3, C3 and C6 boards use native USB Serial/JTAG.
-   On Windows, a classic ESP32 needs its USB chip's driver first (CP210x or CH340); the Board page
-   links both, says how to install them and names the one missing.
-   A board that ships an external antenna, such as the Seeed Studio XIAO ESP32C3 or XIAO ESP32S3,
-   needs it attached; larger S3 boards such as the N8R2 and N16R8 have an onboard antenna.
-4. On Board, choose Install beside Wireless. The app checks the board on its own and shows Up to date.
-5. On Games, choose a game and a tool, build an offer or select a Pokemon file, and follow the
-   console instructions before starting.
+1. 解压适用于电脑平台的压缩包。Windows 用户运行解压后的 `pokeldn` 文件夹中的 `pokeldn.exe`。
+   - macOS：应用未签名，首次启动会被阻止。先尝试打开一次并关闭警告，然后打开“系统设置”→“隐私与安全性”，向下滚动到“安全性”，点击 pokeldn 旁边的“仍要打开”，再输入密码确认。之后可正常启动。
+   - Windows：如果 SmartScreen 阻止应用，请选择“更多信息”→“仍要运行”。
+2. 按提示选择 `prod.keys`。
+3. 使用 USB 数据线连接一块受支持的开发板。S3、C3 和 C6 使用原生 USB Serial/JTAG。Windows 上的经典 ESP32 需先安装 USB 芯片驱动（CP210x 或 CH340）；“开发板”页面提供两种驱动的链接、安装说明，并提示缺少的驱动。附带外置天线的开发板（例如 Seeed Studio XIAO ESP32C3 或 XIAO ESP32S3）需要接好天线；N8R2、N16R8 等较大的 S3 开发板带有板载天线。
+4. 在“开发板”页面点击“无线”旁的“安装”。应用会自动检测开发板，并显示“已是最新”。
+5. 在“游戏”页面选择游戏和功能，生成用于交换的宝可梦或选择宝可梦文件，按照游戏机操作说明完成准备后再开始。
 
-Received Pokemon are saved in `Documents/pokeldn/Received`, with a configurable folder in Settings.
+收到的宝可梦保存在 `Documents/pokeldn/Received`，可在“设置”中修改保存目录。
 
-## Supported features
+## 支持的功能
 
-- Trades in both directions: FireRed/LeafGreen, Let's Go Pikachu/Eevee, Sword/Shield, Brilliant
-  Diamond/Shining Pearl, Legends Arceus, Scarlet/Violet and Legends Z-A.
-- Mystery Gift: FireRed/LeafGreen and Sword/Shield.
-- Tera Raids in both roles: Scarlet/Violet.
-- Legal Pokemon preparation with PKHeX.Core, board detection and flashing, and session recordings.
-- An ESP32-S3 as a wired Switch controller or a classic ESP32 as a Bluetooth one, with macros.
-- Online trade over public relays, and a GTS for banked Pokemon.
+- 双向交换：《火红／叶绿》《Let's Go！皮卡丘／伊布》《剑／盾》《晶灿钻石／明亮珍珠》《传说 阿尔宙斯》《朱／紫》及《传说 Z-A》。
+- 神秘礼物：《火红／叶绿》和《剑／盾》。
+- 太晶团体战的主持与加入：《朱／紫》。
+- 通过 PKHeX.Core 准备合法宝可梦，检测和刷写开发板，以及录制会话。
+- 使用 ESP32-S3 作为 Switch 有线手柄，或使用经典 ESP32 作为蓝牙手柄，均支持宏。
+- 通过公共中继服务器进行在线交换，以及为银行中的宝可梦提供 GTS。
 
-## Platform notes
+## 平台说明
 
-macOS requires Apple silicon and macOS 12 or later. Linux requires GTK 3, libsecret and access
-to the serial port; on distributions using the `dialout` group, run `sudo usermod -aG dialout "$USER"`
-and log out and back in. ESP32-S2 is unsupported.
+macOS 需要 Apple 芯片及 macOS 12 或更高版本。Linux 需要 GTK 3、libsecret 和串口访问权限；使用 `dialout` 用户组的发行版请执行 `sudo usermod -aG dialout "$USER"`，然后退出登录并重新登录。不支持 ESP32-S2。
 
-[Setup and protocol documentation](https://decryptu.github.io/pokeldn/) contains the per-game
-requirements. Attach the latest session recording from Settings to an
-[issue](https://github.com/Decryptu/pokeldn/issues) when reporting a problem.
+[设置与协议文档](https://decryptu.github.io/pokeldn/)包含各游戏的具体要求。报告问题时，请从“设置”中导出最近一次会话录制，并附在[问题报告](https://github.com/Decryptu/pokeldn/issues)中。
