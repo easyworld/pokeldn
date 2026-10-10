@@ -1998,3 +1998,26 @@ LABELS.update({
     "5star": "5 星团体战", "6star": "6 星团体战",
     "standard": "普通", "black": "黑色",
 })
+
+LABELS.update({
+    "Into the bag": "放入背包",
+    "Added to the player's Battle Points": "增加玩家的对战点数",
+    "Casual Tee (Great Ball Guy) (2020 Apr International Competition J)(Ver 1)": "休闲Ｔ恤（超级球球种人）（2020 年 4 月国际挑战赛 J，版本 1）",
+    "Casual Tee (Poke Ball Guy) (2020 Feb International Competition J)": "休闲Ｔ恤（精灵球球种人）（2020 年 2 月国际挑战赛 J）",
+    "Casual Tee (Pokemon Quest)": "休闲Ｔ恤（宝可梦探险寻宝）",
+    "Casual Tee (Ultra Ball Guy) (2020 May International Competition J)": "休闲Ｔ恤（高级球球种人）（2020 年 5 月国际挑战赛 J）",
+    "Clothing Set Eevee Uniform": "服装套装：伊布队服",
+    "Clothing Set Leon's Cap & Tights": "服装套装：丹帝的帽子与紧身裤",
+    "Clothing Set Pikachu Uniform": "服装套装：皮卡丘队服",
+    "Clothing Set Tracksuit": "服装套装：运动服",
+    "Gold Studded Backpack": "金色铆钉背包",
+    "Alola Cap": "阿罗拉帽子", "Hoenn Cap": "丰缘帽子", "Kalos Cap": "卡洛斯帽子",
+    "Original Cap": "初始帽子", "Partner Cap": "就决定是你了之帽子",
+    "Sinnoh Cap": "神奥帽子", "Unova Cap": "合众帽子", "World Cap": "世界帽子",
+    "East": "东海", "Antique": "真品", "Dada": "阿爸", "Poké": "精灵球",
+    "Japanese Release": "日本发行", "Korean Release": "韩国发行", "Western Release": "欧美发行",
+    "Ver 1. Dynamic PID": "版本 1：随机 PID", "Ver 2. Static PID": "版本 2：固定 PID",
+    "Ver. 1 No Nickname": "版本 1：无昵称", "Ver. 2 Nickname Set": "版本 2：已设置昵称",
+    "Ver. 2 Set Nickname": "版本 2：已设置昵称",
+    "Ribbon Sweet": "蝴蝶结糖饰", "Star Sweet": "星星糖饰",
+})

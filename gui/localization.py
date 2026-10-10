@@ -203,9 +203,26 @@ def event_text(value: str) -> str:
     # Event trainer names and campaign titles are retained; Pokemon names and attributes use Chinese.
     result = re.sub(r"\blevel (\d+)\b", r"等级 \1", result)
     result = re.sub(r"\b[Ss]hiny\b", "异色", result)
-    for source, target in (("(Galar)", "（伽勒尔）"), ("Master Ball", "大师球"), (" (an egg)", "（蛋）")):
+    result = re.sub(r"\b(\d+) Battle Points\b", r"\1 对战点数", result)
+    result = re.sub(r"\b(\d+) pieces? of clothing\b", r"\1 件服装", result)
+    for source, target in (("(Galar)", "（伽勒尔）"), ("Master Ball", "大师球"), (" (an egg)", "（蛋）"),
+                           (" (Gmax)", "（超极巨化）"), ("can Gigantamax", "可超极巨化")):
         result = result.replace(source, target)
+    result = re.sub(r"\(([^()]*)\)", lambda m: "（" + LABELS[m[1]] + "）" if m[1] in LABELS else m[0], result)
+    months = {"Feb": "2", "March": "3", "April": "4"}
+    result = re.sub(r"\((\d{4}) (Feb|March|April) International Competition ([JM])\)",
+                    lambda m: f"（{m[1]} 年 {months[m[2]]} 月国际挑战赛 {m[3]}）", result)
     return result
+
+
+def event_label(game: str, card: dict) -> str:
+    """Name official item rewards by their record IDs, independent of the archive's English title."""
+    if game == "swsh" and card["group"] == "Items":
+        from pokeldn.swsh.events import item_pairs
+        items = {item["id"]: item["name"] for item in SERVICE.names(game, "items")}
+        return "，".join(f"{items.get(ident, f'道具 {ident}')} ×{quantity}"
+                       for ident, quantity in item_pairs(card["record"]))
+    return event_text(card["label"])
 
 
 def summary_text(value: str) -> str:

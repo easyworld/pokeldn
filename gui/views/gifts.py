@@ -9,7 +9,7 @@ import threading
 import flet as ft
 
 from gui import drop, theme as t
-from gui.localization import SERVICE, translate, gift_description, event_text
+from gui.localization import SERVICE, translate, gift_description, event_text, event_label
 from gui.views.pokemon import NamePicker
 from gui.views.saves import SavePanel
 from gui.views.widgets import PathField
@@ -153,7 +153,7 @@ class GiftBuilder:
                        t.text(event_text(summary), 12, t.MUTED)],
                       spacing=1, expand=True),
         ], spacing=10), padding=ft.Padding(10, 8, 10, 8), border_radius=10,
-            tooltip=translate(summary), border=ft.Border.all(1, t.BLUE if active else t.BORDER),
+            tooltip=event_text(summary), border=ft.Border.all(1, t.BLUE if active else t.BORDER),
             bgcolor=t.SELECTED if active else None, on_click=on_click)
 
     def _toggle(self, preset, key) -> None:
@@ -219,6 +219,7 @@ class GiftBuilder:
     def events(self) -> ft.Control:
         """Every official card the game's builder ships, filtered by a search and a group."""
         cards = self.module.OFFICIAL.load()
+        labels = {c["key"]: event_label(self.game, c) for c in cards}
         tiles = ft.Column(spacing=6, tight=True)
         search = t.field(hint='搜索：皮卡丘、大师球、异色…', value=self.value.get("event_search", ""))
         group = {"value": self.value.get("event_group", "")}
@@ -226,8 +227,8 @@ class GiftBuilder:
         def render(update=True):
             words = search.value.casefold().split()
             shown = [c for c in cards if (not group["value"] or c["group"] == group["value"])
-                     and all(w in f"{c['label']} {c['group']} {c['summary']} {event_text(c['label'])} {event_text(c['summary'])}".casefold() for w in words)]
-            tiles.controls = t.grid_rows([self._tile(event_text(c["label"]), c["summary"], c["key"] == self.value["event"],
+                     and all(w in f"{c['label']} {c['group']} {c['summary']} {labels[c['key']]} {event_text(c['summary'])}".casefold() for w in words)]
+            tiles.controls = t.grid_rows([self._tile(labels[c["key"]], c["summary"], c["key"] == self.value["event"],
                                          lambda e, k=c["key"]: self._event(k)) for c in shown])
             count.value = f'{len(shown)} / {len(cards)} 张卡片'
             if update:
