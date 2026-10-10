@@ -1,6 +1,7 @@
 """The Pokemon the app keeps between games: each record in the bank folder with a `.json` beside it
 [docs/gui.md, The bank]. A trade's received Pokemon is deposited on its own; one queued for a trade
 carries {"bank": id} in the offer queue and leaves the bank when that trade completes."""
+import base64
 import hashlib
 import json
 import os
@@ -77,34 +78,36 @@ def _entry(path: Path) -> Entry | None:
                  float(meta.get("created") or 0), str(meta.get("origin", "")))
 
 
-def entries() -> list[Entry]:
+def entries(folder=None) -> list[Entry]:
     """Every banked Pokemon, newest first."""
-    if not BANK.is_dir():
+    folder = Path(folder or BANK)
+    if not folder.is_dir():
         return []
-    found = [e for path in BANK.iterdir() if FILES.search(path.name) and (e := _entry(path))]
+    found = [e for path in folder.iterdir() if FILES.search(path.name) and (e := _entry(path))]
     return sorted(found, key=lambda e: (e.created, e.id), reverse=True)
 
 
-def find(entry_id: str) -> Entry | None:
-    return next((e for e in entries() if e.id == entry_id), None)
+def find(entry_id: str, folder=None) -> Entry | None:
+    return next((e for e in entries(folder) if e.id == entry_id), None)
 
 
 def data(entry: Entry) -> bytes:
     return Path(entry.path).read_bytes()
 
 
-def deposit(game: str, source: str, info: dict) -> Entry | None:
+def deposit(game: str, source: str, info: dict, folder=None) -> Entry | None:
     """Keep a copy of the record at `source`, which PKHeX read as `info`. None when the bank already holds
     these bytes: a received file is read again while it grows, and on every later scan."""
+    folder = Path(folder or BANK)
     content = Path(source).read_bytes()
     digest = _digest(content)
-    if BANK.is_dir() and any(_read_meta(p).get("sha256") == digest for p in BANK.glob("*.json")):
+    if folder.is_dir() and any(_read_meta(p).get("sha256") == digest for p in folder.glob("*.json")):
         return None
     from pokeldn.pokemon import summary
-    BANK.mkdir(parents=True, exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)
     name = re.sub(r"[^A-Za-z0-9]+", "", str(info.get("species", ""))) or "pokemon"
     stem = f"{name}-{time.strftime('%Y%m%d-%H%M%S')}-{random.getrandbits(32):08x}"
-    path = BANK / f"{stem}.{EXTENSIONS[game]}"
+    path = folder / f"{stem}.{EXTENSIONS[game]}"
     path.write_bytes(content)
     _write_meta(path, {
         "game": game, "species": info.get("species", ""), "species_id": int(info.get("species_id") or 0),
@@ -116,8 +119,29 @@ def deposit(game: str, source: str, info: dict) -> Entry | None:
     return _entry(path)
 
 
-def remove(entry_id: str) -> None:
-    for path in BANK.glob(f"{entry_id}.*") if BANK.is_dir() else ():
+def edit(entry: Entry, fields: dict) -> Entry:
+    """Change what a player could change in the game (nickname, level, moves, held item) and keep the result,
+    or BuilderError with the reason. A legal Pokemon stays legal: an edit PKHeX rejects is refused."""
+    from pokeldn.pokemon import SERVICE, BuilderError, summary
+    reply = SERVICE.check_bytes(entry.game, data(entry), fields=fields)
+    if entry.legal and not reply["legal"]:
+        raise BuilderError(reply["problems"])
+    content = base64.b64decode(reply["data"])
+    path = Path(entry.path)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_bytes(content)
+    os.replace(tmp, path)
+    meta = _read_meta(path)
+    meta.update({"species": reply["species"], "species_id": int(reply["species_id"]), "shiny": bool(reply["shiny"]),
+                 "summary": summary(reply), "legal": bool(reply["legal"]), "sha256": _digest(content),
+                 "edited": time.time()})
+    _write_meta(path, meta)
+    return _entry(path)
+
+
+def remove(entry_id: str, folder=None) -> None:
+    folder = Path(folder or BANK)
+    for path in folder.glob(f"{entry_id}.*") if folder.is_dir() else ():
         if FILES.search(path.name) or path.suffix == ".json":
             path.unlink(missing_ok=True)
 

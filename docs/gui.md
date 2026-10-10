@@ -140,7 +140,8 @@ folder instead.
 
 A move goes through PKHeX's own HOME conversion (`EntityConverter.ConvertToType`, through `PKH`), then
 PKHeX's legality check in the destination game; a move that is not legal there is refused with
-PKHeX's reason. On the way:
+PKHeX's reason, its per-move lines folded into one ("2 of its moves are not legal") and each problem
+listed once. On the way:
 
 - A Pokemon from another game takes the bank's HOME tracker. PKHeX marks one without a tracker
   invalid (`HomeTrackerUtil.IsRequired`, `HOMETransferSettings.HOMETransferTrackerNotPresent`).
@@ -153,18 +154,25 @@ PKHeX's reason. On the way:
 
 | refusal | source |
 |---|---|
-| nothing goes back to FireRed/LeafGreen or to Let's Go | `EntityConverter.IsConvertibleToFormat` |
+| nothing goes back to FireRed/LeafGreen | `EntityConverter.IsConvertibleToFormat` |
+| nothing goes to Let's Go | HOME only takes from it; the converter alone takes a `PK3` into `PB7`, Let's Go's format (7) being above FireRed's (3) |
 | an egg | HOME's screen for FireRed and LeafGreen; the converter would hatch it |
 | a FireRed/LeafGreen Pokemon holding an item or knowing an HM move | HOME's screen for FireRed and LeafGreen |
 | a species or form absent from the destination | the destination's personal table |
 | no conversion route | PKHeX.Core 26.8.26 converts no Legends Z-A record out to another game |
 
+Edit changes what a player can change in the game itself: the nickname (empty restores the species
+name), the level (upward only), the moves and the held item. The helper's `check` command applies the
+fields and runs PKHeX's legality check; an edit that would make a legal Pokemon not legal is refused and
+the record is left as it was. A saved edit rewrites the record and its `.json` (summary, verdict,
+SHA-256) and the destinations are checked again. A Pokemon queued for a trade is not editable.
+
 A record received from a retail Sword and moved to Legends Z-A, with the bank's tracker and its PID
 kept, showed its level and original trainer on a retail Z-A's trade box and completed the trade.
 
 `tests/test_bank.py` moves records between six pairs of games through the real helper and checks
-that the destination's launcher takes them, along with each refusal and the run that takes a traded
-Pokemon out of the bank.
+that the destination's launcher takes them, along with each refusal, an edit kept and refused, and the
+run that takes a traded Pokemon out of the bank.
 
 ### Unresolved
 
@@ -176,6 +184,15 @@ Pokemon out of the bank.
   FireRed/LeafGreen, which a cartridge Pokemon moved through Pokemon Bank lacks (players' screenshots,
   unmeasured here). PKHeX.Core 26.8.26 converts a `.pk3` by the Pal Park lineage, so a bank move from
   FireRed/LeafGreen may differ from the record HOME writes.
+
+## The GTS
+
+The GTS page lists other players' open listings, filtered by the species offered or wanted, and the
+player's own listings and offers under Yours. Deposit a Pokemon takes a legal banked Pokemon that is
+not queued for a trade; a listing's detail offers each banked Pokemon that answers it. While listed or
+offered, a Pokemon is in `Documents/pokeldn/GTS`, out of the bank. The app answers offers whenever it
+runs, on any page, once a listing or an offer exists. The events and the rules are in
+[The GTS](online.md#the-gts).
 
 ## Boards and firmware
 
@@ -203,8 +220,10 @@ the loader's port, and flashes with `--from-loader`.
 
 The Control page presses a Switch's buttons through a board running the controller firmware
 ([Controller board](hardware_pad.md)) and plays macros on it. Install the Controller firmware from
-the Board page (ESP32-S3 or classic ESP32), plug the board into the Switch's USB-C port, and press
-Connect: the page reaches the board over Bluetooth LE.
+the Board page (ESP32-S3 or classic ESP32). An ESP32-S3 goes into the Switch's USB-C port, and
+Connect reaches it over Bluetooth LE. A classic ESP32 stays on this computer's USB and pairs with the
+Switch from HOME, Controllers, Change Grip/Order; Connect reaches it over its serial port. Installing
+the firmware again clears the pairing.
 
 The status line says where the board is: plugged into this computer (it is on this computer's USB
 bus), into the Switch (its USB is configured and it is not on this computer's bus), or into neither.
@@ -322,9 +341,17 @@ archive: the check catches a corrupted or truncated download and does not authen
 | no network, HTTP error, reply that is not a release | nothing shown at launch; Check now says GitHub did not answer |
 | Settings, Updates off | no request at launch; Check now still asks |
 | no archive for this computer, or no `SHA256SUMS` in the release | Download opens the file or the release page |
-| a source checkout, a macOS app run from Downloads (App Translocation), a folder the user cannot write | Download, with the reason |
+| a source checkout, a macOS app run from Downloads (App Translocation), a macOS or Linux folder the user cannot write | Download, with the reason |
+| Windows, a folder the user cannot write (`C:\Program Files`) | Update now; Windows asks for administrator permission (UAC) before the helper starts, and a refusal leaves the app unchanged |
 | a session, flash or cleanup running | Update now asks to finish it first |
 | checksum mismatch or a failed download | nothing changes; the dialog offers Download |
+
+On Windows in a folder only an administrator may change, the helper starts through
+`ShellExecuteExW` with the `runas` verb, reads and writes its outcome beside the unpacked copy (an
+administrator's helper may run as another user), and opens the new app through Explorer, so it runs at
+the user's own level. `scripts/check_update.py ARCHIVE FOLDER` runs a packed app's own update against a
+release served on 127.0.0.1; the Update check workflow runs it on Windows (a user folder and
+`C:\Program Files`) and Linux from a Release run's archives.
 
 Settings, keys and received Pokemon live outside the app and stay. Whether macOS asks for App
 Management permission when the helper replaces an app in `/Applications` is unmeasured; a refusal

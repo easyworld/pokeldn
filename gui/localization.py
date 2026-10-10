@@ -3,6 +3,7 @@
 Terminology: https://github.com/kwsch/PKHeX/blob/master/PKHeX.WinForms/Resources/text/lang_zh-Hans.txt
 """
 import atexit
+import functools
 import re
 
 from pokeldn.pokemon import BuilderError, Service
@@ -35,7 +36,18 @@ def translate(value: str) -> str:
     name_error = re.fullmatch(r"Names: (.+)", value, re.S)
     if name_error:
         return "名称错误：" + translate(name_error[1])
+    for prefix, target in (("PKHeX could not read it (", "PKHeX 无法读取（"),
+                           ("PKHeX finds it not legal (", "PKHeX 判定其不合法（")):
+        if value.startswith(prefix) and value.endswith(")"):
+            return target + translate(value[len(prefix):-1]) + "）"
     patterns = (
+        (r"(\d+) of its moves are not legal\.", r"有 \1 个招式不合法。"),
+        (r"The level goes from (\d+) to 100: a Pokemon never loses levels\.", r"等级必须在 \1 到 100 之间，宝可梦等级不能降低。"),
+        (r"This form of (.+) is not in that game\.", r"该游戏中不存在 \1 的此形态。"),
+        (r"(.+) is not in that game\.", r"该游戏中不存在 \1。"),
+        (r"[Tt]he lister asks for level (\d+) to (\d+)\.?", r"挂牌方要求等级在 \1 到 \2 之间。"),
+        (r"[Tt]he lister asks for (.+?)\.?", r"挂牌方想要 \1。"),
+        (r"Windows did not give pokeldn permission to change (.+)", r"Windows 未授予 pokeldn 修改 \1 的权限。"),
         (r"unknown button (.+)", r"未知按键：\1"),
         (r"(.+) must be a number of milliseconds from (\d+) to (\d+)", r"\1 必须为 \2 到 \3 毫秒之间的数值"),
         (r"(.+) must be \[x, y\], each from -1 to 1", r"\1 必须为 [x, y]，每个值介于 -1 和 1 之间"),
@@ -152,6 +164,18 @@ class DisplayService(Service):
 
 SERVICE = DisplayService(display_language="zh-Hans")
 atexit.register(SERVICE.close)
+
+
+@functools.cache
+def game_terms(game: str) -> dict[str, str]:
+    """Remote GTS metadata carries names rather than IDs; pair PKHeX names using their original IDs."""
+    from pokeldn.pokemon import SERVICE as english
+    result = {}
+    for kind in ("moves", "items", "balls", "natures", "abilities"):
+        localized = {n["id"]: n["name"] for n in SERVICE.names(game, kind)}
+        result.update((n["name"], localized[n["id"]]) for n in english.names(game, kind)
+                      if n["id"] in localized)
+    return result
 
 
 def summary(info: dict) -> str:

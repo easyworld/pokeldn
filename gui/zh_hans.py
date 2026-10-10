@@ -2021,3 +2021,16 @@ LABELS.update({
     "Ver. 2 Set Nickname": "版本 2：已设置昵称",
     "Ribbon Sweet": "蝴蝶结糖饰", "Star Sweet": "星星糖饰",
 })
+
+LABELS.update({
+    "HOME cannot send Pokemon into this game.": "HOME 无法将宝可梦传入此游戏。",
+    "One of its moves is not legal.": "有 1 个招式不合法。",
+    "A Pokemon knows at least one move.": "宝可梦至少需要一个招式。",
+    "This listing is no longer open.": "该挂牌已结束。",
+    "another offer was taken first": "其他交换请求已先被接受",
+    "the listing has ended": "挂牌已结束",
+    "the offer carries no Pokemon": "交换请求未包含宝可梦",
+    "the lister's answer carries no Pokemon": "挂牌方的回应未包含宝可梦",
+    "it is not the Pokemon the listing showed": "收到的宝可梦与挂牌展示的记录不一致",
+    "refused": "已拒绝", "not legal": "不合法",
+})

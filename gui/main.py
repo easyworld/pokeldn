@@ -41,6 +41,7 @@ PAGES = (
     ("games", '游戏', "gamepad"),
     ("board", '开发板', "cpu"),
     ("bank", '银行', "package"),
+    ("gts", "GTS", "globe"),
     ("controller", '手柄控制', "joystick"),
     ("docs", '文档', "book-open"),
 )
@@ -80,6 +81,9 @@ def main(page: ft.Page) -> None:
         if key == "bank":
             from gui.views.bank import BankView
             return BankView(app)
+        if key == "gts":
+            from gui.views.gts import GtsView
+            return GtsView(app)
         if key == "controller":
             from gui.views.controller import ControllerView
             return ControllerView(app)
@@ -151,6 +155,8 @@ def main(page: ft.Page) -> None:
         threading.Thread(target=prune_viewers, daemon=True).start()
     if app.settings.check_updates:
         app.check_update()
+    from gui.views.gts import resume
+    resume(app)      # a listing or an offer left open is answered while the app runs
 
 
 def prune_viewers() -> None:
@@ -163,7 +169,9 @@ def prune_viewers() -> None:
 def offer_update(app: App) -> None:
     """A newer release on GitHub: installed in place when this copy can replace itself, else its file."""
     release = app.update
-    reason = update.blocker(update.install_root()) if release.installable else "manual"
+    root = update.install_root()
+    reason = update.blocker(root) if release.installable else "manual"
+    admin = not reason and update.needs_admin(root)
 
     def close(e):
         app.page.pop_dialog()
@@ -180,7 +188,7 @@ def offer_update(app: App) -> None:
             note.update()
             return
         app.page.pop_dialog()
-        install_update(app, release)
+        install_update(app, release, admin)
 
     note = t.text(f"当前版本：{__version__}。"
                   + ("pokeldn 将下载并校验更新，然后重启到新版本。" if not reason else
@@ -188,6 +196,7 @@ def offer_update(app: App) -> None:
                      "从发布页面下载适用于此电脑的新版本，然后替换当前应用"
                      "。")
                   + (f"{translate(reason)} " if reason and reason != "manual" else "")
+                  + (f"Windows 将请求管理员权限以修改 {root.parent}。" if admin else "")
                   + "设置、密钥和已接收的宝可梦将保留在原位置。", 13, t.MUTED)
     main = (t.button("立即更新", install, "download") if not reason else
             t.button("下载", open_(release.download), "download"))
@@ -201,7 +210,7 @@ def offer_update(app: App) -> None:
     app.page.update()   # also shown from a background check, where Flet does not flush on its own
 
 
-def install_update(app: App, release: update.Release) -> None:
+def install_update(app: App, release: update.Release, admin: bool = False) -> None:
     """Downloads and checks the release, then quits so the new app can take this one's place."""
     stop = threading.Event()
     status = t.text("正在下载…", 13, t.MUTED)
@@ -257,7 +266,7 @@ def install_update(app: App, release: update.Release) -> None:
             new = update.prepare(release, progress, stop.is_set)
             if stop.is_set():
                 raise update.Cancelled
-            update.start_swap(new, root, release.version)
+            update.start_swap(new, root, release.version, admin=admin)
             # This window stays until the helper's own is up, so one is always on screen.
             update.wait_for(update.READY.exists, 15.0)
         except update.Cancelled:

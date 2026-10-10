@@ -446,6 +446,8 @@ Oui 将其原封不动地保存在保存块 `0x28e707f5` 中：来自 `album+0x2
 法语版《剑》 1.3.2 接受了其在四次交易中已保存的记录（相同的 PID 和 EC）并继续进行交易。 盾 1.3.2 中读取的路径不存在重复检查：PID getter（`0x0076bc20`，块 A + 0x14）仅由异色测试调用；在 12 个站点读取加密常量 getter (`0x0077ec90`)，没有一个站点能够走动；盒子代码（`obj+0x60 + box*0x2850 + slot*0x158`）仅读取种类和蛋标志；并且没有访问器触及 PK8 字节 0x52，其中晶灿钻石保留其非法标志（[BDSP 交换页面](bdsp_trade.md#duplicate-detection)）。 `bin/swsh_host.py --fresh-pid` 和
 `bin/swsh_connect.py --fresh-pid` 绘制新的加密常量和PID；在剑上这是一种预防措施。
 
+`memcmp` 桩 `0x018fe460` 的 375 次计算长度调用均不比较两只宝可梦：374 次比较字符串或库数据（sol2、protobuf、NEX、Lua、Pia、SDK 图形、名称字典、对战数据容器、FlatBuffers 虚函数表），`0x014514ac` 将 `obj+0x60` 的 0x158 字节槽与零比较。交换接收路径（`0x010d81d0` 到 `0x010f5cc0`）及盒子路径（`0x010ce180`、`0x00c8d900`）都不会通过直接调用到达这些位置；交换代码只到达 protobuf 描述符注册（`0x006e26f0`），其操作数是 rodata 中的名称。未追踪虚函数表调用。
+
     --offer-slot 1 --offer-nickname POKELDN --offer-ivs 31,31,31,31,31,31
 
 |旗帜|效果|

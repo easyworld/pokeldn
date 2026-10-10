@@ -41,7 +41,6 @@ ID、偏移量和地址来自 盾 的 `main` 或空气，除非某个部分指�
 ## 未解决
 
 - [玩家档案](swsh_protocol.md#the-player-profile)：宝可梦露营会话中，角色采样状态 3 和 4 各代表哪种角色（`StateCreateSession`、`StateConnect`）。`a_wr0301` 表示王冠雪原野外区域是根据编号推断的；在该区域采集一个信标可确认。
-- [对战竞技场](swsh_protocol.md#the-battle-stadium-block)：`match+0x98` 的写入方。队伍描述符的 `+0` 到 `+7` 是从租借队伍回复 `[job+0x88]+0x38` 复制的一个 u64（`0x014f7fd0`）；`v1/validate` 回复在 `0x014f8094` 覆盖其签名。
+- [对战竞技场](swsh_protocol.md#the-battle-stadium-block)：`0x01430670` 为已存储队伍记录读取哪个存档块，以及 `v1/validate` 签名覆盖 `+0x36` 前，存档队伍描述符的 `+0x30..+0x135` 保存什么（`0x015039f0` 后 `[sp+0x28]` 中的条目）。
 - 《剑》和《盾》的差异：二进制分析来自《盾》，实机为《剑》；[会话常数](swsh_session.md#taking-a-seat)适用于两者。《剑》检查卡片版本掩码位 0 的结论来自《盾》代码：条件为 `1 << (v == 0x2D)`，`0x007d4270` 的 31 处调用中有 11 处同时比较 `0x2C` 和 `0x2D`；PKHeX 的 `RestrictVersion`（1 为剑、2 为盾、3 为两者）也支持此结论。两份实机《剑》快照在 MyStatus `+0xA4` 处包含 `0x2C`。《剑》自身的 `0x007d4270` 和通信 ID 常量尚未读取。
-- [神秘礼物](swsh_gift.md#what-the-menu-refuses)：种类不在游戏中的类型 1 礼物会被构造函数标为损坏，实机对此显示什么尚未确认。
-- [提出交换的记录](swsh_trade.md#the-offered-record)：375 处使用计算长度的 `memcmp` 调用尚未追踪，它们均不在 pml、交换或盒子代码中。
+- [神秘礼物](swsh_gift.md#what-the-menu-refuses)：实机是否像模拟运行的《盾》一样，将种类不在游戏中的类型 1 礼物接收为名为“Egg”的坏蛋，以及该蛋孵化或交换时的行为。

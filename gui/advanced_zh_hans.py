@@ -2176,3 +2176,10 @@ HELP.update({
 HELP.update({'the LDN participant limit; a Tera Raid advertises 4': 'LDN 参与人数上限；太晶团体战广播为 4 人。', 'a standard or a black (six-star) crystal': '普通结晶或黑色结晶（6 星）。', 'join the Tera Raid lobby a console hosts and bring this party record, legal per PKHeX; our player readies, answers the start and leaves when the battle begins, its Pokemon fighting on for the console': '加入游戏机主持的太晶团体战，携带此队伍记录，由 PKHeX 检查合法性。我方玩家准备就绪并回应开始消息，战斗开始后离开，宝可梦留下协助游戏机。', 'the party record our player brings to the raid, legal per PKHeX; with --raid-seed': '我方出战宝可梦的队伍记录，由 PKHeX 检查合法性；配合 --raid-seed 使用。', "the story stage, which sets a standard crystal's star odds": '剧情阶段，决定普通结晶出现各星级团体战的概率。', 'seconds in the raid lobby before our player readies': '我方玩家在团体战大厅等待多少秒后准备就绪。', "a reward row in place of the seed's, in order; up to 45": '按顺序替换种子默认奖励的奖励行，最多 45 项。', 'host a Tera Raid: the raid seed, eight hex digits; the boss, its Tera type and the rewards follow from it and the four --raid-* context flags': '创建太晶团体战：输入八位十六进制种子，种子及四个 --raid-* 上下文参数共同决定首领、太晶属性和奖励。', 'seconds between the record packets; a retail raid host spreads its identity over about 0.13 s': '记录数据包之间的间隔秒数；实机团体战主机约用 0.13 秒发送身份数据。', 'join only a network of this LDN scene: 4 a Link Trade, 7 a Tera Raid': '只加入指定 LDN 场景的网络：4 为连接交换，7 为太晶团体战。', 'the LDN scene: 4 for a Link Trade, 7 for a Tera Raid': 'LDN 场景：4 为连接交换，7 为太晶团体战。'})
 
 OPTION_HELP.update({'--raid-map': '团体战所在地区：帕底亚、北上乡或蓝莓学园。', '--raid-version': '团体战使用的游戏版本：朱或紫。'})
+
+HELP.update({
+    'join an emulated console hosting over ldn_mitm on the LAN; no radio, no root, no keys. Each of --scans waits --dwell seconds for an answer':
+        '通过局域网的 ldn_mitm 加入模拟游戏机主持的会话；无需无线开发板、root 或密钥。--scans 的每次扫描等待 --dwell 秒获取回应。',
+    '--ip-join: our own address on that LAN': '--ip-join：本机在该局域网中的地址。',
+    '--ip-join: the address a scan leaves from; default --our-ip': '--ip-join：扫描请求的源地址，默认使用 --our-ip。',
+})

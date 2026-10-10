@@ -820,6 +820,16 @@ The registration `0x1024d5c` (slot `0x40f2098`) binds three fields to save block
 
 PKHeX's `BlankBlocks8a.cs` agrees on the sizes. In saves `0x96993D83` is type 11 and 0,
 `0xAFA034A5` a false bool, `0x24E0D195` a zero flag byte then the record most recently traded in.
+
+The byte at `+0x78` marks a received record not yet placed. `0x10251c8` sets it (`0x102520c`), copies
+the record to `+0x79` and, when given one, the record's post-trade form to `+0x1f1` (flag `+0x369`).
+Its one caller is executor vf `+0x58` at job state 6 (`0x26ddc64`), which passes no post-trade form
+when `0x2b5be48` returns the same species for both. `0x26dcc74` reads the byte (`0x102527c` at
+`0x26dccfc`); when set, it places the record (`0x10325a0`), registers it in the dex (`0x10342b0`),
+clears the byte (`0x1025268` at `0x26dcdc8`) and saves with request kind 3. The cancel clears it
+(`0x26dd70c`) only with `[executor+0xb0]` set. `0x26dcc74` runs at mode 5 step 10 (`0x110accc`),
+at mode 9 step 0 (`0x110bc88`) and from the box code (`0xc17ce0`, `0xc17e8c`). No other site
+stores to the byte.
 Every writer of the count (whole-text call index; no pointer slot holds a method):
 
 | site | caller | value | when |
@@ -1291,6 +1301,27 @@ station (`0x735b90`). The type-4 handler `0x738280` sets the job's done flag `[j
 With the type-4 answer the first type 3 comes within 0.15 s of the player confirming the quit
 (BOOT-marked, two departures) and the field is back on screen 3.70 s after the confirmation.
 
+After a quit the trade scene holds "Communicating. Please stand by..." (`msg_ui_box_p2ptrd_09`) for
+at least 3.0 s. The player's quit (`0x110bd50`, from the yes/no at `0x110b970`), the partner-gone
+message (`0x110c9bc`) and a session error (`0x110b504`) all enter mode 9 (`0x110b72c`, steps
+`[scene+0xb4]`, table `0x3979c98`). Step 0 runs `0x26dcc74`, which saves (`0x10457e4`, request kind
+3) only when `[[[0x4279560]+0x2b8]+0x78]`, the pending received record
+([The trade restriction](#the-trade-restriction)), is set. Step 1 starts a stopwatch on
+`nn::os::GetSystemTick` at `[scene+0x278]`, starts the leave (`0x26be890`) and cancels the trade
+job (`0x26d9e90`). Step 2 waits until 3.0 s have passed (`fmov d1,#3.0` at `0x110b7d8`), the leave
+sequence is done (`0x26bdc94`) and the job is gone (`0x26d9cf0`), then closes the message; step 3
+returns true once it has closed. A leave answered at once (0.05 s) and one answered by no host
+(2.0 s) both end inside the 3.0 s, so the host's answer does not move the field. One retail departure
+with the type-4 answer measured 3.77 s from the console's type 3 to the field.
+An emulated Arceus 1.1.1 hosting its own search, quitting with one station seated, reached step 1
+(`0x110b78c`) and passed step 2 (`0x110b81c`) 4.33 s later, 0.43 s after its last packet: the host
+migration it hands the station (type 7) outlasts the 3.0 s floor. Step 3 (`0x110b80c`) followed
+0.03 s later and the scene's destructor (`0x110bec0`) 0.33 s after step 2.
+An emulated Arceus 1.1.1 seated as the station of `bin/pla_host.py`, quitting from the box, reached
+step 1 and sent its type 3 within 0.07 s (answered at once), passed step 2 3.03 s after step 1, step 3
+0.03 s later and the destructor 0.33 s after step 2: with the leave done inside the floor, step 2
+waits out the 3.0 s alone.
+
 No timer inside Pia precedes the first type 3 ([pia.md](pia.md), Leaving a session). The only
 caller of `Session::LeaveAsync` is the game's leave request, update `0x2ca0a10` (vtable `0x4198ef8`,
 state `[req+0x88]`, jump table `0x3985448`): its first update calls `LeaveAsync` (`0x2ca0ac0`)
@@ -1321,4 +1352,6 @@ console leaves.
 
 ## Unresolved
 
-- What the console does in the 3.6 s between leaving the network and showing the field.
+- What fills the 0.4 s between the destructor (3.36 s after step 1 on an emulated station) and the
+  field on screen (3.77 s after the type 3 on retail); the emulator gives no field marker.
+- Which flows of the box code call `0x26dcc74` (`0xc17ce0`, `0xc17e8c`).

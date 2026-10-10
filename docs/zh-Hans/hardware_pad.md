@@ -84,7 +84,7 @@ macOS 上使用 bleak 无响应写入时，CoreBluetooth 队列已满会丢弃�
 
 ## 串口端
 
-经典 ESP32 保持连接到电脑的 USB 接口，UART0 以 921600 波特率双向传输帧（`firmware/pad/main/uart_link.c`、`pokeldn/pad/serial_link.py`），关闭控制台输出。
+经典 ESP32 保持连接到电脑的 USB 接口，UART0 以 921600 波特率双向传输帧（`firmware/pad/main/uart_link.c`、`pokeldn/pad/serial_link.py`），关闭控制台输出。关闭控制台后，没有代码把 UART0 路由到 GPIO1 和 GPIO3，因此固件自行设置引脚；否则开发板不会回应。
 
     A5 5A | length u16 (type and payload) | type u8 | payload | sum of type and payload mod 256
 
@@ -96,11 +96,22 @@ macOS 上使用 bleak 无响应写入时，CoreBluetooth 队列已满会丢弃�
 | `0x81` | 发往电脑 | 结果 i8：0 成功，-1 长度错误，-2 拒绝 |
 | `0x82` | 发往电脑 | 状态记录；mounted 表示 Switch 已设置玩家指示灯 |
 
-电脑打开端口时将 DTR 和 RTS 置低。服务先尝试除 S3 原生 USB 之外的各 USB 串口，再扫描蓝牙 LE。
+电脑打开端口时将 DTR 和 RTS 置低。但在 macOS 上，DevKit 的 CP2102 仍会在打开端口时重启开发板，启动期间的请求会丢失，因此电脑会在最多 3 秒内重复发送状态请求。服务先尝试除 S3 原生 USB 之外的 USB 串口，再扫描蓝牙 LE。应由一个进程持续持有端口：每次重新打开都会重启开发板并断开蓝牙连接。
 
 ## 经典蓝牙端
 
-`firmware/pad/main/bt_esp32.c` 注册 Bluedroid HID 设备：170 字节 Pro 手柄报告描述符、服务“Wireless Gamepad”、提供者“Nintendo”、子类 0x08、设备类别 0x002508、名称“Pro Controller”，采用无输入无输出的 SSP，关闭调制解调器睡眠。它按 ID 回复 0x01 子命令：0x02 设备信息（固件 4.00、类型 0x03、蓝牙地址）、0x10 SPI 读取、0x03 报告模式、0x04 触发器时间、0x21 MCU 配置，其余回复普通 ACK；0x30（玩家指示灯）表示手柄已被接收。Switch 请求完整报告后，每 15 毫秒发送 0x30；此前为 100 毫秒，等待回复时暂停报告流。
+`firmware/pad/main/bt_esp32.c` 注册 Bluedroid HID 设备：170 字节 Pro 手柄报告描述符、服务“Wireless Gamepad”、提供者“Nintendo”、子类 0x08、设备类别 0x002508、名称“Pro Controller”，采用无输入无输出的 SSP，关闭调制解调器睡眠。它按 ID 回复 0x01 子命令：0x02 设备信息（固件 4.00、类型 0x03、蓝牙地址）、0x10 SPI 读取、0x03 报告模式、0x04 触发器时间、0x21 MCU 配置，其余回复普通 ACK；0x30（玩家指示灯）表示手柄已被接收。回复优先于任何 0x30 报告发送。
+
+蓝牙连接建立后，按键或摇杆变化时立即发送 0x30 报告，否则每 100 毫秒发送一次；不发送报告时，Switch Lite 虽已连接却不会启动握手。连接建立后等待 1 秒，转入 sniff 模式后等待 250 毫秒，发送因拥塞（原因 8）被拒绝后等待 45 毫秒。这些值来自 friendmaker 的 Switch Lite 配置（`classic_bt_controller_transport.cpp`、`SWITCH_LITE`）。
+
+| 0x30 发送节奏 | 实机 Switch Lite |
+|---|---|
+| 0x03 模式切换后每 15 毫秒发送 | 握手完成至玩家指示灯，随后 Bluedroid 切换 sniff 模式，发送因拥塞失败；指示灯亮后 2 到 20 秒 Switch 断开（HCI 0x13），没有按键到达画面 |
+| 变化时发送，否则每 100 毫秒，使用上述等待 | 连接保持稳定，501 次发送中 0 次失败；按键可移动“更改握法／顺序”和“手柄”菜单的光标 |
+
+Switch 的握手顺序：0x02、0x08、0x6000 和 0x6050 处的 0x10、0x03（0x30）、0x04、0x6080、0x6098、0x8010、0x603D、0x6020 处的 0x10、0x40、0x30（0）、0x48、0x21、0x30（玩家 1）。
+
+已配对开发板启动时会重新连接 Switch。刷写合并镜像会覆盖 NVS 分区及配对记录，因此需从“更改握法／顺序”重新配对。
 
 `pro_report.c` 将共用报告映射到 Pro 手柄的字节布局（dekuNukem 的 `bluetooth_hid_notes.md`）：摇杆居中为 0x800，两个方向的幅度均为 0x700，与 0x603D 返回的出厂校准一致；序列号和用户校准返回空白闪存值（0xFF）。`tests/test_pad_pro.py` 在电脑端编译并检查全部按键位和校准。
 
@@ -171,5 +182,5 @@ TinyUSB 来自组件管理器（`espressif/esp_tinyusb` 2.4.0）。发布构建�
 
 ## 尚未验证
 
-- 零售版 Switch 是否能够与经典 ESP32 固件配对；目前只完成构建和离线测试。源码依据和已报告问题见 nxbt、joycontrol 和 friendmaker。
+- Switch 2 是否与经典 ESP32 固件配对；目前只测量了 Switch Lite。
 - Switch 2 是否同样接受 HORI ID；目前只在 Switch Lite 上测量。

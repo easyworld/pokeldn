@@ -157,6 +157,8 @@ Pia本地协议0x24，如BDSP（`pokeldn.ldn.local_protocol`）：版本1，类�
 
 游戏下面的每一层都是双向的（[Pia层](pia.md)）：本地协议0x24，站握手0x14，网状连接0x18，RTT 0x58，可靠的Windows 0x7C和0x80。
 
+加入端的 0x14 连接响应必须使用《剑》发送的 840 字节形式（`host4.build_host_response`：0x11 的账户 ID、0x88 的玩家名称、0xB1 的尾部、0xBC 的令牌）。模拟运行的《盾》1.3.2 主机接受了 56 字节响应（`[0x37]` 为 1，其后为零），将站点加入网状网络，却不发送游戏消息；使用 840 字节形式后，在加入响应后 0.03 秒发送首个 ping，以加入端名称打开交换盒子并完成交换。实机《剑》使用 17 字节响应也完成交换，其 0x11 之后的字段来自残留缓冲区字节（[Pia 层](pia.md#what-a-connection-response-must-satisfy-to-be-read)）。`bin/swsh_connect.py --respond` 发送 840 字节形式。
+
 单独放置时，游戏机会重复 `61 00 00 00 0a 00`，一个 ping（大约每秒 4 次）； 0x80 每秒请求一次 ack id 1，0x7C 保持沉默。 `bin/swsh_connect.py --send-data HEX
 --send-protocol 0x7c` 发送应用程序数据（`reliable4.build_data_message`，与游戏机自己的字节精确；五个静默接收检查：[版本 4](pia.md#version-4)）。通过信号：0x80 ack id 移1； 0x7C 完全确认。
 ## ping 握手
