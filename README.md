@@ -387,7 +387,8 @@ Raid Battle, Link Code 4970): the seed and four context flags choose the boss, `
 ITEM:QUANTITY` replaces its rewards, and `--raid-pokemon` is the Pokémon pokeldn's player brings.
 `--raid-event FOLDER` draws the boss and rewards from a Poké Portal News delivery instead, an event
 of Project Pokemon's [EventsGallery](https://github.com/projectpokemon/EventsGallery), which the app
-downloads and updates on request.
+downloads and updates on request. `--raid-players N` lets up to three consoles join one raid; it
+starts once N consoles are in the lobby and each has pressed Ready, or when the lobby timer runs out.
 `bin/sv_join.py --raid-pokemon FILE` joins a raid the console hosts. In both, pokeldn's player
 leaves as the battle starts and its Pokémon stays to fight beside the console's. The app's two
 Tera Raid tools carry the flags; see [Tera Raids](docs/sv_raid.md).
@@ -436,7 +437,8 @@ Contributors to this repository (GitHub does not list contributors on a fork):
 - [ismailhasannnnnn](https://github.com/ismailhasannnnnn): Scarlet/Violet Tera Raid hosting and joining
 - [easyworld](https://github.com/easyworld): ESP32 serial reconnects after a high-baud session
 - [capito27](https://github.com/capito27): Scarlet/Violet event Tera Raids, the raid finder's reward
-  filter and its full seed search
+  filter, its full seed search, its ranking by rewards and its size mark filter
+- [elsardine6k7](https://github.com/elsardine6k7): friendship in the Pokemon builder and Showdown sets
 
 - [kinnay](https://github.com/kinnay): the [LDN library](https://github.com/kinnay/LDN) this builds on,
   and the [NintendoClients wiki](https://github.com/kinnay/NintendoClients/wiki)
@@ -444,9 +446,10 @@ Contributors to this repository (GitHub does not list contributors on a fork):
   the Switch port
 - [GB-Link Team](https://github.com/GB-Link/GB-Link-Switch-LDN): the custom FireRed/LeafGreen Wonder
   Cards in `vendor/gblink-cards/` (GPL-3.0)
-- [xCyrusBR](https://github.com/xCyrusBR): [TeraLoop-Bridge](https://github.com/xCyrusBR/TeraLoop-Bridge)
-  and [SV-Past-Tera-Raid](https://github.com/xCyrusBR/SV-Past-Tera-Raid), Scarlet/Violet Tera Raid
-  work
+- [xCyrusBR](https://github.com/xCyrusBR): [TeraLoop-Bridge](https://github.com/xCyrusBR/TeraLoop-Bridge),
+  [SV-Past-Tera-Raid](https://github.com/xCyrusBR/SV-Past-Tera-Raid) and
+  [pokeldn-TeraLoop-](https://github.com/xCyrusBR/pokeldn-TeraLoop-), Scarlet/Violet Tera Raid
+  work, including the raid host waiting for the console's Ready
 - [Project Pokemon](https://github.com/projectpokemon): the [EventsGallery](https://github.com/projectpokemon/EventsGallery)
   of Scarlet/Violet raid event deliveries the app downloads, with pkNX's text of each
 

@@ -240,14 +240,112 @@ def test_the_search_can_stop_at_its_first_match(monkeypatch, chunk, filters):
     assert not offset or not raid_search.search(0xFFFFF000, offset, [context], **filters)
 
 
+@pytest.mark.parametrize("filters", [
+    {}, {"objective": "hardest"}, {"one_per_species": True}, {"one_per_species": True, "objective": "hardest"},
+    {"ivs": ((0, 31), (0, 31), (0, 5), (0, 31), (0, 31), (0, 31)), "objective": "physical"}])
+def test_the_helper_s_requests_turn_away_seeds_that_cannot_beat_those_kept(monkeypatch, filters):
+    """A request after the first passes the ranks kept so far (each species' with one per species),
+    and the helper skips a seed that cannot beat them before its boss: the search is still Python's."""
+    monkeypatch.setattr(raid_scan, "CHUNK", 500)
+    monkeypatch.setattr(raid_scan, "MAX_CHUNK", 500)
+    filters = {"objective": "overall", **filters}
+    scope = raid_search.contexts("scarlet", "paldea", "6star", "any")
+    compiled, python = searched_both_ways(monkeypatch, 0xFFFFF800, 4000, scope, filters.pop("objective"), **filters)
+    assert compiled == python and compiled
+
+
+@pytest.mark.parametrize("size_mark, seeds", [
+    ("either", {0x10002082, 0x10006545, 0x1000749D, 0x1000908D}), ("mini", {0x10002082, 0x10006545}),
+    ("jumbo", {0x1000749D, 0x1000908D})])
+def test_the_helper_s_scan_draws_the_scale_as_python_does(monkeypatch, size_mark, seeds):
+    """A boss's scale is drawn after its height and weight, two draws each: these seeds hold two of
+    scale 0, for the Mini mark, and two of 255, for the Jumbo mark."""
+    scope = raid_search.contexts("scarlet", "paldea", "5star", "standard")
+    compiled, python = searched_both_ways(monkeypatch, 0x10002000, 0x7400, scope, size_mark=size_mark, limit=10)
+    assert compiled == python and {seed for seed, *_ in compiled} == seeds
+    with pytest.raises(ValueError, match="no size mark"):
+        raid_search.search(0, 10, scope, size_mark="huge")
+
+
+HERBA, SWEET, PATCH, CAP = 1907, 1904, 1606, 795      # Bitter and Sweet Herba Mystica, Ability Patch, Bottle Cap
+
+
+def test_most_desired_rewards_ranks_the_first_wanted_first():
+    """A herba over its least and no patch over beat no herba over and three patches: each total is a
+    digit, its place among the item's totals from the least, the first wanted the most significant."""
+    black = raid_search.contexts("scarlet", "paldea", "6star", "black")
+    ranked = raid_search.ranked_rewards(black, {HERBA: 2, PATCH: 2})
+    assert ranked == [(HERBA, tuple(range(2, 12))), (PATCH, tuple(range(2, 12)))]
+    score = lambda herba, patches: raid_search.reward_score([(HERBA, herba), (PATCH, patches), (CAP, 3)], ranked)
+    assert score(3, 2) > score(2, 5) > score(2, 2) == 0
+    assert raid_search.reward_score([(HERBA, 1), (HERBA, 2), (PATCH, 2)], ranked) == score(3, 2)
+
+
+def test_most_desired_rewards_ranks_by_as_many_as_one_score_holds():
+    """A black crystal's raids give 1 to 11 of a herba, a patch or caps, and of a material 8 to 30 by
+    twos: 11^4 * 12^4 fits under the score's limit and a fifth material does not, so Mankey Fur and
+    the items after it only want their least; without wanted rewards there is nothing to rank by."""
+    black = raid_search.contexts("scarlet", "paldea", "6star", "black")
+    wanted = dict.fromkeys([HERBA, SWEET, PATCH, CAP, 2159, 2158, 2157, 2156, 1960, 1129], 1)
+    ranked = raid_search.ranked_rewards(black, wanted)
+    materials = tuple(range(8, 31, 2))
+    assert ranked == [(HERBA, tuple(range(1, 12))), (SWEET, tuple(range(1, 12))), (PATCH, tuple(range(1, 12))),
+                      (CAP, tuple(range(1, 12))), (2159, materials), (2158, materials), (2157, materials),
+                      (2156, materials)]
+    assert 11 ** 4 * 12 ** 4 <= raid_search.SCORE_LIMIT < 11 ** 4 * 12 ** 5
+    totals = lambda fur: [(HERBA, 2), (SWEET, 1), (PATCH, 1), (CAP, 1), (2159, fur), (2158, 9)]
+    score = lambda fur: raid_search.reward_score(totals(fur), ranked)
+    assert score(10) > score(9) == score(8) > 0         # 9 is no total: 8's place, and 9 of 2158 too
+    with pytest.raises(ValueError, match="want at least one"):
+        raid_search.search(0, 10, black, "rewards")
+
+
+@pytest.mark.parametrize("scope, rewards, filters", [
+    (raid_search.contexts("scarlet", "paldea", "6star", "black"), {HERBA: 1, PATCH: 1}, {}),
+    (raid_search.contexts("scarlet", "paldea", "6star", "black"), {HERBA: 1, PATCH: 1}, {"one_per_species": True}),
+    (raid_search.contexts("any", "paldea", "6star", "black"), {CAP: 2, HERBA: 1}, {"shiny": False}),
+    (raid_search.contexts("violet", "kitakami", "6star", "any"), {1128: 1}, {"tera_type": 3}),
+    (raid_search.contexts("scarlet", "paldea", "5star", "standard"), {CAP: 1, 1862: 1}, {"one_per_species": True})])
+def test_the_helper_s_scan_ranks_by_rewards_as_python_does(monkeypatch, scope, rewards, filters):
+    """The rewards drawn once for every item, the scan turning away a seed that cannot beat the bar
+    before its boss, and a row that cannot give the least wanted: the search is still Python's."""
+    monkeypatch.setattr(raid_scan, "CHUNK", 2000)
+    monkeypatch.setattr(raid_scan, "MAX_CHUNK", 2000)
+    compiled, python = searched_both_ways(monkeypatch, 0xFFFFF000, 12000 // len(scope), scope, "rewards",
+                                          rewards=rewards, **filters)
+    assert compiled == python and compiled
+    scores = [score for _, _, _, score, _, _ in compiled]
+    assert scores == sorted(scores, reverse=True) or filters.get("one_per_species")
+
+
+def test_the_helper_s_scan_draws_any_tera_type_under_rule_0(monkeypatch):
+    """Breloom's five-star raid, Tera rule 0: any of 18, as raid_encounter.tera_type, so a Water
+    Breloom (neither Grass nor Fighting) and its Water shards are found by both scans."""
+    scope = raid_search.contexts("scarlet", "paldea", "6star", "standard")
+    breloom = next(r for r, _ in raid_search._rows(scope[0]) if r["species"] == 286)
+    assert breloom["tera"] == 0 and raid_search._gems(breloom) == set(range(18))
+    compiled, python = searched_both_ways(monkeypatch, 0, 40_000, scope, "hardest", species_id=286, tera_type=10,
+                                          rewards={raid_encounter.TERA_SHARDS[10]: 1})
+    assert compiled == python and compiled
+
+
 def test_a_stopped_helper_search_keeps_what_it_found(monkeypatch):
     if not raid_scan.available():
         pytest.skip("needs the PKHeX helper")
     monkeypatch.setattr(raid_scan, "CHUNK", 1000)
+    monkeypatch.setattr(raid_scan, "MAX_CHUNK", 1000)
     seen = []
     found = raid_search.search(0, 10_000, raid_search.contexts("violet", "paldea", "6star", "standard"),
                                progress=lambda done, total: seen.append(done), cancelled=lambda: len(seen) >= 3)
     assert seen[:3] == [1000, 2000, 3000] and len(found) == 12 and max(f.seed for f in found) < 3000
+
+
+def test_with_the_helper_a_search_covers_every_seed_of_every_context(monkeypatch):
+    """No cap over the contexts: the finder's hundred million seeds, or every seed, in each of the 42."""
+    monkeypatch.setattr(raid_search, "FAST", True)
+    assert raid_search.most_seeds(1) == raid_search.most_seeds(42) == 1 << 32
+    with pytest.raises(ValueError, match="1 to 4,294,967,296 seeds in each context"):
+        raid_search.search(0, (1 << 32) + 1, raid_search.contexts("violet", "paldea", "6star", "standard"))
 
 
 def test_without_the_helper_the_search_scans_in_python():
@@ -256,7 +354,10 @@ def test_without_the_helper_the_search_scans_in_python():
         "from pokeldn import pokemon", "pokemon._command = lambda: (_ for _ in ()).throw(pokemon.BuilderError())",
         "from pokeldn.sv import raid_search",
         "assert not raid_search.FAST",
-        "assert raid_search.MAX_WORK == 1_000_000 and raid_search.DEFAULT_COUNT == 100_000",
+        "assert raid_search.DEFAULT_COUNT == 100_000",
+        "assert raid_search.most_seeds(1) == 1_000_000 and raid_search.most_seeds(42) == 23_809",
+        "import pytest",
+        "pytest.raises(ValueError, raid_search.search, 0, 250_001, raid_search.contexts('violet', 'paldea'))",
         "found = raid_search.search(0, 2000, raid_search.contexts('violet', 'paldea', '6star', 'standard'))",
         "assert len(found) == 12"))
     subprocess.run([sys.executable, "-c", code], cwd=ROOT, check=True, timeout=120)
@@ -295,20 +396,27 @@ def party(species):
 
 class RaidGuestConsole:
     """A retail guest as captured against a raid host: it acknowledges the station list, joins port 2
-    after the host's type 6, shows its Pokemon after the type 9s, answers the start with 0x0d, loads
+    after the host's type 6, shows its Pokemon after the type 9s and its Ready 1.9 to 3.6 s later
+    when its player presses it, answers the start with 0x0d, loads
     the bootstrap, and marks the battle; handed the network as a retail joiner was (docs/sv.md,
     Leaving), it answers the type 7 with a type 8 and the is-migrating status, then leaves at the
     first NetStartHostMigration."""
 
-    def __init__(self, clock):
+    def __init__(self, clock, ready_after=2.4, n=1, species=658, join_at=0.2):
         self.clock, self.keys = clock, sv.session_keys(SSID)
+        self.ready_after = ready_after          # its player's Ready after its Pokemon, or never
+        self.ip = JOIN_IP if n == 1 else f"169.254.10.{n + 1}"
+        self.mac = JOIN_MAC if n == 1 else JOIN_MAC[:5] + bytes([n + 1])
+        self.cid = CONSOLE_CID if n == 1 else CONSOLE_CID[:7] + bytes([n])
+        self.var = CONSOLE_VAR + n - 1
         self.later, self.queue, self.seen, self.seqs = [], [], [], {}
         self.done = set()
         self.left = False
-        self.pokemon = party(658)
-        self.at(0.2, pia6.build_session_join(CONSOLE_CID, CONSOLE_VAR, JOIN_IP,
-                                             pia_connect.ldn_constant_id(HOST_MAC), 1, "Player",
-                                             bytes(4)), 0x98)
+        self.pokemon = party(species)
+        self.later_join = clock.now + join_at - 0.2      # on the network before its join
+        self.at(join_at, pia6.build_session_join(self.cid, self.var, self.ip,
+                                                 pia_connect.ldn_constant_id(HOST_MAC), 1, "Player",
+                                                 bytes(4)), 0x98)
 
     def at(self, delay, body, protocol, port=0, flags=0):
         self.later.append((self.clock.now + delay, body, protocol, port, flags))
@@ -328,13 +436,17 @@ class RaidGuestConsole:
         return True
 
     def received(self, packet, dst):
-        _, plain, _ = pia6.parse_packet(self.keys.session_key, HOST_IP, self.keys.network_id, packet)
+        header, plain, ids = pia6.parse_packet(self.keys.session_key, HOST_IP, self.keys.network_id,
+                                               packet)
+        if dst not in (self.ip, BROADCAST) or (ids and self.var not in ids):
+            return                              # another console's
         for msg in pia6.parse_messages(plain):
             p, row = bytes(msg.payload), dict(t=self.clock.now, dst=dst, protocol=msg.protocol,
                                               port=msg.port, flags=msg.message_flags)
             if msg.protocol in (0x7C, 0x80, 0x81) and len(p) >= reliable5.HEADER_SIZE:
                 rm = reliable5.parse(p)
-                row.update(seq=rm["sequence_id"], rflags=rm["flags"], lowest=rm["lowest_pending"])
+                row.update(seq=rm["sequence_id"], rflags=rm["flags"], lowest=rm["lowest_pending"],
+                           bitmap=rm["bitmap"])
                 if rm["flags"] & reliable5.FLAG_APPLICATION_DATA:
                     body = rm["payload"]
                     if rm["flags"] & reliable5.FLAG_ZLIB:
@@ -353,13 +465,13 @@ class RaidGuestConsole:
             self.at(0.02, bytes([1, 0x51, 0, 0]) + p[4:8], 0x2C, 0, 0x11)
         if protocol == 0x98 and p[0] == 5:
             update = pia_connect.parse_session_update_v11(p, route_bytes=0)
-            self.at(0.03, pia_connect.build_session_update_ack_v11(CONSOLE_CID, update["sequence_id"]), 0x98)
+            self.at(0.03, pia_connect.build_session_update_ack_v11(self.cid, update["sequence_id"]), 0x98)
         if protocol == 0x58 and p[0] == 0:
             self.at(0.01, streams.build_rtt_response(p, 1), 0x58)
         migration = pia_connect.parse_session_migration_v11(p) if protocol == 0x98 else None
-        if migration and migration["target_var"] == CONSOLE_VAR:
+        if migration and migration["target_var"] == self.var:
             self.at(0.0, pia_connect.build_session_migration_ack_v11(
-                CONSOLE_CID, CONSOLE_VAR, migration["host_constant_id"], migration["host_var"]), 0x98)
+                self.cid, self.var, migration["host_constant_id"], migration["host_var"]), 0x98)
         if protocol == 0x2C and p[:2] == bytes([1, 0x40]):
             self.left = True
 
@@ -371,30 +483,43 @@ class RaidGuestConsole:
         if (protocol, port) == (0x7C, 2) and body[:1] == b"\x06" and self.once("join"):
             self.send_data(0.3, 0x7C, 2, port2.build_join(0))
         if (protocol, port) == (0x80, 2) and body[:1] == b"\x09" and self.once("lobby"):
+            self.lobby_at = self.clock.now
             self.send_data(0.5, 0x80, 0, raid.state(1, raid.STATE_IDLE), compressed=True)
             self.send_data(0.52, 0x80, 0, raid.pokemon(2, self.pokemon))
+            if self.ready_after is not None:
+                self.send_data(0.52 + self.ready_after, 0x80, 0, raid.state(3, raid.STATE_READY),
+                               compressed=True)
+        if ((protocol, port) == (0x80, 2) and body[:1] == b"\x09" and "lobby" in self.done
+                and body[-8:] != port2.station_id(self.cid).to_bytes(8, "little") and body[4:5] != b"\x00"):
+            # A member joined: the Lua lobby answers it with our Pokemon and our state (0.15829).
+            self.send_data(0.1, 0x80, 0, raid.pokemon(5, self.pokemon))
         if (protocol, port) != (0x80, 0):
             return
         if raid.state_of(body) == raid.STATE_START and self.once("start"):
-            self.send_data(0.4, 0x80, 0, raid.state(3, raid.STATE_STARTED), compressed=True)
-        if rm["sequence_id"] == 12 and self.once("load"):
+            self.send_data(0.4, 0x80, 0, raid.state(4, raid.STATE_STARTED), compressed=True)
+        if rm["flags"] == raid.FRAGMENT_END_ZLIB and self.once("load"):
             self.send_data(1.0, 0x80, 0, raid.message(raid.KEY_LOAD, 0x6E, 0, 5, bytes(4)))
             self.send_data(3.0, 0x80, 0, raid.message(raid.KEY_LOAD, 0x73, 0, 6, bytes(4)))
         if body[:4] == raid.BATTLE and self.once("battle"):
             self.send_data(2.0, 0x80, 0, raid.message(raid.KEY_BATTLE, 0x93, 1, 7, bytes(4)))
 
     def tick(self):
-        self.clock.now += 0.01
         for item in [x for x in self.later if x[0] <= self.clock.now]:
             self.later.remove(item)
             _, body, protocol, port, flags = item
-            self.queue.append(sv_join.build_out(self.keys, JOIN_IP, body, 1, protocol=protocol, port=port,
-                                                flags=flags, src_var=CONSOLE_VAR))
+            # A retail guest's footer names the host's variable id (0xc6).
+            self.queue.append(sv_join.build_out(self.keys, self.ip, body, sv_host.PIA_HOST_VAR,
+                                                protocol=protocol, port=port, flags=flags,
+                                                src_var=self.var))
 
 
-def run_raid_host(monkeypatch, tmp_path, rewards=(), extra=()):
+def run_raid_host(monkeypatch, tmp_path, rewards=(), extra=(), ready_after=2.4, seconds=60,
+                  consoles=None):
+    """-> the scripted console (or the list given in `consoles`, made with the clock) and the clock,
+    after the host has run against them."""
     clock = Clock()
-    console = RaidGuestConsole(clock)
+    made = [RaidGuestConsole(clock, ready_after)] if consoles is None else consoles(clock)
+    console = made[0]
 
     class Transport:
         ssid, our_ip, our_mac, broadcast = SSID, HOST_IP, HOST_MAC, BROADCAST
@@ -402,7 +527,7 @@ def run_raid_host(monkeypatch, tmp_path, rewards=(), extra=()):
 
         @property
         def participants(self):
-            return [] if console.left else [(JOIN_MAC, JOIN_IP)]
+            return [(c.mac, c.ip) for c in made if not c.left and clock.now >= c.later_join]
 
         def __init__(self, **kwargs):
             pass
@@ -417,14 +542,21 @@ def run_raid_host(monkeypatch, tmp_path, rewards=(), extra=()):
             pass
 
         def send(self, packet, dst):
-            console.received(packet, dst)
+            for c in made:
+                if not c.left:
+                    c.received(packet, dst)
 
         def wait_readable(self, _):
-            console.tick()
+            clock.now += 0.01
+            for c in made:
+                c.tick()
 
         def recv(self):
-            queued, console.queue = console.queue, []
-            return [(packet, JOIN_IP) for packet in queued]
+            out = []
+            for c in made:
+                queued, c.queue = c.queue, []
+                out += [(packet, c.ip) for packet in queued]
+            return out
 
     ours = tmp_path / "ours.pk9"
     ours.write_bytes(party(25))
@@ -439,8 +571,9 @@ def run_raid_host(monkeypatch, tmp_path, rewards=(), extra=()):
     args = build(tool, {"--raid-pokemon": {"file": str(ours)}, "--raid-seed": "000F34C3",
                         "--raid-reward": [{"item_id": str(i), "quantity": str(q)} for i, q in rewards]},
                  {}, Settings())
-    assert sv_host.main(args + ["--keys", str(tmp_path / "prod.keys"), "--seconds", "60", *extra]) == 0
-    return console, clock
+    assert sv_host.main(args + ["--keys", str(tmp_path / "prod.keys"), "--seconds", str(seconds),
+                                *extra]) == 0
+    return (console if consoles is None else made), clock
 
 
 # What the host's twenty raid messages start with, their reliable flags and lowest pending, as the
@@ -484,6 +617,86 @@ def test_a_console_fights_the_raid_we_host(monkeypatch, tmp_path):
     assert handed[0]["t"] - sent(20) == pytest.approx(raid.LINGER, abs=0.05)
     assert len(handed) == 1 and handed[0]["t"] < status[0]["t"] < start[0]["t"]
     assert start[0]["flags"] == 0x11 and clock.now - start[0]["t"] < 0.1
+
+
+def lobby_rows(console):
+    """-> the host's messages on 0x80 port 0 to `console`, first copy of each sequence, in order."""
+    first = {}
+    for row in console.seen:
+        if (row["protocol"], row["port"]) == (0x80, 0) and "data" in row:
+            first.setdefault(row["seq"], row)
+    return [first[seq] for seq in sorted(first)]
+
+
+def start_of(console):
+    return next(r for r in lobby_rows(console) if raid.state_of(r["data"]) == raid.STATE_START)
+
+
+def test_three_consoles_fight_one_raid(monkeypatch, tmp_path):
+    """`--raid-players 3`: each console takes the next seat, every station list names the four
+    stations, the start waits for the last console's Ready, the one bootstrap carries every
+    Pokemon in its seat, and the network goes to seat 1 while seats 2 and 3 draw the is-migrating
+    status and NetStartHostMigration. A fourth console's join goes unanswered."""
+    made, clock = run_raid_host(
+        monkeypatch, tmp_path, extra=["--raid-players", "3"], seconds=120,
+        consoles=lambda clock: [RaidGuestConsole(clock, 2.4, n, species, join_at)
+                                for n, species, join_at in ((1, 658, 0.2), (2, 6, 8.0), (3, 150, 15.0),
+                                                            (4, 1, 17.0))])
+    consoles, fourth = made[:3], made[3]
+    assert not [r for r in fourth.seen if r["protocol"] == 0x98]
+    readies = []
+    for n, console in enumerate(consoles, 1):
+        response = next(pia_connect.parse_session_join_response_v11(r["data"]) for r in console.seen
+                        if r["protocol"] == 0x98 and r["data"][0] == 2)
+        assert response["station_index"] == n
+        lists = [pia_connect.parse_session_update_v11(r["data"], route_bytes=0) for r in console.seen
+                 if r["protocol"] == 0x98 and r["data"][0] == 5]
+        assert [st["station_index"] for st in lists[-1]["stations"]] == [0, 1, 2, 3]
+        accepts = [r["data"] for r in console.seen if (r["protocol"], r["port"]) == (0x80, 2)
+                   and r.get("data", b"")[:1] == b"\x09"]
+        # Every member's code, ours 0, whatever the order the consoles joined in.
+        assert set(accepts) == {port2.build_accept(port2.station_id(cid), code=k) for k, cid in
+                                enumerate([pia_connect.ldn_constant_id(HOST_MAC)]
+                                          + [c.cid for c in consoles])}
+        sessions = [r["data"] for r in console.seen if (r["protocol"], r["port"]) == (0x7C, 2)
+                    and r.get("data", b"")[:1] == b"\x06"]
+        assert sessions[0] == port2.build_session(
+            port2.station_id(pia_connect.ldn_constant_id(HOST_MAC)),
+            members=[(port2.station_id(c.cid), k) for k, c in enumerate(consoles[:n - 1], 1)])
+        rows = lobby_rows(console)
+        assert all(r["bitmap"] == [1 << n] for r in rows)
+        timers = [struct.unpack_from("<I", r["data"], 34)[0] for r in rows
+                  if r["data"][:4] == raid.trade.build(raid.KEY_LOBBY, raid.KIND_COUNTDOWN, 1)]
+        assert timers == sorted(set(timers), reverse=True) and timers[0] <= raid.LOBBY_SECONDS
+        readies.append(console.lobby_at + 0.52 + 2.4)
+        plain = raid.payload_of(next(r["data"] for r in rows if r["data"][:4] == raid.trade.build(
+            raid.KEY_LOBBY, raid.KIND_BOOTSTRAP, 1)) + next(r["data"] for r in rows if "data" in r
+                                                             and r["rflags"] == raid.FRAGMENT_END_ZLIB))
+        assert [plain[k * gen9.SIZE_PARTY:(k + 1) * gen9.SIZE_PARTY] for k in range(4)] == [
+            party(25)] + [c.pokemon for c in consoles]
+        assert console.left
+    assert all(start_of(c)["t"] > max(readies) for c in consoles)
+    handed = [[r for r in c.seen if r["protocol"] == 0x98 and r["data"][0] == 7] for c in consoles]
+    assert handed[0] and not handed[1] and not handed[2]
+    for console in consoles[1:]:
+        status = [r for r in console.seen if r["protocol"] == 0x2C and r["data"][1] == 0x11
+                  and r["data"][29] == 1]
+        assert status and any(r["data"] == bytes.fromhex("01400000") for r in console.seen
+                              if r["protocol"] == 0x2C)
+
+
+@pytest.mark.parametrize("ready_after, players", [(None, 1), (2.4, 2)])
+def test_the_raid_starts_when_the_lobby_timer_runs_out(monkeypatch, tmp_path, ready_after, players):
+    """A console that never readies, or fewer consoles than `--raid-players`: the lobby timer counts
+    down a step a second and the raid starts when it reaches zero, then runs to its battle."""
+    console, clock = run_raid_host(monkeypatch, tmp_path, extra=["--raid-players", str(players)],
+                                   ready_after=ready_after, seconds=240)
+    rows = lobby_rows(console)
+    timers = [struct.unpack_from("<I", r["data"], 34)[0] for r in rows
+              if r["data"][:4] == raid.trade.build(raid.KEY_LOBBY, raid.KIND_COUNTDOWN, 1)]
+    assert timers == list(range(raid.LOBBY_SECONDS, -1, -1))
+    assert start_of(console)["t"] - rows[0]["t"] == pytest.approx(raid.LOBBY_SECONDS, abs=1.1)
+    assert rows[-1]["data"] == raid.HANDOFF[-1] and console.left
 
 
 @pytest.mark.parametrize("capture, extra, word, record, summary", [

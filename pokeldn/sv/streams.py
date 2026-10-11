@@ -26,7 +26,7 @@ ZLIB_HEADER = bytes.fromhex("484b")
 
 def open_payload(port):
     """-> the eleven bytes the INITIALIZED open on this port carries."""
-    if port in (0, 1):
+    if port < 4:
         return OPEN_PAYLOAD_LOW
     return bytes([0, port]) + bytes.fromhex("00000ff00800000000")
 
@@ -56,9 +56,10 @@ def ack_position(received, peer_lowest_pending=1):
 
 
 def build_ack(highest, our_next_seq, station_index, *, unknown0=0, stream_id=0,
-              entry_count=ACK_ENTRIES, destination_bits=3, masks=None):
+              entry_count=ACK_ENTRIES, destination_bits=3, masks=None, to=None):
     """The bulk ack in the retail shape: entry k acknowledges station k with one past `highest[k]`.
-    `entry_count` and `destination_bits` are sweep handles; retail sends 4 entries, 3 bits."""
+    `entry_count` and `destination_bits` are sweep handles; retail sends 4 entries, 3 bits. `to`
+    names the receiving station when there are more than two."""
     masks = masks or {}
     entries = [dict(stream_id=0, ack_id=highest.get(k, 0) + 1, field_0x50=highest.get(k, 0) + 1,
                     mask=masks.get(k, b"")) for k in range(entry_count)]
@@ -66,7 +67,8 @@ def build_ack(highest, our_next_seq, station_index, *, unknown0=0, stream_id=0,
     header = reliable5.build_header(0, reliable5.ACK_SEQUENCE, len(payload),
                                     lowest_pending=our_next_seq, stream_id=stream_id,
                                     destination_bits=destination_bits,
-                                    bitmap=[bitmap_for(station_index)] if destination_bits else ())
+                                    bitmap=([bitmap_for(station_index) if to is None else 1 << to]
+                                            if destination_bits else ()))
     return header + payload
 
 

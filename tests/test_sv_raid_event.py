@@ -314,7 +314,9 @@ def test_every_delivery_agrees_with_its_encounters_text():
 
 @pytest.mark.parametrize("event, filters", [
     (TYRANITAR, {}), (TYRANITAR, {"one_per_species": True}), (SPOTLIGHT, {"shiny": False}),
-    (MIGHTY, {"rewards": {1606: 2, 1127: 10}, "objective": "hardest"})])
+    (MIGHTY, {"rewards": {1606: 2, 1127: 10}, "objective": "hardest"}),
+    (MIGHTY, {"rewards": {1127: 10, 1606: 1}, "objective": "rewards"}),
+    (MIGHTY, {"rewards": {1127: 10}, "objective": "rewards", "one_per_species": True})])
 def test_the_helper_s_scan_finds_an_event_s_raids_as_python_does(monkeypatch, event, filters):
     if not raid_scan.available():
         pytest.skip("needs the PKHeX helper")
@@ -325,6 +327,53 @@ def test_the_helper_s_scan_finds_an_event_s_raids_as_python_does(monkeypatch, ev
         out.append([(f.seed, f.context["version"], f.context["group"], f.score, f.rewards)
                     for f in raid_search.search(0xFFFFFE00, 1200, scope, **filters)])
     assert out[0] == out[1] and out[0]
+
+
+# One boss for each scale rule: a band from 240, its own 0, its own 128, a band from 0, two draws.
+SIZES = raid_event.Event(20230101, "", tuple(
+    row(identifier=no, species=species, stars=5, scale_type=rule, scale=scale)
+    for no, species, rule, scale in ((1, 25, 5, 0), (2, 155, 6, 0), (3, 6, 6, 128), (4, 133, 1, 0), (5, 448, 0, 0))),
+    {"1": []}, {"1": []}, (1,) + (0,) * 9)
+
+
+@pytest.mark.parametrize("size_mark, species", [("either", {25, 155, 133}), ("mini", {155, 133}), ("jumbo", {25})])
+def test_the_helper_s_scan_follows_an_event_s_scale_rules(monkeypatch, size_mark, species):
+    """Scale 0 takes the Mini mark and 255 the Jumbo mark: Charizard's 128 takes neither and its seeds
+    are turned away with their encounter; the bands make the marks 1 in 16, two draws 1 in 16 512."""
+    if not raid_scan.available():
+        pytest.skip("needs the PKHeX helper")
+    scope = raid_search.contexts(event=SIZES)
+    out = []
+    for fast in (True, False):
+        monkeypatch.setattr(raid_search, "FAST", fast)
+        found = raid_search.search(0, 600, scope, size_mark=size_mark, one_per_species=True)
+        out.append([(f.seed, f.context["version"], f.score, f.boss["species"], f.boss["scale"]) for f in found])
+    assert out[0] == out[1]
+    assert {s for *_, s, _ in out[0]} == species
+    assert {scale for *_, scale in out[0]} <= set(raid_search.SIZE_MARKS[size_mark])
+
+
+def test_an_event_s_scale_rules_say_which_size_marks_its_bosses_can_take():
+    scope = raid_search.contexts(event=SIZES)
+    assert raid_search.size_marks(scope) == {"either", "mini", "jumbo"}
+    assert [raid_search.size_marks(scope, species_id=s) for s in (25, 155, 6, 133)] == [
+        {"either", "jumbo"}, {"either", "mini"}, set(), {"either", "mini"}]
+    assert raid_search.size_marks(raid_search.contexts("violet", "kitakami")) == {"either", "mini", "jumbo"}
+
+
+def test_the_helper_s_bounds_follow_the_filters():
+    """The helper keeps each row's bounds for the next request on the same tables: wanting rewards
+    with a Fire Tera type turns away the Water Squirtle's row, which a search without it must not
+    inherit."""
+    if not raid_scan.available():
+        pytest.skip("needs the PKHeX helper")
+    patch = {"1": [dict(category=0, item=1606, amount=1, probability=100, subject=0)]}
+    event = raid_event.Event(2, "", (row(species=4, stars=5, tera=11), row(species=7, stars=5, tera=12)),
+                             patch, {"1": []}, (1,) + (0,) * 9)
+    scope = raid_search.contexts(event=event)
+    fire = raid_search.search(0, 200, scope, tera_type=9, rewards={1606: 1}, one_per_species=True)
+    either = raid_search.search(0, 200, scope, rewards={1606: 1}, one_per_species=True)
+    assert [f.boss["species"] for f in fire] == [4] and {f.boss["species"] for f in either} == {4, 7}
 
 
 def test_the_rewards_listed_are_what_an_event_s_raids_can_give():

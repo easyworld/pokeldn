@@ -43,6 +43,54 @@ In raid mode the host differs from a trade host in what it addresses and when:
 The opening's 0x7C, 0x81 port 5 and 0x80 port 2 messages repeat every 0.25 s until acknowledged,
 and every ack the host sends declares the lowest unacknowledged sequence of the stream.
 
+### Several consoles
+
+`--raid-players N` (1 to 3, the app's "Consoles joining") seats up to three consoles in one lobby,
+each at the lowest free station index, 1 to 3. The host keeps one set of streams per console, as for
+a single one, with that console's index wherever a single console's raid has 1:
+
+| | the console at index *k* |
+|---|---|
+| join response | station index and join order *k* |
+| station list | every seated station, ours first; each new seat and each departure from the lobby sends the list to every seated console under the next sequence, resent until each one's type 6 |
+| Net 0x11 | our station, then the seated consoles by index, then the joiner |
+| destination bitmap | `1 << k` under three destination bits |
+| bulk ack | entry *k* |
+| opening | 0x81 ports *k* and 4 + *k*, the ports the console sends on |
+| port-2 type 6 | ours and the members already seated, in join order, with their codes and count |
+| port-2 type 9s | ours under code 0, each seated member's under its code, the console's last under code *k*; each seated member receives the console's |
+| bootstrap | its Pokemon in slot *k*; an empty slot for a free seat |
+
+A join that finds every seat taken, or comes after the start, is left unanswered, and a console with
+no free seat gets no Net 0x11. The host drops every packet whose header and footer do not name its
+own variable id, and every reliable message whose bitmap lacks station 0: consoles in one lobby
+address each other through the same broadcast.
+
+A port-2 slot keeps its members at slot `+0x170` as a u8 code and a u64 station id;
+`0x138d208` returns a station's code, 0xfd for a non-member. A retail host's type-3 handler
+`0x1981e94` takes the lowest code 0 to 7 that no member holds and no queued type 9 names
+(`0x279c9a0`), then broadcasts one type 9 per member with its own code and one for the joiner. The
+receiver `0x18b68fc` appends a `(code, id)` it has not listed, never changing a listed member's code;
+for its own id it raises a member-joined event for every other member, and the code becomes its
+own. The type 6 (`0x12fbf8c`, composer `0xe457cc`, to the joining station only) carries the members'
+ids at `+0xa0`, their codes at `+0xc0`, the count at `+0xc4` and the closed byte at `+0xc5`; its
+receiver `0x279b9c4` replays a type 9 for each member.
+
+The lobby's participants are the port-2 members: the Lua lobby (chunk `be21e654`, receiver
+`0.15829`) files every message under its sender's code, and under 253 a sender with no code. Each
+console sends its state 0x18 and its Pokemon to the others on entering the lobby, and a station
+receiving a 0x18 answers with its own Ready state and Pokemon; the consoles of one lobby exchange
+their Pokemon among themselves.
+
+The reliable header's receive check (`0x6f0410`..`0x6f0430`) tests the receiver's own bit,
+`index & 31` of word `index >> 5` (bit 0 station 0), for any destination count from 1 to 23. A
+retail sender writes three, the station capacity 4 (`0x44dfcb0`) less one (`0x6e71c4`), whatever
+the number of stations.
+
+The host hands the network to the lowest index still on it, as for one console; the other consoles
+draw the is-migrating Net 0x11 and NetStartHostMigration with no Session type 7. The run ends once
+every console has left the network or each handover has run out.
+
 A random player id of the form `10 00` and fourteen random bytes drew no type 6 from a retail
 console; the anonymous id `00000000000000010000000000000000` (`pia_connect.DEFAULT_PLAYER_ID`) seated
 it.
@@ -66,13 +114,17 @@ A raid message is a game message on 0x80 port 0: a u16 handler key, a kind byte,
 | key | kind | what |
 |---|---|---|
 | 0x3380 | 0x2c | the raid's descriptor: species (DevID), form, stars, Tera type, gender, the encounter's record number |
-| 0x3380 | 0x2d | a participant's state: 0x18 idle, 0x01 ready, 0x0c the host's start, 0x0d a guest's answer to it |
+| 0x3380 | 0x2d | a participant's state: 0x00 not ready, 0x01 ready, 0x0c the host's start, 0x0d a guest's answer to it, 0x18 entering the lobby, 0x1e the host refusing a late station (`0.30822`) |
 | 0x3380 | 0x2e | a participant's Pokemon, its encrypted 344-byte party record |
 | 0x3380 | 0x2f | the battle bootstrap |
 | 0x3380 | 0x30 | the lobby timer, in seconds left (0x91 downwards) |
 | 0x0132 | 0x6e, 0x73 | a console loading the battle, then loaded |
 | 0x3480 | 0x93 | the battle begins |
 | 0x007b | 0x13 | the battle-start messages a host sends after 0x3480 |
+
+A retail guest sends 0x18 and its Pokemon on entering the lobby and 0x01 when its player presses
+Ready: in seven retail raids four guests sent 0x01, 1.9 to 3.6 s after their Pokemon, and three sent
+none before the host's start at 5.39 s; all seven answered the start with 0x0d and fought.
 
 The header is message object `+0x40..+0x4f`. The receive path `0x18bec54` copies the id, the
 counter and the object id back into the object and compares none of them; it does not check the LZ4
@@ -126,8 +178,10 @@ announces them as two messages: the four, then the raid's two 0.79 s later. Port
 from the host: the type 7's session block under kind 5 and capacity 4, then a list of four slots
 with the host's station id in the first (`port2.build_session`).
 
-`pokeldn.sv.raid.RaidHost` releases the host's twenty messages in order, each at its time from the
-port-2 answer and after the console's previous step:
+`pokeldn.sv.raid.RaidHost` releases the host's messages to one console in order, each at its time
+from the port-2 answer and after the console's previous step; `pokeldn.sv.raid.RaidGroup` holds what
+the consoles of one lobby share. With one console that readies within 5 s the sequence numbers are a
+retail host's:
 
 | seq | message | released by |
 |---|---|---|
@@ -136,19 +190,35 @@ port-2 answer and after the console's previous step:
 | 4, 5, 6 | timer 0x91, 0x90, 0x8f | 0.73, 1.76, 2.75 s |
 | 7 | state 0x01 | 3.19 s |
 | 8, 9 | timer 0x8e, 0x8d | 3.76, 4.79 s |
-| 10 | state 0x0c, the start | 5.39 s |
+| | the timer, each time it drops | one step a second from 0.73 s after the first console's answer |
+| 10 | state 0x0c, the start | 5.39 s, once `--raid-players` consoles are seated and every one has sent 0x01, or once the timer has sent 0 |
 | | Net 0x50, property state 7 | the console's state 0x0d |
-| | Session station list, sequence 1 | the console's Net 0x51 |
+| | Session station list, the next sequence | the console's Net 0x51 |
 | 11, 12 | the bootstrap, two fragments | the console's type 6 for it |
 | 13 | loaded, `0x320173` | the console's 0x6e or 0x73 |
 | 14 | the battle begins, `0x803493` | the console's 0x73 |
 | 15 to 20 | the battle-start messages | the console's 0x93; then 0, 0.10, 0.12, 0.16, 0.18 s |
 
+The timer is the seconds left before the host's lobby deadline: a retail host opens a 180 s lobby
+and sends the value once a second (`0.27104`), so the 0x91 of the table came 35 s after it opened.
+Our timer starts at 180 at the first console's answer; a console that joins a running lobby
+receives it at its current value. A console's 0x00 or 0x18 withdraws its 0x01; its Pokemon does
+not, since a ready console resends it to each newcomer.
+
+In the game's code a guest answers 0x0c with 0x0d at once, with no Ready check, and a guest whose
+timer reaches 0 waits for the bootstrap (`Raid_Start_Ready`, `0.27137`): only the host starts a
+battle. A retail host readies on its player's first choice and sends 0x0c on the second, with no
+test of the guests' Ready (`0.27095`); at timer 0 it breaks the lobby up when no member is ready
+and starts otherwise. `Raid_Start_Go` (`0.27140`) resends 0x0c until every member has answered
+0x0d, then sends the bootstrap, slot *k* the Pokemon of the member with code *k*; ours waits for
+every console's 0x0d too. Waiting for every console's Ready before the start is this host's own
+rule, and it starts at timer 0 whoever is ready.
+
 A gated message leaves 50 ms after its milestone; the Net 0x50 and the station list repeat every
 0.5 s until answered, and the raid messages every 0.5 s until acknowledged. A retail console once
 answered the bootstrap with 0x73 and no 0x6e, so message 13 waits for either.
 
-Five seconds after message 20 the host hands the console its network as a leaving retail host does
+Five seconds after the last console's message 20 the host hands the console its network as a leaving retail host does
 ([docs/sv.md](sv.md#leaving)): Session type 7 naming the console, every second until its type 8;
 Net 0x11 in its is-migrating form, every 0.5 s until its 0x12; NetStartHostMigration `01400000`
 every 0.3 s until the console leaves the network or 4 s pass. A host that destroyed its network 5 s
@@ -421,10 +491,28 @@ encryption constant, IVs, ability number, gender, nature, height, weight and sca
 
 The app's raid seed field shows the boss and rewards the seed gives in the tool's context, and Find
 a raid searches seeds from a first one, typed or picked at random, in every context the filters
-leave (`pokeldn.sv.raid_search`) for a species, star level, Tera type, nature, gender, shininess and
-IV ranges, ranked by a score of the boss's stats: HP times the sum of its defenses, either defense
-alone, its better attacking stat, or its total. One result per species is kept unless a species is
-chosen.
+leave (`pokeldn.sv.raid_search`) for a species, star level, Tera type, nature, gender, shininess,
+size mark and IV ranges. It ranks the results by a score of the boss's stats (HP times the sum of
+its defenses, either defense alone, its better attacking stat, or its total) or by the rewards
+wanted (Most desired rewards, below). One result per species is kept unless a species is chosen.
+
+### Size marks
+
+PKHeX allows the Mini mark on a Pokemon that has been in Scarlet or Violet at scale 0 and the Jumbo
+mark at scale 255 (`MarkRules.IsMarkAllowedMini`, `IsMarkAllowedJumbo`). The finder's Size mark
+eligibility wants the boss's scale at 0 (Mini mark), 255 (Jumbo mark) or either (Any mark). The
+scale is drawn after the height and weight (`boss_fields`):
+
+| scale rule | scale | chance of 0 or of 255 |
+|---|---|---|
+| two draws (rule 0), every standard and black crystal boss | `next_int(0x81) + next_int(0x80)` | 1 in 16 512 each |
+| an event band from 0 (rule 1) or from 240 (rule 5) | `next_int(16) + low` | 1 in 16 for the end it touches |
+| an event's own value (rule 6) | the record's `scale` | always or never |
+
+`raid_search.size_marks` names the marks an event's bosses of the chosen crystal, stars and species
+can take, and the finder greys out the others.
+
+### Wanted rewards
 
 Its Rewards section, folded until opened, wants rewards: rows of an item and the least quantity a
 raid must give of it, the raid's quantities of an item summed and two rows of one item added up.
@@ -436,24 +524,56 @@ draws of an item up to the most a raid draws (exactly as many as it draws when t
 nothing else), each Tera type the boss can take naming its shards and the species its material.
 Every Paldea, Kitakami and Blueberry context at once lists 343 items in about a second, so the list
 is made off the page. The search skips an encounter that cannot give what is wanted, then draws a
-seed's rewards before its boss, which keeps its speed.
+seed's rewards before its boss.
+
+Most desired rewards ranks the results by the rewards wanted, in their order: more of the first item
+wins, then more of the second, each row's least still a minimum. A raid's total of an item counts as
+a digit, its place among the totals the raids searched can give, from the least up
+(`raid_search.ranked_rewards`): a black crystal gives a material 8 to 30 by twos, 12 places. The
+leading items' digits make one score under 2^31, which the helper keeps beside the seed in a 64-bit
+rank; the items after those only want their least. Five items fit in every raid known (an event's
+Exp. Candy L has 59 totals, the most of any item), and a black crystal ranks four herbas, patches or
+caps and four materials.
+
+### The helper's scan
 
 The PKHeX helper scans the seeds over every core (`services/pkhex/RaidScan.cs`, packed and sent by
 `pokeldn.sv.raid_scan`, in a helper process of its own): a seed's encounter, its boss up to the
-nature, the score, every filter and the rewards, the work of `select`, `boss_fields`, `rewards` and
+scale, the score, every filter and the rewards, the work of `select`, `boss_fields`, `rewards` and
 `tera_type` on the context's tables. It names a context's best seeds (or each species' best), and
 `search` makes their raids with the plain Python code, so the results, their order and the ties
-between seeds and contexts are the Python scan's (`tests/test_sv_raid.py` compares both). On an
-Apple M4, ten million seeds of one context take 0.36 s, 0.12 s for shiny ones, and ten million in
-each of the 42 contexts 9.1 s. A search covers up to 4 294 967 296 seed and context pairs, sent to
-the helper 16 777 216 seeds at a time, and the finder offers ten million seeds. Without the helper
-(a source checkout that has not built it), Python scans every seed, about 22 000 a second, up to a
-million pairs, and the finder offers 100 000.
+between seeds and contexts are the Python scan's (`tests/test_sv_raid.py` compares both).
 
-The finder's Every seed searches all 4 294 967 296 seeds of one context (a game, region, progress
-and crystal chosen), 41 s on that machine. Stop at the first match answers the first raid that
-matches, whatever its score, instead of the best ones (`stop_at_first`): the earliest seed of the
-first context that has one, the contexts searched one after the other.
+The scan turns most seeds away after their encounter. Each encounter row's best rank is worked out
+once per request: its flawless IVs at 31 wherever they can fall, its other IVs the best the IV filter
+lets through, the best of its natures, and ranked by rewards the most the row gives of each item. A
+seed whose row cannot beat the ranks kept so far stops there; one that passes is checked again after
+its flawless IVs and after all its IVs, against the best any nature makes of them (a nature changes
+a stat by a tenth, and every score grows with each stat). Ranked by rewards, the rewards are drawn
+first, a draw looks only at the lottery rows that give a wanted item, and the draws stop once those
+left cannot bring the first item to the kept ranks' first digit. Each request carries the ranks the
+earlier ones kept (each species' with one boss per species), and only a search's first request
+carries a context's tables, which the helper keeps by their digest.
+
+A request holds 16 777 216 seeds, then as many as the helper scans in about a quarter of a second, up
+to 268 435 456. A search covers up to 4 294 967 296 seeds in each context, in as many contexts as
+chosen (`most_seeds`); the finder offers a hundred million, and Every seed searches all of them.
+Stop at the first match answers the first raid that matches, whatever its score, instead of the best
+ones (`stop_at_first`): the earliest seed of the first context that has one, the contexts searched
+one after the other. Without the helper (a source checkout that has not built it), Python scans
+about 22 000 seeds a second, up to a million seed and context pairs, and the finder offers 100 000.
+
+Measured on an Apple M4 (10 cores), the helper warm:
+
+| search | time |
+|---|---|
+| 10 000 000 seeds of one context (Scarlet, Paldea, 6-star, standard) | 0.02 s, 0.03 s wanting a shiny |
+| 10 000 000 seeds in each of the 42 contexts | 0.51 s |
+| 100 000 000 seeds in each of the 42 contexts, the finder's default | 5.2 s |
+| every seed of one context | 6.1 s |
+| every seed of the 42 contexts | 4 min 3 s |
+| every seed of Scarlet's Paldea black crystal, two Bitter Herba Mystica then two Ability Patches ranked, one boss per species | 20.9 s |
+| every seed of that crystal, wanting the Jumbo mark | 3.3 s |
 
 ## Joining
 
@@ -494,3 +614,9 @@ the host start; its Pokemon stayed in the battle.
 - What a retail console does with a fixed reward row's subject (host, guests, once), which
   `raid_point` writes as 0, every player's.
 - Whether the five-star catch-once records go in the save's list as the seven-star ones do.
+- Several consoles in one lobby are tested against scripted consoles only: whether retail
+  consoles mesh with each other over the board's network, and what the consoles other than the
+  next host do on NetStartHostMigration, are unmeasured.
+- What the menu element `Raid_Start_Ready` switches when every guest is ready is on a retail
+  host's screen (`f6277C172`, `0.27137`), and when the second end test of `0.27104` ends a lobby
+  before its timer.

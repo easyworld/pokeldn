@@ -2178,6 +2178,8 @@ HELP.update({'the LDN participant limit; a Tera Raid advertises 4': 'LDN 参与�
 OPTION_HELP.update({'--raid-map': '团体战所在地区：帕底亚、北上乡或蓝莓学园。', '--raid-version': '团体战使用的游戏版本：朱或紫。'})
 
 HELP.update({
+    'consoles the raid waits for, 1 to 3; it starts once N are in the lobby and every one is Ready, or when the lobby timer runs out':
+        '等待加入的游戏机数量，范围为 1 到 3；指定数量的游戏机全部进入大厅并准备完毕，或大厅倒计时结束时开始团体战。',
     "host an event raid: a Poke Portal News delivery's folder (an EventsGallery event, or its Files); the seed draws from the event's encounters at --raid-version and --raid-progress, and --raid-map and --raid-content are unused":
         '主持活动团体战：指定宝可入口站新闻分发目录（EventsGallery 活动目录或其 Files 目录）；种子根据 --raid-version 和 --raid-progress 选择活动遭遇，不使用 --raid-map 和 --raid-content。',
     "the delivery group of the event's den, 1 to 10; by default the first with dens and an encounter at that progress":

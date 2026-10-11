@@ -30,6 +30,7 @@ VERSIONS = {"scarlet": "朱", "violet": "紫"}
 REGIONS = {"paldea": "帕底亚", "kitakami": "北上乡", "blueberry": "蓝莓学园"}
 PROGRESS = (("beginning", "游戏初期"), ("tera", "已解锁太晶团体战"), ("3star", "3 星团体战"),
             ("4star", "4 星团体战"), ("5star", "5 星团体战"), ("6star", "6 星团体战"))
+SIZE_MARKS = {0: "Mini", 0xFF: "Jumbo"}  # Icon keys; translate labels only.
 ALL_SEEDS = 1 << 32
 
 
@@ -52,7 +53,9 @@ def searching(done: int, total: int, elapsed: float) -> str:
     if not done or elapsed <= 0:
         return f"正在搜索种子 {done:,} / {total:,}…"
     rate = done / elapsed
-    speed = f"{rate / 1e4:.1f} 万" if rate >= 1e6 else f"{rate:,.0f}"
+    # A billion once the millions would show 1000.0.
+    speed = (f"{rate / 1e8:.2f} 亿" if round(rate / 1e6, 1) >= 1000
+             else f"{rate / 1e4:.1f} 万" if rate >= 1e6 else f"{rate:,.0f}")
     return f"正在搜索种子 {done:,} / {total:,}，每秒 {speed} 个，预计剩余 {duration((total - done) / rate)}…"
 
 
@@ -131,13 +134,19 @@ def boss_card(app, seed, stars, boss, context, *, compact=False, rewards=None, o
     title = [t.text(name, 14 if compact else 17, weight=ft.FontWeight.W_700)]
     if shiny:
         title.append(t.tinted(t.pixel_icon("sparkles", color="#FFFFFF", tooltip="异色"), crystal_colors(context)))
+    mark = SIZE_MARKS.get(boss["scale"])
+    if mark:
+        title.append(t.tinted(t.pixel_icon(f"{mark.lower()}-mark", color="#FFFFFF", tooltip=translate(f"{mark} mark")),
+                              crystal_colors(context)))
     title.append(stars_row(stars, context))
     accent = t.RED if context["content"] in ("black", "might") else t.BLUE
     facts = ft.Row([
         t.chip(f"等级 {boss['level']}", "sword", accent),
         t.chip(f"太晶属性：{TERA_TYPES[boss['tera_type_original']]}", "diamond-gem", accent),
         t.chip(NATURES[boss["nature"]]), t.chip(GENDERS[boss["gender"]]),
+        # The compact card keeps to one row: its title's icons tell these.
         *([t.chip("异色", "sparkles", accent)] if shiny and not compact else []),
+        *([t.chip(translate(f"{mark} mark"), f"{mark.lower()}-mark", accent)] if mark and not compact else []),
     ], spacing=6, run_spacing=6, wrap=True)
     where = (f"{VERSIONS[context['version']]} · {REGIONS[context['map_name']]} · "
              f"{dict(PROGRESS)[context['progress']]} · {CRYSTALS[context['content']]}"
@@ -240,7 +249,12 @@ class RaidSeedPicker:
                                species_id=pick(species) and int(species.value),
                                tera_type=pick(tera) and int(tera.value))
         wants = RewardFilter(self.app, reward_scope)
-        choose = lambda options, value: t.dropdown(options, value, on_select=lambda _e: wants.changed())
+
+        def changed() -> None:
+            wants.changed()
+            if event is not None:
+                size_marks()
+        choose = lambda options, value: t.dropdown(options, value, on_select=lambda _e: changed())
         if event is None:
             version = choose([("any", "任意游戏"), ("scarlet", "朱"), ("violet", "紫")],
                              current["version"])
@@ -264,13 +278,32 @@ class RaidSeedPicker:
             crystal = choose(([("any", "任意团体战")] if len(dens) > 1 else [])
                              + [(str(d.group), raid_label(d.label)) for d in dens], str(current["group"]))
             star_levels = sorted({s for d in dens for s in d.stars})
-        species = NamePicker(self.app, "sv", "species", "", lambda _v: wants.changed(),
+        species = NamePicker(self.app, "sv", "species", "", lambda _v: changed(),
                              names=[{"id": s, "name": translate(n)} for s, n in raid_search.species(event)]).control
         stars = choose([("any", "任意星级"), *((str(n), f"{n} 星") for n in star_levels)], "any")
         tera = choose([("any", "任意太晶属性"), *((str(i), n) for i, n in enumerate(TERA_TYPES))], "any")
         nature = choose([("any", "任意性格"), *((str(i), n) for i, n in enumerate(NATURES))], "any")
         gender = choose([("any", "任意性别"), *((str(i), n) for i, n in enumerate(GENDERS))], "any")
         shiny = choose([("any", "不限异色"), ("yes", "仅异色"), ("no", "非异色")], "any")
+        size_mark = choose([("any", "不限体型证章"), ("either", "任意体型证章"), ("mini", "小不点之证"),
+                            ("jumbo", "大个子之证")], "any")
+
+        def size_marks(update: bool = True) -> None:
+            """An event's band or own scale can rule a mark out: its option is greyed out, and picked, it
+            falls back to Eligible or not."""
+            try:
+                scope, narrow = reward_scope()
+                able = raid_search.size_marks(scope, stars=narrow["stars"], species_id=narrow["species_id"])
+            except ValueError:
+                able = set(raid_search.SIZE_MARKS)
+            for option in size_mark.options:
+                option.disabled = option.key != "any" and option.key not in able
+            if size_mark.value not in able:
+                size_mark.value = "any"
+            if update:
+                size_mark.update()
+        if event is not None:
+            size_marks(update=False)
         rank = choose([(key, translate(label)) for key, (label, _, _) in raid_search.OBJECTIVES.items()], "overall")
         ivs = [t.field(hint="任意", mono=True, expand=True, text_align=ft.TextAlign.CENTER,
                        content_padding=ft.Padding(4, 8, 4, 8)) for _ in STATS]
@@ -290,13 +323,15 @@ class RaidSeedPicker:
             for control in (start, count, shuffle):
                 control.disabled = on
                 control.update()
-        every = Check(f"搜索全部 {ALL_SEEDS:,} 个种子", "搜索指定游戏、地区、进度和结晶的全部种子", everything)
+        every = Check(f"搜索全部 {ALL_SEEDS:,} 个种子", "搜索所选每种游戏、地区、进度和结晶的全部种子", everything)
         first_only = Check("找到首个结果后停止", "找到符合条件的首个团体战后停止，不按评分择优；"
                            "按游戏、地区、进度和结晶的搜索顺序返回最早符合条件的种子")
         results = ft.ListView(spacing=8, expand=True)
         results.controls = [empty_results()]
         status = t.text("选择团体战条件，然后点击“搜索”。", 12, t.MUTED)
         busy = ft.Container(PixelActivity("正在搜索"), visible=False)
+        # How far the search is: moving until the first seeds are counted, then the share searched.
+        bar = ft.ProgressBar(value=None, color=t.BLUE, bgcolor=t.FIELD, height=4, border_radius=2, visible=False)
         run = t.button("搜索", None, "search")
         stop = t.secondary_button("停止", None)
         stop.disabled = True
@@ -313,10 +348,10 @@ class RaidSeedPicker:
             results.controls = [boss_card(self.app, f.seed, f.stars, f.boss, f.context, compact=True,
                                           rewards=reward_chips(wants.names, f.rewards) if f.rewards else None,
                                           on_use=self._use) for f in found] or [empty_results(True)]
-            status.value = (f"找到 {len(found)} 场团体战" + ("（搜索已停止）。" if stopped else "。")
-                            if found else "没有符合条件的团体战。")
-            run.disabled, stop.disabled, busy.visible = False, True, False
-            for control in (results, status, run, stop, busy):
+            status.value = (f"找到 {len(found)} 场团体战"
+                            + ("（搜索已停止）。" if stopped else "。") if found else "没有符合条件的团体战。")
+            run.disabled, stop.disabled, busy.visible, bar.visible = False, True, False, False
+            for control in (results, status, run, stop, busy, bar):
                 control.update()
 
         def submit(_):
@@ -325,15 +360,14 @@ class RaidSeedPicker:
                                              event=event, group=crystal.value)
                 if not scope:
                     raise ValueError("此活动在该游戏及剧情进度下没有可用的团体战。")
-                if every.value:
-                    if len(scope) > 1:
-                        raise ValueError(f"搜索全部种子需遍历同一团体战的 {ALL_SEEDS:,} 个种子，请指定游戏、地区、进度和结晶。")
+                if every.value:              # offered with the helper alone, which takes every seed
                     first, amount = 0, ALL_SEEDS
                 else:
                     first = seed_of(start.value)
                     amount = int(count.value) if count.value.strip().isdigit() else 0
-                    if first is None or not 1 <= amount * len(scope) <= raid_search.MAX_WORK:
-                        raise ValueError(f"请输入八位十六进制起始种子，此范围最多可搜索 {raid_search.MAX_WORK // len(scope):,} 个种子。")
+                    most = raid_search.most_seeds(len(scope))
+                    if first is None or not 1 <= amount <= most:
+                        raise ValueError(f"请输入八位十六进制起始种子，此范围最多可搜索 {most:,} 个种子。")
                 ranges = tuple(iv_range(field.value) for field in ivs)
                 filters = dict(stars=pick(stars) and int(stars.value),
                                species_id=pick(species) and int(species.value),
@@ -341,8 +375,11 @@ class RaidSeedPicker:
                                nature=pick(nature) and int(nature.value),
                                gender=pick(gender) and int(gender.value),
                                shiny=None if pick(shiny) is None else shiny.value == "yes",
+                               size_mark=pick(size_mark),
                                ivs=None if ranges == ((0, 31),) * 6 else ranges,
                                rewards=wants.wanted())
+                if rank.value == "rewards" and not filters["rewards"]:
+                    raise ValueError("“所需奖励最多”按指定奖励排序，请展开“奖励”并添加至少一项。")
             except ValueError as exc:
                 status.value, status.color = translate(str(exc)), t.RED
                 status.update()
@@ -350,14 +387,16 @@ class RaidSeedPicker:
             cancel.clear()
             status.value, status.color = "正在搜索…", t.MUTED
             results.controls, run.disabled, stop.disabled, busy.visible = [], True, False, True
-            for control in (status, results, run, stop, busy):
+            bar.value, bar.visible = None, True
+            for control in (status, results, run, stop, busy, bar):
                 control.update()
 
             began = time.monotonic()
 
             def progress(done_count, total):
                 status.value = searching(done_count, total, time.monotonic() - began)
-                self.app.ui(lambda: self._update(status))
+                bar.value = done_count / total if total else None
+                self.app.ui(lambda: (self._update(status), self._update(bar)))
 
             def work():
                 try:
@@ -372,8 +411,8 @@ class RaidSeedPicker:
                     def failed():
                         if not closed.is_set():
                             status.value, status.color, run.disabled = message, t.RED, False
-                            stop.disabled, busy.visible = True, False
-                            for control in (status, run, stop, busy):
+                            stop.disabled, busy.visible, bar.visible = True, False, False
+                            for control in (status, run, stop, busy, bar):
                                 control.update()
                     self.app.ui(failed)
             threading.Thread(target=work, daemon=True).start()
@@ -390,13 +429,14 @@ class RaidSeedPicker:
             pair(t.labeled_control("种类", species, expand=True), t.labeled_control("星级", stars, expand=True)),
             pair(t.labeled_control("太晶属性", tera, expand=True), t.labeled_control("性格", nature, expand=True)),
             pair(t.labeled_control("性别", gender, expand=True), t.labeled_control("异色", shiny, expand=True)),
+            pair(t.labeled_control("可获得的体型证章", size_mark, expand=True), ft.Container(expand=True)),
             heading("sliders-horizontal", "个体值"),
             pair(*(t.labeled_control(label, field, expand=True) for label, field in zip(STATS, ivs))),
             t.text("留空表示任意，也可填写具体数值或范围（如 20-31）。", 11, t.FAINT),
             wants.control,
             heading("search", "搜索"),
             t.labeled_control("排序依据", rank),
-            t.text("耐久与攻击评分仅根据能力值估算首领的难度。", 11, t.FAINT),
+            t.text("耐久与攻击评分仅根据能力值估算首领的难度。“所需奖励最多”按指定奖励数量排序，优先比较第一项。", 11, t.FAINT),
             pair(t.labeled_control("起始种子", ft.Row([start, shuffle], spacing=4,
                                                          vertical_alignment=ft.CrossAxisAlignment.CENTER),
                                    expand=True),
@@ -405,7 +445,8 @@ class RaidSeedPicker:
             first_only.control,
         ], spacing=10, scroll=ft.ScrollMode.AUTO, expand=True)
         found = ft.Column([
-            ft.Row([busy, status], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.Column([ft.Row([busy, status], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER), bar],
+                      spacing=6, tight=True),
             t.fade(results)], spacing=10, expand=True)
         self.app.page.show_dialog(t.dialog(
             title=t.text("查找太晶团体战", 17, weight=ft.FontWeight.W_600),

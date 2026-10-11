@@ -174,11 +174,16 @@ def dialog(**kwargs) -> ft.AlertDialog:
                           barrier_color=ft.Colors.with_opacity(0.6, "#000000"), **kwargs)
 
 
-def _border() -> dict:
-    flat = ft.OutlineInputBorder(border_radius=CONTROL_RADIUS, side=ft.BorderSide(1, ft.Colors.TRANSPARENT))
+def _border(color: str = "") -> dict:
+    flat = ft.OutlineInputBorder(border_radius=CONTROL_RADIUS, side=ft.BorderSide(1, color or ft.Colors.TRANSPARENT))
     return {ft.ControlState.FOCUSED: ft.OutlineInputBorder(border_radius=CONTROL_RADIUS,
-                                                           side=ft.BorderSide(1.5, BLUE)),
+                                                           side=ft.BorderSide(1.5, color or BLUE)),
             ft.ControlState.DISABLED: flat, ft.ControlState.DEFAULT: flat}
+
+
+def mark_invalid(control: ft.TextField, invalid: bool) -> None:
+    """A red border with no message: an empty `error` keeps Flet's message line, which squeezes a fixed-height field."""
+    control.border = _border(RED if invalid else "")
 
 
 class _Field(ft.TextField):

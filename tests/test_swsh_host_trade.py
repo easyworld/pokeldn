@@ -264,3 +264,60 @@ def test_a_second_trade_runs_on_the_same_session(monkeypatch):
     assert host.elements[50].values[1][0] == second
     assert host.elements[50].phase == 1
     assert host.elements[40].phase == host_trade.LADDER_LAST
+
+
+class CancellingJoiner(ScriptedJoiner):
+    """Offers one Pokemon, presses B (box command 5), offers another. B in step 7 clears the partner's
+    flags (0x00aa57d0), so its 4 waits for the host's flag 1 sent after the 5 (docs/swsh_trade.md)."""
+
+    def __init__(self, wrong, right):
+        super().__init__(right)
+        self.wrong, self.stage, self.ones = wrong, "start", 0
+
+    def on_data(self, protocol, port, payload):
+        if struct.unpack_from("<I", payload)[0] != trade.POKEMON_TRADE:
+            return super().on_data(protocol, port, payload)
+        if trade.offered_pokemon(payload) is not None and self.stage == "start":
+            self.stage = "cancelled"
+            for message in (trade.pokemon_trade(self.wrong), trade.box_sync_state(1), trade.box_sync_state(5),
+                            trade.pokemon_trade(self.pk8), trade.box_sync_state(1)):
+                self.data(protocol, 0, message)
+        elif trade.parse_box_command(payload) == 1 and self.stage == "cancelled":
+            self.ones += 1
+            if self.ones == 1:          # the host's first 1, in the burst with its offer, came before the 5
+                return
+            self.stage = "accepted"
+            self.data(protocol, 0, trade.box_sync_state(4))
+
+
+def test_a_joiner_that_cancels_and_offers_again_gets_our_offer_again(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(host_trade.time, "time", lambda: now[0])
+    wrong, right = bytes([0x33]) * 0x158, bytes(range(256)) + bytes(0x158 - 256)
+    joiner = CancellingJoiner(wrong, right)
+    to_joiner = []
+    host = host_trade.HostTrade(
+        HOST, JOINER, snapshot=bytes(3456), offer_pk8=bytes(0x158),
+        send=lambda protocol, port, payload: to_joiner.append(("data", protocol, port, payload)),
+        send_broadcast=lambda port, msg, packed: to_joiner.append(("bcast", 0x84, port, msg, packed)),
+        send_mesh=lambda payload: to_joiner.append(("mesh", 0x18, 1, payload)),
+        log=lambda *a: None)
+    for _ in range(4000):
+        host.tick(now[0])
+        for item in to_joiner:
+            if item[0] == "data":
+                joiner.on_data(item[1], item[2], item[3])
+            elif item[0] == "bcast":
+                joiner.on_broadcast(item[2], item[3], item[4])
+        to_joiner.clear()
+        for item in joiner.out:
+            if item[0] == "data":
+                host.on_data(item[1], item[2], item[3], now[0])
+            else:
+                host.on_broadcast(item[2], item[3], item[4])
+        joiner.out.clear()
+        if host.stage == "saving":
+            break
+        now[0] += 0.01
+    assert joiner.stage == "accepted" and host.stage == "saving", host.stage
+    assert host.elements[50].values[1][0] == right

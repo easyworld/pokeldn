@@ -4,21 +4,31 @@ seeds worth keeping; raid_search then makes their raids with the plain Python co
 what the Python scan finds, faster (docs/sv_raid.md, Finding a seed). The scan runs in a helper process
 of its own, so a search never waits on the app's other PKHeX requests."""
 
+import hashlib
+import json
 import threading
+import time
 
 from pokeldn.sv import raid_encounter as encounter, raid_event
 
-CHUNK = 1 << 24                       # seeds per request: progress and Stop between requests
+# Seeds per request, progress and Stop between requests: the first CHUNK, then as many as the helper
+# scans in about PACE seconds, up to MAX_CHUNK.
+CHUNK, MAX_CHUNK, PACE = 1 << 24, 1 << 28, 0.25
 MODE_STANDARD, MODE_BLACK, MODE_EVENT = range(3)
-OBJECTIVE_INDEX = {"overall": 0, "physical": 1, "special": 2, "offense": 3, "hardest": 4}
+OBJECTIVE_INDEX = {"overall": 0, "physical": 1, "special": 2, "offense": 3, "hardest": 4, "rewards": 5}
+SIZE_MARK_INDEX = {"either": 0, "mini": 1, "jumbo": 2}
 # A packed encounter row's columns, as RaidScan.cs reads them.
 (SPECIES, STARS, FLAWLESS, ABILITY_RULE, GENDER, CUTOFF, RATIO, NATURE, TOXTRICITY, SHINY, TERA, LEVEL,
  MATERIAL, NFIXED, NLOTTERY, LOTTERY_TOTAL) = range(16)
 IVS, ABILITIES, TYPES, BASE, EVS = 16, 22, 25, 27, 33
-COLUMNS = 39
+SCALE_TYPE, SCALE = 39, 40
+COLUMNS = 41
 
 _SERVICE = None
 _LOCK = threading.Lock()
+_PACKED = {}                          # a context's key -> its event, its tables' digest and the tables
+_SENT = set()                         # the digests of the tables the helper holds
+UNKNOWN = "unknown tables"            # the helper's answer for tables it does not hold
 
 
 def available() -> bool:
@@ -56,18 +66,17 @@ def pack(context):
         fixed_t, lottery_t = data["fixed_rewards"], data["lottery_rewards"]
         lottery_stars = encounter.STAR_LOTTERY[context["progress"]]
         totals = [0, *encounter.RATE_TOTALS[(context["map_name"], version)], 0]
-    width = max(totals) + 1
-    lut = [-1] * (8 * width)
-    if mode == MODE_EVENT:            # raid_event.draw: the rates one after the other
-        low = 0
-        for i, r in enumerate(rows):
-            lut[low:low + r["rate"]] = [i] * r["rate"]
+    # Each row's draws, (stars, first, last): the helper builds its draw table from them, the first
+    # row whose range holds a draw taking it (encounter.select). An event's rates follow one another
+    # (raid_event.draw).
+    ranges, low = [], 0
+    for r in rows:
+        if mode == MODE_EVENT:
+            ranges += 0, low, low + r["rate"]
             low += r["rate"]
-    else:                             # encounter.select: the first row whose range holds the choice
-        for i, r in reversed(list(enumerate(rows))):
+        else:
             first = r["rate_min"][version]
-            last = min(first + r["rate"], totals[r["stars"]])
-            lut[r["stars"] * width + first:r["stars"] * width + last] = [i] * (last - first)
+            ranges += r["stars"], first, min(first + r["rate"], totals[r["stars"]])
     fixed = [fixed_t.get(r["fixed_rewards"], ()) for r in rows]
     lottery = [lottery_t.get(r["lottery_rewards"], ()) for r in rows]
     fixed_width = max(map(len, fixed), default=0) or 1
@@ -89,6 +98,7 @@ def pack(context):
         line[IVS:IVS + 6] = [-1 if v is None else v for v in (r.get("ivs") or [None] * 6)]
         line[ABILITIES:ABILITIES + 3], line[TYPES:TYPES + 2] = abilities, types
         line[BASE:BASE + 6], line[EVS:EVS + 6] = base, r["evs"]
+        line[SCALE_TYPE], line[SCALE] = r.get("scale_type", encounter.SCALE_RANDOM), r.get("scale", 0)
         table += line
         for j, e in enumerate(fixed[i]):
             at = (i * fixed_width + j) * 3
@@ -100,43 +110,77 @@ def pack(context):
     longest = max(len(t) for t in natures)
     return {
         "mode": mode, "star_ceil": [c for c, _ in lottery_stars], "star_val": [s for _, s in lottery_stars],
-        "totals": totals, "lut": lut, "lut_width": width, "rows": table,
+        "totals": totals, "ranges": ranges, "rows": table,
         "fixed": fixed_a, "fixed_width": fixed_width, "lottery": lottery_a, "lottery_width": lottery_width,
         "toxt_tab": [n for t in natures for n in (*t, *[0] * (longest - len(t)))],
         "toxt_n": [len(t) for t in natures], "shards": list(encounter.TERA_SHARDS),
         "slots": [n for row in encounter.REWARD_SLOTS for n in row], "columns": list(encounter.REWARD_COLUMNS),
+        "scale_bands": [n for rule in sorted(encounter.SCALE_BANDS) for n in encounter.SCALE_BANDS[rule]],
     }
+
+
+def tables(context):
+    """-> the digest of the context's packed tables and the tables; kept, as a context's tables never
+    change. An entry holds its event, so no other event takes its id while it is kept."""
+    event = context.get("event")
+    key = (id(event), context["version"], context["map_name"], context["progress"], context["content"],
+           context.get("group"))
+    if key not in _PACKED or _PACKED[key][0] is not event:
+        if len(_PACKED) > 256:
+            _PACKED.clear()
+        packed = pack(context)
+        digest = hashlib.sha256(json.dumps(packed, sort_keys=True).encode()).hexdigest()
+        _PACKED[key] = event, digest, packed
+    return _PACKED[key][1:]
 
 
 def offsets(start, count, context, objective, lowest, limit, one_per_species, *, stars=None, shiny=None,
             species_id=None, tera_type=None, nature=None, gender=None, ability=None, ivs=None, rewards=None,
-            progress=None, cancelled=None, stop_at_first=False):
+            size_mark=None, progress=None, cancelled=None, stop_at_first=False, amounts=()):
     """-> the offsets from `start`, in order, of the seeds among start..start+count-1 that can be a
     match raid_search keeps in this context: its best `limit`, each species' best, or with
     `stop_at_first` the earliest match alone, and every seed whose table has no encounter before it.
+    `amounts`, for the "rewards" objective, is raid_search.ranked_rewards' totals of each item ranked.
     Scanned in chunks; `progress(n)` after each, and a Stop answers what was found so far."""
-    request = {"cmd": "raid_scan", "game": "sv", **pack(context), "objective": OBJECTIVE_INDEX[objective],
+    digest, packed = tables(context)
+    request = {"cmd": "raid_scan", "game": "sv", "tables": digest, "objective": OBJECTIVE_INDEX[objective],
                "lowest": bool(lowest), "limit": limit,
                "keep": "first" if stop_at_first else "species" if one_per_species else "best",
                "filters": [-1 if v is None else int(v)
-                           for v in (stars, shiny, species_id, tera_type, nature, gender, ability)],
+                           for v in (stars, shiny, species_id, tera_type, nature, gender, ability,
+                                     None if size_mark is None else SIZE_MARK_INDEX[size_mark])],
                "ivs": [n for pair in (ivs if ivs is not None else [(0, 31)] * 6) for n in pair],
-               "want": [n for pair in (rewards or {}).items() for n in pair]}
+               "want": [n for pair in (rewards or {}).items() for n in pair], "amounts": [list(a) for a in amounts]}
+    from pokeldn import pokemon
     service = _service()
     kept, by_species, visits = [], {}, []
-    for first in range(0, count, CHUNK):
+    first, n = 0, CHUNK
+    while first < count:
         if cancelled and cancelled():
             break
-        n = min(CHUNK, count - first)
-        reply = service._ask({**request, "start": (start + first) & 0xFFFFFFFF, "count": n})
+        n = min(n, count - first)
+        began = time.monotonic()
+        # The ranks kept so far: the helper turns away a seed that cannot beat them before its boss.
+        bars = ({"species_bars": [[s, r] for s, r in by_species.items()]} if one_per_species
+                else {"bar": kept[-1]} if len(kept) == limit and not stop_at_first else {})
+        ask = {**request, **bars, "start": (start + first) & 0xFFFFFFFF, "count": n}
+        try:
+            reply = service._ask(ask if digest in _SENT else {**ask, **packed})
+        except pokemon.BuilderError as e:   # a helper started since, without them
+            if str(e) != UNKNOWN:
+                raise
+            reply = service._ask({**ask, **packed})
+        _SENT.add(digest)
         visits += [first + v for v in reply["visits"]]
         if stop_at_first and reply["first"] >= 0:
             return sorted(visits) + [first + reply["first"]]
         for species, rank in reply["species"]:
             by_species[species] = min(rank, by_species.get(species, rank))
         kept = sorted(kept + reply["ranks"])[:limit]
+        first += n
         if progress:
-            progress(first + n)
+            progress(first)
+        n = max(CHUNK, min(MAX_CHUNK, int(n * PACE / max(time.monotonic() - began, 1e-3))))
     if one_per_species:
         kept = by_species.values()
     return sorted({((rank & 0xFFFFFFFF) - start) & 0xFFFFFFFF for rank in kept} | set(visits))

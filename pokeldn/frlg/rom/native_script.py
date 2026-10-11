@@ -615,7 +615,10 @@ def emulate(code, *, base=SCRATCH, memory=None, instruction_limit=_INSTRUCTION_L
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE, UcError
     from unicorn.arm_const import UC_ARM_REG_PC, UC_ARM_REG_SP, UC_ARM_REG_LR
 
+    from pokeldn.frlg.rom.buffer_script import TCG_BUFFER
+
     uc = Uc(UC_ARCH_ARM, UC_MODE_THUMB)
+    uc.ctl_set_tcg_buffer_size(TCG_BUFFER)
     uc.mem_map(_EWRAM, _EWRAM_SIZE)
     uc.mem_map(_IWRAM, _IWRAM_SIZE)
     uc.mem_map(_RETURN & ~0xFFF, 0x1000)

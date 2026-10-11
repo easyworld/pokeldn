@@ -41,6 +41,8 @@ def translate(value: str) -> str:
         if value.startswith(prefix) and value.endswith(")"):
             return target + translate(value[len(prefix):-1]) + "）"
     patterns = (
+        (r"a search covers 1 to ([\d,]+) seeds in each context", r"每个上下文的搜索种子数量须为 1 到 \1"),
+        (r"friendship (\d+)", r"亲密度 \1"),
         (r"delivery group (\d+) has no (.+) encounter at (.+) progress", r"分发组 \1 在版本 \2、进度 \3 下没有可用遭遇"),
         (r"event (\d+) has no (.+) encounter at (.+) progress", r"活动 \1 在版本 \2、进度 \3 下没有可用遭遇"),
         (r"event (\d+) has no encounter", r"活动 \1 没有可用遭遇"),

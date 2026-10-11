@@ -428,7 +428,8 @@ ANY = "-"
 
 
 class OfferOptions:
-    """Nature, ability, gender, held item, ball, IVs and effort for the built Pokemon, folded under the form.
+    """Nature, ability, gender, held item, ball, friendship, IVs and effort for the built Pokemon, folded under the
+    form.
 
     The choices offered are the ones PKHeX permits for the species (services/pkhex Options); the build is
     still checked for legality as a whole."""
@@ -523,7 +524,8 @@ class OfferOptions:
         if found["gendered"]:
             first.append(t.labeled_control('性别', self._choice(
                 "gender", [{"id": int(k), "name": n} for k, n in GENDERS]), expand=True))
-        second = [t.labeled_control('精灵球', self._choice("ball", found["balls"]), expand=True)]
+        second = [t.labeled_control("精灵球", self._choice("ball", found["balls"]), expand=True),
+                  t.labeled_control("亲密度（0-255）", self._number("friendship", 255), width=130)]
         if found["held"]:
             second.insert(0, t.labeled_control('携带道具', self._choice("held_item", found["held"], search=True),
                                                expand=True))
@@ -580,21 +582,31 @@ class OfferOptions:
         return ft.Column([t.text('招式（留空使用该遭遇的原有招式）', 12, t.MUTED),
                           ft.Row(boxes[:2], spacing=6), ft.Row(boxes[2:], spacing=6)], spacing=4)
 
+    def _number(self, key: str, top: int) -> ft.TextField:
+        def changed(e):
+            raw = e.control.value.strip()
+            if raw.isdigit() and int(raw) <= top:
+                self.chosen[key] = int(raw)
+            else:
+                self.chosen.pop(key, None)
+            t.mark_invalid(e.control, bool(raw) and key not in self.chosen)
+            self._label()
+            self.control.update()
+        current = self.chosen.get(key)
+        return t.field(value="" if current is None else str(current), hint="-", mono=True, digits=True,
+                       limit=len(str(top)), on_change=changed)
+
     def _stats(self, group: str, title: str, top: int, limit: str, total: int | None = None) -> ft.Control:
         values = self.chosen.setdefault(group, {})
         boxes = []
 
         def changed(e, stat):
             raw = e.control.value.strip()
-            if not raw:
-                values.pop(stat, None)
-                e.control.error = None
-            elif raw.isdigit() and int(raw) <= top:
+            if raw.isdigit() and int(raw) <= top:
                 values[stat] = int(raw)
-                e.control.error = None
             else:
                 values.pop(stat, None)
-                e.control.error = ""
+            t.mark_invalid(e.control, bool(raw) and stat not in values)
             if not values:
                 self.chosen.pop(group, None)
             else:

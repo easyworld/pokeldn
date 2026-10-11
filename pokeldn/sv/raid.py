@@ -19,7 +19,9 @@ KIND_DESCRIPTOR, KIND_STATE, KIND_POKEMON, KIND_BOOTSTRAP, KIND_COUNTDOWN = 0x2C
 COMPRESSION_NONE, COMPRESSION_LZ4 = 0, 2
 SERIALIZER_HEADER = struct.Struct("<HII4s")      # counter, compression, plain size, four unread bytes
 
-STATE_IDLE, STATE_READY, STATE_START, STATE_STARTED = 0x18, 0x01, 0x0C, 0x0D
+# Lua chunk be21e654, proto 0.30822: 0 not ready, 1 ready, 12 start, 13 its answer, 24 entering the
+# lobby, 30 refused (docs/sv_raid.md, The lobby).
+STATE_NOT_READY, STATE_IDLE, STATE_READY, STATE_START, STATE_STARTED = 0x00, 0x18, 0x01, 0x0C, 0x0D
 
 # What a retail host and a retail guest sent, by the prefix the game dispatches on.
 CONSOLE_POKEMON = trade.build(KEY_LOBBY, KIND_POKEMON, 1)
@@ -62,16 +64,23 @@ POINT_TIME = 0x30                 # the record's raidTimeData; zero leaves the c
 # event (Tera-Finder RaidContent); no retail event RaidPoint has been seen (docs/sv_raid.md).
 CRYSTALS = {"standard": 0, "black": 1, "event": 2, "might": 3}
 TERA_EMPTY = raid_encounter.TERA_NONE
-FIRST_COUNTER = 0x0105            # the host's lobby counters run on from here; the bootstrap 0x010f
+FIRST_COUNTER = 0x0105            # the host's lobby counters run on from here, one per message
+CONSOLES = PARTICIPANTS - 1       # station indices 1 to 3; our player is station 0
 
-# Seconds after the port-2 answer for messages 1 to 10, and after message 15 for 15 to 20, as a
-# retail host's raid ran.
-LOBBY_AT = (0.0, 0.0, 0.0, 0.726, 1.758, 2.748, 3.192, 3.757, 4.787, 5.393)
+# Seconds after the port-2 answer for the lobby's first nine messages and the start, as a retail
+# host's raid ran: the descriptor, state 0x18, our Pokemon, three timer steps, our state 0x01, two
+# steps; then a step each time the timer, LOBBY_SECONDS at the first console's answer, ticks.
+LOBBY = (("descriptor", 0.0), ("idle", 0.0), ("pokemon", 0.0), ("timer", 0.726), ("timer", 1.758),
+         ("timer", 2.748), ("ready", 3.192), ("timer", 3.757), ("timer", 4.787))
+START_AT = 5.393
+LOBBY_SECONDS = 180               # a retail host's lobby; the timer is the seconds left
+# After the first battle-start message: when the six leave, and each one's lowest pending.
 HANDOFF_AT = (0.0, 0.0, 0.101, 0.121, 0.161, 0.181)
-HANDOFF_LOWEST = (None, 15, 15, 17, 18, None)
+HANDOFF_LOWEST = (None, 0, 0, 2, 3, None)
 GATE_MARGIN = 0.05                # a gated message leaves this long after its milestone
 RETRY = 0.5                       # the raid Net 0x50 and Session update repeat until answered
 LINGER = 5.0                      # the handover starts this long after the twentieth message
+HANDOVER_WAIT = 20.0              # at most this long after the first console's, for the others
 # A leaving host's Session type 7, Net 0x11 is-migrating and NetStartHostMigration: repeat and give-up
 # times (`0x6df050`, `0x6defb8`, `0x6ac68c`, `0x6aca98`, `0x6ac984`; docs/sv.md, Leaving).
 MIGRATION_REPEAT, MIGRATION_WAIT = 1.0, 5.0
@@ -180,10 +189,11 @@ def raid_point(raid, rewards=None, name=POINT_NAME):
 
 
 def bootstrap(raid, participants, rewards=None, name=POINT_NAME):
-    """-> the 0xaa0 plaintext: up to four party records, empty slots, the boss, the RaidPoint."""
+    """-> the 0xaa0 plaintext: up to four party records (None an empty slot), the boss, the
+    RaidPoint."""
     if len(participants) > PARTICIPANTS:
         raise ValueError(f"a raid has at most {PARTICIPANTS} participants")
-    records = [gen9.encrypt(gen9.load(p)) for p in participants]
+    records = [empty_participant() if p is None else gen9.encrypt(gen9.load(p)) for p in participants]
     records += [empty_participant()] * (PARTICIPANTS - len(records))
     return b"".join(records) + boss_record(raid) + raid_point(raid, rewards, name)
 
@@ -195,47 +205,140 @@ def bootstrap_message(plain, counter=FIRST_COUNTER + 10):
                    compression=COMPRESSION_LZ4, size=len(plain))
 
 
-class RaidHost:
-    """The host's side of one console's raid: twenty messages on 0x80 port 0, each released by the
-    console's previous step, then the network handed to the console as a leaving retail host
-    hands it. `actions` -> [("app", seq, flags, lowest, payload) | ("net",) | ("session",) |
-    ("migration",) | ("migrating",) | ("handover",)]; the launcher reports the console's messages,
-    its acks, and its leaving the network. `left` is set once the host may go."""
+class RaidGroup:
+    """The lobby a raid host shares with up to three consoles, one per station index: who is seated
+    and ready, the timer, the start, the one bootstrap they all receive and the handover. The start
+    waits until `players` consoles are seated and every one has sent state 0x01, or until the timer
+    runs out. `left` is set once the host may go."""
 
-    def __init__(self, raid, pokemon_record, rewards=None):
+    def __init__(self, raid, pokemon_record, rewards=None, players=1):
+        if not 1 <= players <= CONSOLES:
+            raise ValueError(f"a raid seats 1 to {CONSOLES} consoles, not {players}")
         self.raid = raid
         self.pokemon = gen9.load(pokemon_record)
         self.rewards = None if rewards is None else tuple(rewards)
         raid_point(raid, self.rewards)          # a list that does not fit raises before the radio
+        self.players = players
+        self.members = {}                       # station index -> RaidHost
+        self.opened_at = None
+        self.started_at = None
+        self.handover_at = None
+        self.plain = None
+
+    def seat(self, index, now):
+        """-> the RaidHost for the console at station `index`, or None once the raid has started."""
+        if self.started_at is not None or not 1 <= index <= CONSOLES:
+            return None
+        if self.opened_at is None:
+            self.opened_at = now
+        self.members[index] = RaidHost(self, index)
+        self.members[index].accepted(now)
+        return self.members[index]
+
+    def leave(self, index):
+        """The console at `index` left the network; before the start its seat is freed."""
+        member = self.members.get(index)
+        if member is not None and self.started_at is None:
+            del self.members[index]
+            if not self.members:
+                self.opened_at = None           # the next console starts a fresh timer
+
+    def present(self):
+        return [m for _, m in sorted(self.members.items()) if not m.gone_at]
+
+    def timer(self, now):
+        return max(0, LOBBY_SECONDS - int(max(0.0, now - self.opened_at - LOBBY[3][1])))
+
+    def started(self, now):
+        if self.started_at is None and self.opened_at is not None:
+            here = self.present()
+            ready = len(here) >= self.players and all(m.ready for m in here)
+            if (here and ready) or self.timer(now) == 0:
+                self.started_at = now
+        return self.started_at is not None
+
+    def bootstrap(self):
+        """-> the bootstrap plaintext: our record in slot 0, each console's in its station index."""
+        if self.plain is None:
+            slots = [self.pokemon] + [self.members[i].guest if i in self.members else None
+                                      for i in range(1, CONSOLES + 1)]
+            self.plain = bootstrap(self.raid, slots, self.rewards)
+        return self.plain
+
+    def next_host(self):
+        """-> the station index the network goes to: the lowest still on it with its battle."""
+        here = [m for m in self.present() if m.done_at is not None] or self.present()
+        return here[0].index if here else None
+
+    def due(self, now):
+        """-> whether the handover begins: every console on the network has its battle."""
+        if self.handover_at is None:
+            here = self.present()
+            done = [m.done_at for m in here if m.done_at is not None]
+            if here and len(done) == len(here):
+                self.handover_at = max(done)
+            elif done and now >= min(done) + HANDOVER_WAIT:
+                self.handover_at = now          # a console stuck loading holds no one back
+        return self.handover_at is not None and now >= self.handover_at
+
+    @property
+    def left(self):
+        return bool(self.members) and all(m.left for m in self.members.values())
+
+
+class RaidHost:
+    """The host's side of one console's raid, on 0x80 port 0: the lobby, then the bootstrap, the
+    loading steps and six battle-start messages, each released by the console's previous step, then
+    the network handed over as a leaving retail host hands it (to the lowest station index; the
+    others draw the is-migrating status and NetStartHostMigration). `actions` -> [("app", seq,
+    flags, lowest, payload) | ("net",) | ("session",) | ("migration",) | ("migrating",) |
+    ("handover",)]; the launcher reports the console's messages, its acks, and its leaving."""
+
+    def __init__(self, group, index):
+        self.group = group
+        self.index = index
+        self.raid = group.raid
+        self.pokemon = group.pokemon
         self.guest = None
+        self.ready = False
         self.seen = {}                          # milestone -> when the console reached it
         self.sent = {}                          # our sequence -> when it left
+        self.steps = {}                         # step name -> our sequence
+        self.counter = FIRST_COUNTER
         self.accepted_at = None
+        self.timer_sent = None
         self.net_at = self.session_at = None
         self.done_at = None
+        self.gone_at = None
         self.departure = None                   # [phase, since, next send, span]
         self.left = False
         self.whole = None
 
     def accepted(self, now):
-        """The console's port-2 join was answered: the lobby clock starts."""
+        """The console's port-2 join was answered: its lobby clock starts."""
         if self.accepted_at is None:
             self.accepted_at = now
 
     def on_message(self, payload, now):
         """A message the console sent on 0x80 port 0, inflated."""
         payload = bytes(payload)
-        record = pokemon_of(payload)
-        if record is not None:
+        record, state_value = pokemon_of(payload), state_of(payload)
+        if "start" not in self.steps:
+            # A ready console resends its Pokemon to each newcomer; only a state withdraws Ready.
+            if state_value == STATE_READY:
+                self.ready = True
+            elif state_value in (STATE_NOT_READY, STATE_IDLE):
+                self.ready = False
+        if record is not None and "start" not in self.steps:
             self.guest = record
             self._reach("guest_lobby", now)
-        if state_of(payload) == STATE_STARTED and 10 in self.sent:
+        if state_value == STATE_STARTED and "start" in self.steps:
             self._reach("guest_start", now)
-        if payload[:4] == CONSOLE_LOADING and 12 in self.sent:
+        if payload[:4] == CONSOLE_LOADING and "boot2" in self.steps:
             self._reach("loading", now)
-        if payload[:4] == CONSOLE_LOADED and 12 in self.sent:
+        if payload[:4] == CONSOLE_LOADED and "boot2" in self.steps:
             self._reach("loaded", now)
-        if payload[:4] == BATTLE and 13 in self.sent:
+        if payload[:4] == BATTLE and "loaded" in self.steps:
             self._reach("battle", now)
 
     def net_acked(self, now):
@@ -258,7 +361,9 @@ class RaidHost:
 
     def gone(self, now):
         """The console left the network: a client of a migrating host leaves to host its own."""
-        if self.departure:
+        if self.gone_at is None:
+            self.gone_at = now
+        if self.departure or self.group.started_at is not None:
             self.left = True
 
     def _depart(self, phase, now, span=None):
@@ -287,73 +392,101 @@ class RaidHost:
         times = [self.seen[m] for m in milestones if m in self.seen]
         return bool(times) and now >= min(times) + GATE_MARGIN
 
-    def _lobby(self):
-        counters = iter(range(FIRST_COUNTER, FIRST_COUNTER + 10))
-        n = lambda: next(counters)
-        return [(FIRST, streams.compress(descriptor(n(), self.raid)), 1),
-                (COMPLETE, state(n(), STATE_IDLE, initial=True), 1),
-                (COMPLETE, pokemon(n(), self.pokemon), 1),
-                (COMPLETE, countdown(n(), 0x91), None),
-                (COMPLETE, countdown(n(), 0x90), None),
-                (COMPLETE, countdown(n(), 0x8F), None),
-                (COMPLETE_ZLIB, streams.compress(state(n(), STATE_READY)), None),
-                (COMPLETE, countdown(n(), 0x8E), None),
-                (COMPLETE, countdown(n(), 0x8D), None),
-                (COMPLETE_ZLIB, streams.compress(state(n(), STATE_START)), None)]
+    def _count(self):
+        self.counter += 1
+        return self.counter - 1
 
-    def _ready(self, seq, now):
-        """-> whether message `seq` may leave now."""
-        if seq - 1 not in self.sent and seq > 1:
-            return False
-        if seq <= 10:
-            if seq in (1, 7, 10) and not self._passed("guest_lobby", now=now):
-                return False
-            return now >= self.accepted_at + LOBBY_AT[seq - 1]
-        if seq == 11:
-            return self.guest is not None and self._passed("session_ack", now=now)
-        if seq == 12:
-            return True
-        if seq == 13:
-            return self._passed("loading", "loaded", now=now)
-        if seq == 14:
-            return self._passed("loaded", now=now)
-        if seq == 15:
-            return self._passed("battle", now=now)
-        return now >= self.sent[15] + HANDOFF_AT[seq - 15]
+    def _lobby(self, now):
+        """-> the next lobby step that may leave now, or None."""
+        if not self._passed("guest_lobby", now=now):
+            return None
+        position = len(self.sent)
+        if position < len(LOBBY):
+            name, at = LOBBY[position]
+            if now < self.accepted_at + at:
+                return None
+            return name
+        if self.group.timer(now) != self.timer_sent:
+            return "timer"
+        if self.group.started(now) and now >= self.accepted_at + START_AT:
+            return "start"
+        return None
 
-    def _message(self, seq):
-        if seq <= 10:
-            return self._lobby()[seq - 1]
-        if seq in (11, 12):
-            if self.whole is None:
-                self.whole = bootstrap_message(bootstrap(self.raid, (self.pokemon, self.guest),
-                                                         self.rewards))
+    def _build(self, name, now):
+        """-> (flags, payload, lowest) of a lobby step."""
+        if name == "descriptor":
+            return FIRST, streams.compress(descriptor(self._count(), self.raid)), 1
+        if name == "idle":
+            return COMPLETE, state(self._count(), STATE_IDLE, initial=True), 1
+        if name == "pokemon":
+            return COMPLETE, pokemon(self._count(), self.pokemon), 1
+        if name == "timer":
+            self.timer_sent = self.group.timer(now)
+            return COMPLETE, countdown(self._count(), self.timer_sent), None
+        if name == "ready":
+            return COMPLETE_ZLIB, streams.compress(state(self._count(), STATE_READY)), None
+        return COMPLETE_ZLIB, streams.compress(state(self._count(), STATE_START)), None
+
+    def _next(self, now):
+        """-> (name, flags, payload, lowest) of the message that may leave now, or None."""
+        if "start" not in self.steps:
+            name = self._lobby(now)
+            if name is None:
+                return None
+            return (name,) + self._build(name, now)
+        if "boot1" not in self.steps:
+            # A retail host sends the bootstrap once every member has answered the start (0.27140).
+            if (self.guest is None or not self._passed("session_ack", now=now)
+                    or not all("guest_start" in m.seen for m in self.group.present())):
+                return None
+            self.whole = bootstrap_message(self.group.bootstrap(), self._count())
             cut = min(BOOTSTRAP_FRAGMENT, len(self.whole) - 1)
-            if seq == 11:
-                return FRAGMENT_START, self.whole[:cut], None
-            return FRAGMENT_END_ZLIB, streams.compress(self.whole[cut:]), 11
-        if seq == 13:
-            return COMPLETE, LOADED, None
-        if seq == 14:
-            return COMPLETE, BATTLE_READY, None
-        return COMPLETE_ZLIB, streams.compress(HANDOFF[seq - 15]), HANDOFF_LOWEST[seq - 15]
+            return "boot1", FRAGMENT_START, self.whole[:cut], None
+        if "boot2" not in self.steps:
+            cut = min(BOOTSTRAP_FRAGMENT, len(self.whole) - 1)
+            return "boot2", FRAGMENT_END_ZLIB, streams.compress(self.whole[cut:]), self.steps["boot1"]
+        if "loaded" not in self.steps:
+            if not self._passed("loading", "loaded", now=now):
+                return None
+            return "loaded", COMPLETE, LOADED, None
+        if "battle" not in self.steps:
+            if not self._passed("loaded", now=now):
+                return None
+            return "battle", COMPLETE, BATTLE_READY, None
+        first = self.steps.get("handoff0")
+        n = sum(1 for name in self.steps if name.startswith("handoff"))
+        if n == len(HANDOFF):
+            return None
+        if n == 0 and not self._passed("battle", now=now):
+            return None
+        if n and now < self.sent[first] + HANDOFF_AT[n]:
+            return None
+        lowest = None if HANDOFF_LOWEST[n] is None else (first or len(self.sent) + 1) + HANDOFF_LOWEST[n]
+        return f"handoff{n}", COMPLETE_ZLIB, streams.compress(HANDOFF[n]), lowest
 
     def actions(self, now):
         if self.accepted_at is None or self.left:
             return []
         if self.departure:
             return self._leaving(now)
-        if self.done_at is not None and now >= self.done_at:
-            self._depart("migration", now)
+        if self.gone_at is not None:
+            return []
+        if "start" in self.steps and self.group.due(now):
+            self._depart("migration" if self.group.next_host() == self.index else "status", now)
             return self._leaving(now)
+        if self.done_at is not None:
+            return []
         out = []
-        seq = len(self.sent) + 1
-        while seq <= 20 and self._ready(seq, now):
-            flags, payload, lowest = self._message(seq)
+        while True:
+            step = self._next(now)
+            if step is None:
+                break
+            name, flags, payload, lowest = step
+            seq = len(self.sent) + 1
             out.append(("app", seq, flags, seq if lowest is None else lowest, payload))
             self.sent[seq] = now
-            seq += 1
-        if seq > 20 and self.done_at is None:
+            self.steps[name] = seq
+        if f"handoff{len(HANDOFF) - 1}" in self.steps and self.done_at is None:
             self.done_at = now + LINGER
         if ("net_ack" not in self.seen and self._passed("guest_start", now=now)
                 and (self.net_at is None or now >= self.net_at + RETRY)):

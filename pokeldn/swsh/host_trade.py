@@ -251,6 +251,9 @@ class HostTrade:
                     self.box["peer_cmds"] = [c for c in self.box["peer_cmds"] if c != 4]
                 if command == 2:
                     self.box["peer_pk8"] = None
+                # B in its step 7 also clears our flags (0x00aa57d0): our offer and 1 go again.
+                if command == 5:
+                    self.box["our_offer"] = self.box["our_accept"] = False
                 if self.partner:
                     {4: self.partner.accept, 2: self.partner.withdraw,
                      5: self.partner.unaccept}.get(command, lambda: None)()

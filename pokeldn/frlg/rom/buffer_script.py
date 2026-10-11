@@ -2743,6 +2743,11 @@ def create_mon_copy_model(source):
     return _CREATE_MON_COPY_MODEL + (int(source) & 0xFFFFFFFF).to_bytes(4, "little")
 
 
+# Unicorn's default translation buffer is 1 GiB per instance; Windows commits it up front, and a few
+# instances awaiting collection exhaust the commit limit (an access violation inside uc_mem_map).
+TCG_BUFFER = 32 << 20
+
+
 class _Machine:
     """The console's memory across a whole CLI_RUN_BUFFER_SCRIPT: the image is copied once
     [decomp:src/mystery_gift_client.c:239] and then called every frame until it returns 1. `call`
@@ -2761,6 +2766,7 @@ class _Machine:
 
         validate(code)
         uc = unicorn.Uc(unicorn.UC_ARCH_ARM, unicorn.UC_MODE_ARM | unicorn.UC_MODE_LITTLE_ENDIAN)
+        uc.ctl_set_tcg_buffer_size(TCG_BUFFER)
         uc.mem_map(EWRAM_BASE, EWRAM_SIZE)
         uc.mem_map(IWRAM_BASE, IWRAM_SIZE)
         uc.mem_map(ROM_BASE, ROM_SIZE)

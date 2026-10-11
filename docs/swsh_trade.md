@@ -157,6 +157,12 @@ Steps 2 and 6 arm it after the offer and the acceptance (`0x00aa5434`); every ti
 (`0x00aa5608`). In step 7 a press clears the partner's flags, sends box command 5 (the acceptance
 withdrawn) and leaves the sequence (`0x00aa57d0`); in step 3 it sends box command 2.
 
+A partner's offer and box command 1 sent before that box command 5 are cleared with its flags; the
+console's next offer waits in step 3 until they arrive again. `pokeldn.swsh.host_trade` and
+`bin/swsh_connect.py` send their offer and box command 1 again after a box command 5. With a retail
+Sword in either role that offered, accepted, pressed B and offered again, the trade then completed;
+without the second send the console stayed on "En attente d'une réponse".
+
 Every later trade repeats the trade's own part: both offers and box command 1, the two box command
 4s in that order, ping 130 (the joiner pings first), a new content 50 at phase 0, ping 120, a new
 content 40 from phase 0 to 4. No 0x84 snapshot, ping 97 or 110, box command 3 or content 30 publish

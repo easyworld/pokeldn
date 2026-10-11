@@ -131,14 +131,17 @@ def test_form_errors_name_the_field_to_fix():
         frlg.compile(state)
 
 
-def test_the_sword_pikachu_preset_is_the_record_the_launcher_builds():
+def test_the_sword_pikachu_preset_is_the_record_the_launcher_builds(monkeypatch):
+    # The checksum includes the date: both builds must use the same second.
+    date = wc8.pack_date(1_700_000_000)
+    monkeypatch.setattr(wc8, "pack_date", lambda t=None: date)
     args = swsh_gift_host.build_parser().parse_args(
         ["--species", "25", "--level", "25", "--move1", "84", "--move2", "45", "--move3", "86",
          "--move4", "98", "--nickname", "POKELDN", "--ot", "POKELDN"])
     random.seed(7)
     built = swsh.record(swsh.PRESET["pikachu"].state)
     random.seed(7)
-    assert built[8:] == swsh_gift_host.build_record(args)[8:]   # +0x00 is the date
+    assert built == swsh_gift_host.build_record(args)
 
 
 def _pkhex_available():

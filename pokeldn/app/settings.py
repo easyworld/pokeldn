@@ -30,6 +30,7 @@ class Settings:
     switch_tid: int | None = None   # the Switch titles' six-digit ID, as shown; None: the one tid/sid make
     switch_sid: int | None = None
     language: int = 2
+    gender: int = 0     # 0 male, 1 female; Legends Z-A checks it before taking a Pokemon back as its trainer's
     board_names: dict = field(default_factory=dict)   # MAC -> name the user gave the board
     tool_values: dict = field(default_factory=dict)   # tool key -> {"values": {...}, "extra": {...}}
 
@@ -64,7 +65,7 @@ class Settings:
 
     def trainer(self, game: str) -> dict:
         tid, sid = self.ids(game)
-        return {"ot": self.name(game), "tid": tid, "sid": sid, "language": self.language, "gender": 0}
+        return {"ot": self.name(game), "tid": tid, "sid": sid, "language": self.language, "gender": self.gender}
 
 
 def switch_ids_valid(tid: int, sid: int) -> bool:

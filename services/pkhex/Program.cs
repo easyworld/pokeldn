@@ -685,8 +685,16 @@ JsonObject Paste(Game game, JsonObject request)
     var blank = game.Blank();
     var dummied = MoveInfo.GetDummiedMovesHashSet(game.Context);
     var errorText = BattleTemplateParseErrorLocalization.Get(displayLanguage);
-    foreach (var set in ShowdownParsing.GetShowdownSets(lines))
+    // A set is a run of lines between blank ones, as PKHeX's parser splits them.
+    var blocks = new List<List<string>> { new() };
+    foreach (var line in lines)
+        if (!string.IsNullOrWhiteSpace(line))
+            blocks[^1].Add(line);
+        else if (blocks[^1].Count > 0)
+            blocks.Add([]);
+    foreach (var block in blocks.Where(b => b.Count > 0))
     {
+        var set = ShowdownParsing.GetShowdownSets(block).Single();
         var errors = new JsonArray();
         var notes = new JsonArray();
         foreach (var invalid in set.InvalidLines)
@@ -770,8 +778,11 @@ JsonObject Paste(Game game, JsonObject request)
             notes.Add("Gigantamax and Dynamax level are not set.");
         if (set.HiddenPowerType >= 0 && blank.Format < 8)
             notes.Add("Hidden Power follows the IVs; its type is not set.");
-        if (set.Friendship != 255)
-            notes.Add("Friendship is not set.");
+        // Showdown leaves out a friendship of 255, its default; a set asks for one only by naming it, so an
+        // event Pokemon whose friendship is fixed still builds from a set that does not.
+        if (block.Any(line => BattleTemplateLocalization.GetAll().Values
+                .Any(l => l.Config.TryParse(line.Trim(), out _) == BattleTemplateToken.Friendship)))
+            options["friendship"] = set.Friendship;
         sets.Add(new JsonObject
         {
             ["species"] = name,
@@ -1034,6 +1045,7 @@ JsonObject Describe(Game game, PKM pk, LegalityAnalysis la)
         ["shiny"] = pk.IsShiny,
         ["nickname"] = pk.Nickname,
         ["ot"] = pk.OriginalTrainerName,
+        ["ot_gender"] = pk.OriginalTrainerGender,
         ["trainer_id"] = pk.DisplayTID,
         ["secret_id"] = pk.DisplaySID,
         ["nature"] = strings.natures[(int)pk.StatAlignment],
@@ -1077,7 +1089,7 @@ static byte[] DecryptedParty(PKM pk)
 
 // The offer options a request asks for; a stat array is HP, Atk, Def, SpA, SpD, Spe and -1 leaves a stat alone.
 record Wish(Nature? Nature, int? Ability, Gender? Gender, int[] IVs, int[] Effort, int? Item, byte? Ball,
-            byte? Form, ushort[] Moves)
+            byte? Form, byte? Friendship, ushort[] Moves)
 {
     static readonly string[] Stats = ["hp", "atk", "def", "spa", "spd", "spe"];
     static readonly string[] StatNames = ["HP", "Attack", "Defense", "Sp. Atk", "Sp. Def", "Speed"];
@@ -1096,6 +1108,8 @@ record Wish(Nature? Nature, int? Ability, Gender? Gender, int[] IVs, int[] Effor
             throw new ArgumentException("An IV is at most 31 and an effort value at most 252.");
         if (Number("nature") is < 0 or > 24)
             throw new ArgumentException("Unknown nature.");
+        if (Number("friendship") is < 0 or > 255)
+            throw new ArgumentException("Friendship is at most 255.");
         ushort[] moves = o?["moves"] is JsonArray list
             ? [.. list.Select(m => checked((ushort)(int)m!)).Where(m => m != 0).Distinct()] : [];
         if (moves.Length > 4)
@@ -1103,7 +1117,7 @@ record Wish(Nature? Nature, int? Ability, Gender? Gender, int[] IVs, int[] Effor
         return new Wish(Number("nature") is { } n ? (Nature)n : null, Number("ability"),
             Number("gender") is { } g ? (Gender)g : null, ivs, effort,
             Number("held_item"), Number("ball") is { } b ? checked((byte)b) : null,
-            Number("form") is { } f ? checked((byte)f) : null, moves);
+            Number("form") is { } f ? checked((byte)f) : null, (byte?)Number("friendship"), moves);
     }
 
     public ushort[] Moveset() => [.. Moves, .. new ushort[4 - Moves.Length]];
@@ -1150,6 +1164,10 @@ record Wish(Nature? Nature, int? Ability, Gender? Gender, int[] IVs, int[] Effor
             pk.HeldItem = item;
         if (Ball is { } ball)
             pk.Ball = ball;
+        // The original trainer's: a console whose player is not the original trainer writes its handler's
+        // as the species' base friendship (docs/architecture.md, Offer options).
+        if (Friendship is { } friendship)
+            pk.OriginalTrainerFriendship = friendship;
         ApplyEffort(pk);
         // Gen 3 and 4 raise an EV past 100 (the vitamin cap) only in battle, so the record must have gained
         // experience since it was met; one point stays below the next level.
@@ -1201,6 +1219,8 @@ record Wish(Nature? Nature, int? Ability, Gender? Gender, int[] IVs, int[] Effor
             return $"a {strings.balllist[ball]}";
         if (Form is { } form && pk.Form != form)
             return "this form";
+        if (Friendship is { } friendship && pk.OriginalTrainerFriendship != friendship)
+            return $"friendship {friendship}";
         foreach (var move in Moves)
             if (!pk.HasMove(move))
                 return $"the move {strings.movelist[move]}";

@@ -50,6 +50,7 @@ class Runner:
     def __init__(self, path):
         self.img = load(path)
         self.uc = uc = Uc(UC_ARCH_ARM64, UC_MODE_LITTLE_ENDIAN)
+        uc.ctl_set_tcg_buffer_size(64 << 20)    # the default 1 GiB is committed up front on Windows
         uc.mem_map(0, (len(self.img) + 0xFFFFF) & ~0xFFFFF)
         uc.mem_write(0, bytes(self.img))
         uc.mem_map(SCRATCH, 0x200000)

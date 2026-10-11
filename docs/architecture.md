@@ -98,8 +98,8 @@ stats.
 
 ### Offer options
 
-A build can also ask for a form, nature, ability, gender, held item, ball, up to four moves, IVs and
-effort values. Moves and form narrow the encounter search to encounters that can carry them. Nature,
+A build can also ask for a form, nature, ability, gender, held item, ball, friendship, up to four
+moves, IVs and effort values. Moves and form narrow the encounter search to encounters that can carry them. Nature,
 ability, gender and IVs go into the encounter criteria, so the record is generated with them; a
 Generation 3 PID is searched for the requested nature. When an encounter rolls something else, the
 record is moved to the request the way a player would, and the legality analysis judges the result:
@@ -111,11 +111,25 @@ record is moved to the request the way a player would, and the legality analysis
 | an IV asked to be 31 | hyper training, at level 100 (Generations 7 and 8) or 50 (Generation 9) |
 | form | set on species whose form the player changes, such as Rotom's appliances |
 
-Held item, ball and effort values are set after the build. A Generation 3 or 4 EV above 100 is legal
+Held item, ball, friendship and effort values are set after the build. A Generation 3 or 4 EV above 100 is legal
 only once the Pokémon has gained experience since it was met, so such a record gets one experience
 point, below the next level. A Legends Arceus effort level is the stored value plus a bias from the IV
 (1 from 20, 2 from 26, 3 at 31), and a stored value past 10 minus the bias is illegal, so the request
 is taken as the level the game shows and the bias is subtracted.
+
+Friendship is the original trainer's, 0 to 255; a save edit writes it as built. A console that
+receives the Pokemon in a trade keeps it only when its player is the original trainer, so Settings, Your
+trainer must be the player's ([Your trainer](gui.md#your-trainer)). PKHeX refuses a friendship other than
+the event's own on an event Pokemon, such as Brilliant Diamond's Manaphy.
+
+| title | a received Pokemon's friendship |
+|---|---|
+| FireRed, LeafGreen | 70 on every non-egg Pokemon, whoever its trainer [trade_scene.c:1071] |
+| Legends Z-A | kept when the player's gender, IDs and name are the original trainer's; otherwise the player becomes the handler, with the species' base friendship ([the received record](za.md#what-the-trade-writes-into-a-received-record)) |
+| Brilliant Diamond | kept when received back by its original trainer; received by another trainer, handler friendship 50 ([the received Pokemon](bdsp_trade.md#what-the-console-does-to-a-received-pokemon)) |
+| Legends Arceus, Scarlet | received by another trainer, handler friendship 50 ([Legends Arceus](pla.md#what-a-trade-rewrites), [Scarlet](sv.md#what-a-trade-rewrites)) |
+| Sword | a Pichu sent at friendship 255 evolved on its next level-up when built under the receiving player's name, IDs and gender, and did not under another trainer |
+| Let's Go | unmeasured |
 
 The record must carry every request and pass the legality analysis. The first encounter that does is
 kept, and the first request no encounter can carry is named in the refusal.
@@ -153,7 +167,8 @@ an IV the `IVs:` line leaves out is 31. The parser keeps stats in PKHeX's order,
 | the set names | result |
 |---|---|
 | a line the parser cannot read, a species or form absent from the game, an ability the species lacks, an item the game cannot hold, a move the game lacks, EVs over 510 | refused with the reason; nothing is filled |
-| Tera Type, Gigantamax, Dynamax level, Friendship, Hidden Power type | filled without it, with a note |
+| Tera Type, Gigantamax, Dynamax level, Hidden Power type | filled without it, with a note |
+| no `Friendship:` line | the encounter's own friendship; Showdown leaves out its default, 255, so a set asks for friendship only by naming it |
 | EVs in Let's Go or Legends Arceus, an ability in Legends Z-A | left out, with a note |
 | several sets, in a trade queue | each fills a trade in order from the picker it was pasted into: an untouched picker after it is reused, otherwise one is inserted, up to the queue's limit; a set that does not fit is counted in a note. A refusal in any set refuses the paste |
 | several sets, outside a queue | the first fills the form, with a note |

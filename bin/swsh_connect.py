@@ -719,6 +719,11 @@ async def main_async(args):
                 print(f"\n[rx] t={now:6.2f} *** BOX SYNC STATE COMMAND {command} *** on the trade "
                       f"holder - the console naming its own state machine")
                 record(rec="rx_box_command", t=now, command=command)
+                # B after accepting clears our flags with its 5 (0x00aa57d0): its next offer gets ours
+                # and box command 1 again (docs/swsh_trade.md, The box state machine).
+                if command == 5:
+                    st["offered_pk8"] = None
+                    st["pk8_offer_sent"] = st["trade_ready_sent"] = False
             offered = swsh_trade.offered_pokemon(got["payload"])
             if offered is not None and st["ladder_finished"]:
                 next_trade()

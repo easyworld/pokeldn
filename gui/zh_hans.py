@@ -4,6 +4,11 @@ Species source: https://github.com/kwsch/PKHeX/tree/master/PKHeX.Core/Resources/
 """
 
 LABELS = {
+ 'Mini mark': '小不点之证',
+ 'Jumbo mark': '大个子之证',
+ 'Most desired rewards': '所需奖励最多',
+ 'Most desired rewards ranks by the wanted rewards: want at least one.': '“所需奖励最多”按指定奖励排序，请添加至少一项奖励。',
+ 'Friendship is at most 255.': '亲密度范围为 0 到 255。',
  'Asking GitHub for the latest raid events...': '正在向 GitHub 查询最新团体战活动…',
  'Downloading the event gallery...': '正在下载活动库…',
  'Unpacking the raid events...': '正在解压团体战活动…',

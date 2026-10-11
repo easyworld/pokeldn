@@ -100,8 +100,8 @@ class Service:
 
     def make(self, game: str, species: int, trainer: dict, level: int = 0, shiny: bool = False,
              nickname: str = "", version: str = "", options: dict | None = None) -> dict:
-        """options: form, nature, ability, gender, held_item, ball (ids), moves (up to four ids), and ivs / effort
-        as {hp, atk, def, spa, spd, spe}."""
+        """options: form, nature, ability, gender, held_item, ball (ids), friendship (0-255), moves (up to four
+        ids), and ivs / effort as {hp, atk, def, spa, spd, spe}."""
         reply = self._ask({"cmd": "make", "game": game, "species": species, "level": level, "shiny": shiny,
                            "nickname": nickname, "trainer": trainer, "version": version,
                            "options": options or {}})

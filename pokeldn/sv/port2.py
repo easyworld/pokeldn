@@ -48,19 +48,23 @@ def build_announce(host_station_id, kind=1, capacity=2, zero=0, key=0):
             + bytes([TUPLE]) + encode_uint(5) + outer)
 
 
-def build_session(host_station_id, kind=5, capacity=4):
+def build_session(host_station_id, kind=5, capacity=4, members=()):
     """-> the type 6 a raid host sends on 0x7C port 2 after the seat: the type 7's session block
-    under kind 5, then the four slots, the host's station in the first (docs/sv_raid.md)."""
+    under kind 5, then the members in join order, ours first, their codes and their count; `members`
+    are the (station id, code) of the consoles already seated (docs/sv_raid.md, Several consoles)."""
+    seated = [(host_station_id, 0)] + list(members)
     session = (bytes([TUPLE]) + encode_uint(6) + encode_uint(kind) + encode_uint(capacity)
                + encode_uint(0) + encode_bytes(bytes(JOIN_BLOB_SIZE))
                + encode_bytes(bytes(ANNOUNCE_BLOB_SIZE)) + encode_uint(0))
     block = (bytes([TUPLE]) + encode_uint(5) + session + encode_uint(0) + encode_uint(0)
              + bytes([TUPLE]) + encode_uint(1) + encode_u64(host_station_id) + encode_uint(0))
-    slots = (bytes([LIST]) + encode_uint(capacity)
-             + bytes([TUPLE]) + encode_uint(1) + encode_u64(host_station_id)
-             + (bytes([TUPLE]) + encode_uint(1) + encode_uint(0)) * (capacity - 1))
+    slots = bytes([LIST]) + encode_uint(capacity)
+    for station, _ in seated:
+        slots += bytes([TUPLE]) + encode_uint(1) + encode_u64(station)
+    slots += (bytes([TUPLE]) + encode_uint(1) + encode_uint(0)) * (capacity - len(seated))
+    codes = bytes(code for _, code in seated).ljust(capacity, b"\0")
     return (bytes([TYPE_SESSION, TUPLE]) + encode_uint(5) + block + slots
-            + encode_bytes(bytes(4)) + encode_uint(1) + encode_uint(0))
+            + encode_bytes(codes) + encode_uint(len(seated)) + encode_uint(0))
 
 
 def _skip_field(data, pos):

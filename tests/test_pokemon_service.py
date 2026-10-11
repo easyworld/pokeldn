@@ -122,13 +122,13 @@ def test_creation_import_and_launcher_preparation_remain_legal(service, game):
 
 
 @pytest.mark.parametrize("game", FORMATS)
-def test_a_built_pokemon_shows_the_trainer_id_typed_in_settings(service, game):
+def test_a_built_pokemon_shows_the_trainer_typed_in_settings(service, game):
     """FireRed shows the 16-bit TID; a Switch title shows the 32-bit id as six digits and a secret ID,
-    here the largest pair 32 bits hold. PKHeX's DisplayTID reads them back."""
-    settings = Settings(tid=12345, sid=54321, switch_tid=967295, switch_sid=4294)
+    here the largest pair 32 bits hold. PKHeX's DisplayTID reads them back. Z-A matches the gender too."""
+    settings = Settings(tid=12345, sid=54321, switch_tid=967295, switch_sid=4294, gender=1)
     built = service.make(game, 25, settings.trainer(game))
     shown = (12345, 54321) if game == "frlg" else (967295, 4294)
-    assert (built["trainer_id"], built["secret_id"]) == shown and built["legal"]
+    assert (built["trainer_id"], built["secret_id"], built["ot_gender"]) == (*shown, 1) and built["legal"]
 
 
 def test_an_event_pokemon_offered_under_a_new_pid_keeps_its_own(service, capsys):
@@ -228,6 +228,19 @@ def test_offer_options_land_in_the_record_the_launcher_sends(service, game):
         3, options["ability"], 1, options["held_item"], options["ball"])
     assert (f["ivs"][0], f["ivs"][1], f["ivs"][3]) == (31, 0, 31)
     assert f["evs"] == (252, 0, 0, 4, 0, 0)
+
+
+@pytest.mark.parametrize("game, species, handled", [
+    ("swsh", 447, 0),      # Riolu, evolved at friendship 160 on level-up
+    ("sv", 447, 0),
+    ("bdsp", 68, 1),       # Machamp, a trade evolution: the build gains a handler, whose friendship is its own
+])
+def test_friendship_lands_in_the_original_trainers_byte(service, game, species, handled):
+    """A console keeps the original trainer's friendship when its player is that trainer (docs/architecture.md)."""
+    built = service.make(game, species, TRAINER, options={"friendship": 222})
+    offer = Path(pokemon.prepare_file(game, built["file"])).read_bytes()
+    f = gen9.read(gen9.load(offer)) if game == "sv" else gen8.read(gen8.load(offer))
+    assert built["legal"] and (f["current_handler"], f["ot_friendship"]) == (handled, 222)
 
 
 @pytest.mark.parametrize("game", ["frlg", "lgpe", "pla", "za"])
@@ -406,6 +419,18 @@ def test_a_value_the_builder_does_not_set_is_reported(service, game, text, note)
     found, = service.paste(game, text, TRAINER)
     assert any(note in n for n in found["notes"])
     assert "effort" not in found["options"] or game != "lgpe"
+
+
+@pytest.mark.parametrize("game, text, friendship", [
+    ("swsh", "Riolu\nFriendship: 255\n- Quick Attack", 255),
+    ("swsh", "Riolu\nHappiness: 0", 0),
+    ("swsh", CHARIZARD_FR + "Bonheur : 200", 200),
+    ("bdsp", "Manaphy\nLevel: 1", None),     # an event whose friendship is fixed: Showdown's 255 would refuse it
+])
+def test_a_set_asks_for_friendship_only_by_naming_it(service, game, text, friendship):
+    found, = service.paste(game, text, TRAINER)
+    assert found["errors"] == [] and found["options"].get("friendship") == friendship
+    assert service.make(game, found["species_id"], TRAINER, found["level"], options=found["options"])["legal"]
 
 
 def test_a_team_paste_returns_every_set_in_order(service):

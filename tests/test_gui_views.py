@@ -6,6 +6,9 @@ import pytest
 
 pytest.importorskip("flet")
 
+import flet as ft
+
+from gui import theme as t
 from gui.views import pokemon
 from gui.views.games import GamesView
 from gui.views.pokemon import OfferOptions, OfferQueue
@@ -48,6 +51,17 @@ def test_effort_over_the_games_total_is_refused_before_the_builder_is_asked(effo
     options = OfferOptions(SimpleNamespace(value={"options": {"effort": dict(values)}}))
     options._form({**FOUND, "effort": effort})
     assert bool(options.problem()) == refused
+
+
+@pytest.mark.parametrize("typed, sent", [("220", 220), ("256", None), ("", None)])
+def test_a_friendship_past_255_or_empty_is_not_sent(typed, sent):
+    options = OfferOptions(SimpleNamespace(value={"options": {"friendship": 70}}))
+    options.control.update = lambda: None
+    box = options._number("friendship", 255)
+    box.value = typed
+    box.on_change(SimpleNamespace(control=box))
+    assert options.chosen.get("friendship") == sent
+    assert (box.border[ft.ControlState.DEFAULT].side.color == t.RED) == (typed == "256")
 
 
 class StubPicker:
@@ -1079,8 +1093,35 @@ def test_the_finder_wants_the_rewards_its_unfolded_list_names():
     assert [o.text for o in picker.options] == ["银色王冠 （此范围不掉落）", "特性膏药"]
 
 
-def test_find_a_raid_searches_ten_million_seeds_from_any_first_seed(monkeypatch):
-    """The finder offers the compiled scan's ten million seeds, and its shuffle picks a random first seed."""
+def raid_controls(control):
+    """-> the control and every one inside it: the raid finder's dialog and cards."""
+    import flet as ft
+    yield control
+    for name in ("content", "controls"):
+        child = getattr(control, name, None)
+        for c in child if isinstance(child, list) else [child] if isinstance(child, ft.Control) else []:
+            yield from raid_controls(c)
+
+
+def test_a_raid_card_tells_a_shiny_jumbo_boss_by_its_title_and_tags():
+    """Both cards put the sparkles and the Jumbo mark beside the name; the raid's own card also tags
+    them, while the finder's compact card keeps its facts to one row."""
+    import flet as ft
+    from gui.views import raid_seed
+    from pokeldn.sv import raid_encounter, raid_search
+    app = SimpleNamespace(settings=SimpleNamespace(sprites=False), page=None, ui=lambda fn: fn())
+    context = raid_search.contexts("scarlet", "paldea", "5star", "standard")[0]
+    row, stars = raid_search._drawer(context)(0)
+    boss = dict(raid_encounter.boss_fields(0, row), trainer_id=0, secret_id=0, pid=0, scale=0xFF)
+    for compact, tags in ((True, []), (False, ["异色", "大个子之证"])):
+        card = list(raid_controls(raid_seed.boss_card(app, 0, stars, boss, context, compact=compact)))
+        assert [c.value for c in card if isinstance(c, ft.Text) and c.value in ("异色", "大个子之证")] == tags
+        assert [c.tooltip for c in card if isinstance(c, ft.Image) and c.tooltip] == ["异色", "大个子之证"]
+
+
+def test_find_a_raid_offers_its_default_seeds_from_any_first_seed(monkeypatch):
+    """The finder offers its default count of seeds (a hundred million with the compiled scan), and its
+    shuffle picks a random first seed."""
     import flet as ft
     from gui.views import raid_seed
     from pokeldn.sv import raid_search
@@ -1092,14 +1133,7 @@ def test_find_a_raid_searches_ten_million_seeds_from_any_first_seed(monkeypatch)
                                       lambda: {"version": "violet", "map_name": "paldea", "progress": "6star",
                                                "content": "standard"}, lambda _c: None)
     picker._open(None)
-
-    def walk(control):
-        yield control
-        for name in ("content", "controls"):
-            child = getattr(control, name, None)
-            for c in child if isinstance(child, list) else [child] if isinstance(child, ft.Control) else []:
-                yield from walk(c)
-    controls = list(walk(shown[0].content))
+    controls = list(raid_controls(shown[0].content))
     labels = [c for c in controls if isinstance(c, ft.Column) and c.controls and isinstance(c.controls[0], ft.Container)
               and isinstance(c.controls[0].content, ft.Text)]
     first = next(c.controls[1] for c in labels if c.controls[0].content.value == "起始种子")
@@ -1116,6 +1150,82 @@ def test_find_a_raid_searches_ten_million_seeds_from_any_first_seed(monkeypatch)
     assert len(values) > 1
 
 
+def test_the_finder_greys_out_the_size_marks_an_event_rules_out(monkeypatch):
+    """A five-star Pikachu drawn between 240 and 255 can take the Jumbo mark, never the Mini mark; a
+    six-star Charizard always 128 neither, so picking six stars greys both out and lets Jumbo go."""
+    import flet as ft
+    from gui.views import raid_seed
+    from pokeldn.sv import raid_event, raid_search
+    shown = []
+    app = SimpleNamespace(page=SimpleNamespace(show_dialog=shown.append, pop_dialog=lambda: None),
+                          ui=lambda f: f())
+    monkeypatch.setattr(raid_search, "FAST", False)
+    monkeypatch.setattr(ft.Dropdown, "update", lambda self: None)
+    base = dict(form=0, ability=0, flawless_ivs=0, level=12, capture_level=12, moves=[33, 0, 0, 0], tera=1,
+                rate=1, fixed_rewards="1", lottery_rewards="1", boss_desc=[500] + [0] * 36, evs=[0] * 6, rom=0,
+                group=1, capture_rate=1, ivs=None, gender=None, nature=None, shiny=0, held_item=0, time=None)
+    event = raid_event.Event(1, "", (dict(base, identifier=1, species=25, stars=5, scale_type=5, scale=0),
+                                     dict(base, identifier=2, species=6, stars=6, scale_type=6, scale=128)),
+                             {"1": []}, {"1": []}, (1,) + (0,) * 9)
+    context = raid_search.contexts(event=event)[0]
+    picker = raid_seed.RaidSeedPicker(app, "", lambda _v: None, lambda: context, lambda _c: None)
+    picker._open(None)
+    dropdowns = [c for c in raid_controls(shown[0].content) if isinstance(c, ft.Dropdown)]
+    size = next(d for d in dropdowns if d.options[0].text == "不限体型证章")
+    stars = next(d for d in dropdowns if d.options[0].text == "任意星级")
+    greyed = lambda: [o.text for o in size.options if o.disabled]
+    assert greyed() == ["小不点之证"]
+    size.value = "jumbo"
+    stars.value = "6"
+    stars.on_select(None)
+    assert greyed() == ["任意体型证章", "小不点之证", "大个子之证"] and size.value == "any"
+    stars.value = "any"
+    stars.on_select(None)
+    assert greyed() == ["小不点之证"]
+
+
+def test_the_finder_s_bar_shows_how_far_a_search_is(monkeypatch):
+    """Under the status, a bar moves until the first seeds are counted, then fills with the share
+    searched, and goes once the search is done. Most desired rewards with no wanted reward is refused
+    before any search starts."""
+    import flet as ft
+    from gui.views import raid_seed
+    from pokeldn.sv import raid_search
+    shown = []
+    app = SimpleNamespace(page=SimpleNamespace(show_dialog=shown.append, pop_dialog=lambda: None),
+                          ui=lambda f: f())
+    monkeypatch.setattr(raid_search, "FAST", False)
+    monkeypatch.setattr(ft.BaseControl, "update", lambda self: None)
+    monkeypatch.setattr(raid_seed.threading, "Thread", lambda target, daemon: SimpleNamespace(start=target))
+    picker = raid_seed.RaidSeedPicker(app, "", lambda _v: None,
+                                      lambda: {"version": "violet", "map_name": "paldea", "progress": "6star",
+                                               "content": "standard"}, lambda _c: None)
+    picker._open(None)
+    bar = next(c for c in raid_controls(shown[0].content) if isinstance(c, ft.ProgressBar))
+    seen = []
+
+    def search(*_args, progress, **_kwargs):
+        seen.append((bar.visible, bar.value))
+        progress(25, 100)
+        seen.append((bar.visible, bar.value))
+        return []
+    monkeypatch.setattr(raid_search, "search", search)
+    count = next(c for c in raid_controls(shown[0].content)
+                 if isinstance(c, ft.TextField) and c.value == str(raid_search.DEFAULT_COUNT))
+    count.value = "1000"
+    assert not bar.visible
+    rank = next(c for c in raid_controls(shown[0].content)
+                if isinstance(c, ft.Dropdown) and c.options[0].text == "最低综合耐久")
+    rank.value = "rewards"
+    shown[0].actions[-1].on_click(None)
+    status = next(c for c in raid_controls(shown[0].content) if isinstance(c, ft.Text)
+                  and c.value.startswith("“所需奖励最多”"))
+    assert not seen and not bar.visible and status.color == raid_seed.t.RED
+    rank.value = "overall"
+    shown[0].actions[-1].on_click(None)
+    assert seen == [(True, None), (True, 0.25)] and not bar.visible
+
+
 def test_the_finder_tells_how_far_a_search_is_and_how_long_it_has_left():
     from gui.views.raid_seed import duration, searching
     assert [duration(s) for s in (0, 59.9, 60, 200, 3600, 7500)] == [
@@ -1124,6 +1234,10 @@ def test_the_finder_tells_how_far_a_search_is_and_how_long_it_has_left():
     assert searching(500, 1000, 2) == "正在搜索种子 500 / 1,000，每秒 250 个，预计剩余 2 秒…"
     assert searching(50_000_000, 1 << 32, 2) == (
         "正在搜索种子 50,000,000 / 4,294,967,296，每秒 2500.0 万 个，预计剩余 2 分 49 秒…")
+    assert searching(28_448_764_162, 180_388_626_432, 28.209) == (
+        "正在搜索种子 28,448,764,162 / 180,388,626,432，每秒 10.08 亿 个，预计剩余 2 分 30 秒…")
+    assert "10.00 亿 个" in searching(999_960_000, 1 << 32, 1)
+    assert "99990.0 万 个" in searching(999_900_000, 1 << 32, 1)
 
 
 def test_the_finder_s_checkboxes_flip_and_tell(monkeypatch):
