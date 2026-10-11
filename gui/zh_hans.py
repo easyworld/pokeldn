@@ -3,7 +3,17 @@
 Species source: https://github.com/kwsch/PKHeX/tree/master/PKHeX.Core/Resources/text/other
 """
 
-LABELS = {'Controller board': '手柄开发板',
+LABELS = {
+ 'Asking GitHub for the latest raid events...': '正在向 GitHub 查询最新团体战活动…',
+ 'Downloading the event gallery...': '正在下载活动库…',
+ 'Unpacking the raid events...': '正在解压团体战活动…',
+ 'GitHub sent no commit': 'GitHub 未返回提交信息',
+ 'the event gallery is not downloaded': '尚未下载活动库',
+ 'the download holds no raid events': '下载文件中没有团体战活动',
+ 'Cancelled.': '已取消。',
+ 'Download the event gallery in Raid event, or choose no event.': '请在“团体战活动”中下载活动库，或取消选择活动。',
+ 'The chosen event is not in the event gallery any more.': '活动库中已没有所选活动。',
+ 'Controller board': '手柄开发板',
  'Control': '手柄控制',
  'Not connected': '未连接',
  'Connected': '已连接',

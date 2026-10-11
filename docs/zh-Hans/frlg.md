@@ -13,7 +13,7 @@ Switch 版《火红／叶绿》是在模拟器中运行原版 GBA ROM，因此�
 | LDN 与 Pia | 属于模拟器，与其他 Switch 游戏共用 | [无线通信层](ldn.md) |
 | GBA 连接层：RFU 帧、席位和区块发送 | 属于 ROM | 本组文档 |
 
-[pret/pokefirered](https://github.com/pret/pokefirered) 是 `REVISION >= 0xA` 下整个游戏层协议的权威参考。从两台主机读取的卡带头信息为：软件版本 `0x0A`，游戏代码 `BPRF`（法语版《火红》）和 `BPGF`（法语版《叶绿》）。主持端还会为英语、德语、意大利语、西班牙语和日语版本选择经过测量的 ROM 与 RAM 地址，共支持十二种卡带。玩家在“朋友”列表中选择 pokeldn 后，神秘礼物功能根据卡带代码检测语言；基础页面在版本旁显示结果。新增语言版本已通过离线 ROM 和 mGBA 检查，但这些版本的无线传送仍需实机验证。参见[卡带地址映射](frlg_rom_map.md#the-international-revision-0x0a-cartridges)。
+[pret/pokefirered](https://github.com/pret/pokefirered) 是 `REVISION >= 0xA` 下整个游戏层协议的权威参考。从两台主机读取的卡带头信息为：软件版本 `0x0A`，游戏代码 `BPRF`（法语版《火红》）和 `BPGF`（法语版《叶绿》）。主持端还会为英语、德语、意大利语、西班牙语和日语版本选择经过测量的 ROM 与 RAM 地址，共支持十二种卡带。玩家在“朋友”列表中选择 pokeldn 后，神秘礼物功能根据卡带代码检测语言；基础页面在版本旁显示结果。新增语言版本已通过离线 ROM 和 mGBA 检查，实机覆盖范围见[实机验证](frlg_rom_map.md#retail-verification)。参见[卡带地址映射](frlg_rom_map.md#the-international-revision-0x0a-cartridges)。
 
 如果主机在关联并完成 Pia 会话建立后约三秒离开，原因可能是关联响应未包含 6、9、12 Mbit/s（[frlg_link.md](frlg_link.md) 中的广播速率集合）；缺少 Pia 类型 2 的 Join Response 也会出现相同现象。
 

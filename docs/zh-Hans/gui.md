@@ -183,6 +183,28 @@ macOS 26 的 `bluetoothd` 对签名为应用包主可执行文件的后台进程
 
 设置有开关和清空缓存的按钮。 `POKELDN_SPRITE_BASE` 替换精灵主机，用于测试（`tests/test_sprites.py`）。
 
+<a id="raid-events"></a>
+## 团体战活动
+
+《朱／紫》的“太晶团体战（主持）”入口通过“团体战活动”卡片主持 Project Pokemon [EventsGallery](https://github.com/projectpokemon/EventsGallery) 中的活动（[活动团体战](sv_raid.md#event-raids)）。应用将活动库中的团体战活动保存为数据目录下的 `EventsGallery/` 副本（`pokeldn.app.events_gallery`）；“清除本地文件”会保留此目录。
+
+| 操作 | 行为 |
+|---|---|
+| 下载 | 向 `api.github.com` 查询 master 分支中最后修改 `Released/Gen 9/SV/Raid Events` 的提交，下载 `codeload.github.com/projectpokemon/EventsGallery/zip/<commit>`（2026 年 10 月为 22 MB），解压各活动最新补丁的四张表，约 17 MB；`gallery.json` 保存提交和日期 |
+| 检查更新 | 请求一次最新提交；若与本地副本不同则有更新，活动库其他目录的修改不计入 |
+| 更新 | 重新执行下载 |
+
+新副本只有在完整下载后才替换旧副本；失败或取消时保留旧副本。活动目录名最长达 152 个字符，因此 Windows 上使用 `\\?\` 路径打开文件。
+
+活动列表包含副本中除 `000 Base Data`（游戏自己的表）外的全部活动：2026-09-06 时为 152 个。默认按时间降序排列，旁边箭头可切换顺序。每项上方显示去除编号的目录名称，多轮活动显示为“活动 · 轮次”，下方显示首领；输入文字可同时筛选活动和首领。选择后：
+
+- 团体战卡片只提供该活动支持的游戏版本、帕底亚地区、所选结晶可生成的进度，并用该版本的活动结晶替换普通结晶选项。各结晶对应一个分发组，显示星级和首领（如“7 星：喷火龙”“4-5 星：花洁夫人、谜拟丘”）。无法生成的值会调整为最接近的可用值（`raid_event.constrain`）。
+- “查找团体战”仅搜索活动结晶，每个阶段对应一种进度，种类列表使用活动首领。“奖励”区域提供该活动奖励表中的道具和数量（[查找种子](sv_raid.md#finding-a-seed)；`gui/views/reward_filter.py`）。
+- 若某首领每个存档只能捕获一次，则显示“允许再次捕获”（`--raid-catch-normal`）。每次启动应用或更换活动时都默认不勾选（[活动团体战](sv_raid.md#event-raids)）。
+
+折叠卡片后暂时停用活动（工具值中的 `#raid-event-folded`，`GamesView.show_raid_event`）：团体战卡片、“查找团体战”和命令都改为普通团体战，标题显示“已关闭：活动”。展开后恢复活动。启动时若正在使用活动，卡片自动展开。副本中缺少的活动（尚未下载，或更新后被移除）仍保持选中：标题以红色显示“缺失：活动”，在下载到该活动或改选其他活动前禁止运行（`pokeldn.app.command.code_error`）。
+
+
 ## 更新
 
 启动时，应用在后台向 `api.github.com/repos/Decryptu/pokeldn/releases/latest` 查询最新稳定版，超时为 5 秒。高于应用 `pokeldn.__version__` 的标签会在侧栏增加更新入口，打开后显示发布说明，以及“立即更新”或“下载”。

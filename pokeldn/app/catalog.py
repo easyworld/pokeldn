@@ -11,8 +11,8 @@ class Field:
     flag: str | tuple[str, ...]   # "" is positional; a tuple passes the same value to each flag
     label: str
     kind: str = "text"            # text number choice switch pokemon file builder multi linkcode code
-                                  # (eight digits) raidseed rewards, or a PKHeX name list: species move
-                                  # item ball
+                                  # (eight digits) raidseed rewards raidevent raidden, or a PKHeX name
+                                  # list: species move item ball
     help: str = ""
     default: str | bool = ""
     choices: tuple[tuple[str, str], ...] = ()
@@ -23,6 +23,7 @@ class Field:
     exts: tuple[str, ...] = ()
     when: tuple[str, str] = ()    # (flag, value): the field applies only while that field has that value
     unless: str = ""             # hide and omit the field while this source field has a value
+    requires: str = ""           # hide and omit the field while this source field has no value
     template: str = ""            # the value is passed as template.format(value), e.g. "ball={}"
     limits: tuple[tuple[str, int, str], ...] = ()   # (NAME, highest, why) for NAME=VALUE text
     choice_help: tuple[tuple[str, str], ...] = ()
@@ -353,6 +354,8 @@ SV = Game("sv", '朱／紫', "SV", "sv.md", (
           "获胜后领取奖励。"),
          (Field("--raid-pokemon", "我方宝可梦", "pokemon", required=True,
                 help="我方出战宝可梦，由 PKHeX 检查合法性。"),
+          Field("--raid-event", "团体战活动", "raidevent",
+                help="使用 Project Pokemon 的 EventsGallery 中往期宝可入口站新闻的活动团体战。留空或折叠此卡片以使用普通团体战。"),
           Field("--raid-version", "游戏", "choice", default="violet", group="团体战",
                 choices=(("scarlet", "朱"), ("violet", "紫")),
                 help="相同种子在另一版本可能生成不同的团体战。"),
@@ -364,11 +367,16 @@ SV = Game("sv", '朱／紫', "SV", "sv.md", (
                          ("5star", "5 星团体战"), ("6star", "6 星团体战")),
                 help="设置普通结晶可出现的星级。"),
           Field("--raid-content", "结晶", "choice", default="standard", group="团体战",
-                choices=(("standard", "普通"), ("black", "黑色（6 星）"))),
+                choices=(("standard", "普通"), ("black", "黑色（6 星）")), unless="--raid-event"),
+          Field("--raid-event-group", "结晶", "raidden", group="团体战", requires="--raid-event",
+                help="活动中的每种结晶都有各自的首领。"),
           Field("--raid-seed", "团体战种子", "raidseed", default="000F34C3", required=True,
                 group="团体战", help="八位十六进制数字，可通过“查找团体战”搜索种子。"),
           Field("--raid-reward", "奖励", "rewards",
                 help=f"留空使用团体战默认奖励，或设置最多 {REWARD_ROWS} 项道具奖励。"),
+          Field("--raid-catch-normal", "再次捕获活动首领", "switch", hidden=True,
+                requires="--raid-event",
+                help="将每个存档只能捕获一次的活动首领改为普通捕获，使用该存档尚未捕获过的记录编号，由活动卡片设置。"),
           host_seconds("600")),
          fixed=("--channel", "1", "--scene-id", "7", "--max-participants", "4", "--code", "4970",
                 "--scarlet-response", "--session-flags", "0", "--session-packet-id", "1",

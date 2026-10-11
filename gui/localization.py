@@ -41,6 +41,13 @@ def translate(value: str) -> str:
         if value.startswith(prefix) and value.endswith(")"):
             return target + translate(value[len(prefix):-1]) + "）"
     patterns = (
+        (r"delivery group (\d+) has no (.+) encounter at (.+) progress", r"分发组 \1 在版本 \2、进度 \3 下没有可用遭遇"),
+        (r"event (\d+) has no (.+) encounter at (.+) progress", r"活动 \1 在版本 \2、进度 \3 下没有可用遭遇"),
+        (r"event (\d+) has no encounter", r"活动 \1 没有可用遭遇"),
+        (r"no event stage for (.+)/(.+)", r"版本 \1、进度 \2 没有对应的活动阶段"),
+        (r"(.+) holds no readable delivery \((.+)\)", r"\1 中没有可读取的活动分发数据（\2）"),
+        (r"a search covers 1 to ([\d,]+) seeds over its contexts", r"搜索范围内的种子与上下文组合数量须为 1 到 \1"),
+        (r"a search returns 1 to (\d+) results", r"搜索结果数量须为 1 到 \1"),
         (r"(\d+) of its moves are not legal\.", r"有 \1 个招式不合法。"),
         (r"The level goes from (\d+) to 100: a Pokemon never loses levels\.", r"等级必须在 \1 到 100 之间，宝可梦等级不能降低。"),
         (r"This form of (.+) is not in that game\.", r"该游戏中不存在 \1 的此形态。"),
@@ -220,6 +227,32 @@ def gift_description(game, state, name):
     if card.get("shareable"):
         lines.append("玩家可以分享卡片")
     return when, lines
+
+
+def raid_label(value: str) -> str:
+    """Translate gallery and den labels for display; their directory keys stay untouched."""
+    # The gallery's early folders include this misspelling; its directory key is preserved.
+    value = value.replace("Inceneroar", "Incineroar")
+    for source, target in (
+        ("Mighty Mewtwo Showdown - Prepare the Offense!", "最强超梦对决：准备进攻！"),
+        ("Mighty Mewtwo Showdown - A Show of Supporters", "最强超梦对决：支援宝可梦登场"),
+        ("Mighty Mewtwo Showdown - ", "最强超梦对决："),
+        ("Prepare for Tricks and Treats from Mismagius!", "准备迎接梦妖魔的万圣节惊喜！"),
+        ("Happy Valentine's Day", "情人节快乐"), ("Valentines Day", "情人节"),
+        ("Hard to Find Pokemon", "稀有宝可梦"), ("Presents from ", "礼物来自 "),
+        ("Hisuian ", "洗翠形态 "), ("Alolan ", "阿罗拉形态 "),
+        ("Worthy ", "挑战助手："), ("Shiny ", "异色 "),
+    ):
+        value = value.replace(source, target)
+    value = names(value)
+    value = re.sub(r"(\d+(?:-\d+)?) stars?: ", r"\1 星：", value)
+    value = re.sub(r"([^\s·&]+) the Unrivaled", r"最强\1", value)
+    value = re.sub(r"\bRound (\d+)\b", r"第 \1 轮", value)
+    value = value.replace(" and ", "与").replace(" & ", " ／ ")
+    for source, target in (("the Unrivaled", "最强"), ("Spotlight", "精选活动"),
+                           ("Round", "轮次"), ("Mighty", "最强")):
+        value = re.sub(r"\b" + re.escape(source) + r"\b", target, value)
+    return value.replace(" Appears", "登场").replace(" Returns", "再次登场").replace(", ", "、")
 
 
 def event_text(value: str) -> str:

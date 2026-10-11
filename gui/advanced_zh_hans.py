@@ -2178,6 +2178,15 @@ HELP.update({'the LDN participant limit; a Tera Raid advertises 4': 'LDN 参与�
 OPTION_HELP.update({'--raid-map': '团体战所在地区：帕底亚、北上乡或蓝莓学园。', '--raid-version': '团体战使用的游戏版本：朱或紫。'})
 
 HELP.update({
+    "host an event raid: a Poke Portal News delivery's folder (an EventsGallery event, or its Files); the seed draws from the event's encounters at --raid-version and --raid-progress, and --raid-map and --raid-content are unused":
+        '主持活动团体战：指定宝可入口站新闻分发目录（EventsGallery 活动目录或其 Files 目录）；种子根据 --raid-version 和 --raid-progress 选择活动遭遇，不使用 --raid-map 和 --raid-content。',
+    "the delivery group of the event's den, 1 to 10; by default the first with dens and an encounter at that progress":
+        '活动团体战的分发组，范围为 1 到 10；默认使用在当前进度下具有团体战地点和遭遇的首个组。',
+    'with --raid-event: serve a catch-once encounter (every seven-star raid, Walking Wake, Iron Leaves...) as a normal catch, its capture rate normal and its record number a stand-in no save has caught, so a save that caught it may catch it again; one that cannot be caught stays so (docs/sv_raid.md, Event raids)':
+        '配合 --raid-event 使用：将仅限捕获一次的遭遇（所有七星团体战、波荡水、铁斑叶等）改为普通捕获，使用普通捕获规则及替代记录编号，让已捕获过的存档也能再次捕获；无法捕获的遭遇仍不可捕获。详见 docs/sv_raid.md。',
+})
+
+HELP.update({
     'join an emulated console hosting over ldn_mitm on the LAN; no radio, no root, no keys. Each of --scans waits --dwell seconds for an answer':
         '通过局域网的 ldn_mitm 加入模拟游戏机主持的会话；无需无线开发板、root 或密钥。--scans 的每次扫描等待 --dwell 秒获取回应。',
     '--ip-join: our own address on that LAN': '--ip-join：本机在该局域网中的地址。',
