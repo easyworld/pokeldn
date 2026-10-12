@@ -3,6 +3,7 @@ players' listings, and the answers. Each listing and offer is a folder in the GT
 key, its record and its signed events, so an app opened later answers and settles where it stopped
 [pokeldn.online.gts, docs/online.md, The GTS]."""
 import json
+from collections import deque
 import os
 import shutil
 import threading
@@ -18,6 +19,9 @@ TICK = 5.0
 REPUBLISH = 6 * 3600
 PURGE_AFTER = 60 * 86400
 LISTINGS_SHOWN = 300
+OFFERS_HELD = 256
+ANSWERS_KEPT = 256
+CHECKS_PER_MINUTE = 6
 
 
 class GtsError(Exception):
@@ -58,8 +62,10 @@ class Service:
         self.held: list[tuple] = []                     # offers stored before that, answered oldest first
         self.listeners: list = []
         self.last_republish = 0.0
+        self.checks = deque()
         factory = pool_factory or (lambda on_event, on_eose, on_change: relays.RelayPool(
-            gts.relay_urls(), on_event, log=log, on_eose=on_eose, on_change=on_change))
+            gts.relay_urls(), on_event, log=log, on_eose=on_eose, on_change=on_change,
+            max_size=gts.EVENT_LIMIT + 256))
         self.pool = factory(self._on_event, self._on_eose, self._on_relay)
         self.thread = threading.Thread(target=self._run, name="gts", daemon=True)
 
@@ -312,22 +318,35 @@ class Service:
         self._changed()
 
     def _on_event(self, event):
+        if not isinstance(event, dict):
+            return
         kind = event.get("kind")
         if kind == gts.LISTING:
             listing = gts.parse_listing(event)
-            if listing is None:
+            if listing is None or listing.created > self.clock() + gts.SKEW:
                 return
             with self.lock:
                 known = self.listings.get((listing.key, listing.d))
                 if known is None or listing.created > known.created:
-                    self.listings[(listing.key, listing.d)] = listing
+                    if known is None and len(self.listings) >= LISTINGS_SHOWN:
+                        oldest = min(self.listings, key=lambda k: self.listings[k].created)
+                        if listing.created <= self.listings[oldest].created:
+                            oldest = None
+                        if oldest is not None:
+                            del self.listings[oldest]
+                    if known is not None or len(self.listings) < LISTINGS_SHOWN:
+                        self.listings[(listing.key, listing.d)] = listing
                 for state in list(self.states.values()):
                     if (state["role"] == "offer" and state["status"] == "waiting"
-                            and state["listing"]["pubkey"] == listing.key):
+                            and state["listing"]["pubkey"] == listing.key
+                            and gts._tag(state["listing"], "d") == listing.d
+                            and listing.created >= state["listing"]["created_at"]):
                         self._listing_moved(state, listing)
             self._changed()
         elif kind == gts.WRAP:
-            to = next((t[1] for t in event.get("tags") or [] if len(t) >= 2 and t[0] == "p"), None)
+            if not gts._event(event, gts.WRAP):
+                return
+            to = gts._tag(event, "p")
             with self.lock:
                 state = next((s for s in self.states.values() if s["key"] == to), None)
                 if state is None:
@@ -336,24 +355,41 @@ class Service:
                 if body is None:
                     return
                 if state["role"] == "listing" and body.get("t") == "offer":
+                    if body["listing"] != state["id"]:
+                        return
                     if self.caught_up:
                         self._answer(state, body)
                     else:       # a relay sends stored events newest first; the first offer made wins
-                        self.held.append((event.get("created_at", 0), state["id"], body))
+                        self._hold(event["created_at"], state, body)
                 elif (state["role"] == "offer" and body.get("t") in ("trade", "refused")
                       and body.get("offer") == state["event"]["id"] and body["from"] == state["listing"]["pubkey"]):
-                    self._settle(state, body)
+                    listing = gts.parse_listing(state["listing"])
+                    if listing and body["listing"] == listing.d:
+                        self._settle(state, body)
             self._changed()
 
     # The lister's app answers an offer
 
+    def _hold(self, created, state, body):
+        if (len(self.held) < OFFERS_HELD
+                and not any(h[2]["id"] == body["id"] for h in self.held)):
+            self.held.append((created, state["id"], body))
+
     def _answer(self, state, body):
         offer_id = body["id"]
-        identity = relays.Identity(bytes.fromhex(state["secret"]))
         if offer_id in state["answers"]:
             self.pool.publish(state["answers"][offer_id])
             return
+        if len(state["answers"]) >= ANSWERS_KEPT and state["status"] != "active":
+            return
         now = self.clock()
+        while self.checks and now - self.checks[0] >= 60:
+            self.checks.popleft()
+        if len(self.checks) >= CHECKS_PER_MINUTE:
+            self._hold(now, state, body)
+            return
+        self.checks.append(now)
+        identity = relays.Identity(bytes.fromhex(state["secret"]))
         record, game = gts.record_of(body), body.get("game")
         info = {}
         if state["status"] == "traded":
@@ -369,8 +405,9 @@ class Service:
         expires = int(now + gts.LIFETIME)
         if why:
             reply = gts.wrap(identity, body["from"], gts.refusal_body(state["id"], offer_id, why), expires)
-            state["answers"][offer_id] = reply
-            self._save(state)
+            if len(state["answers"]) < ANSWERS_KEPT:
+                state["answers"][offer_id] = reply
+                self._save(state)
             self.pool.publish(reply)
             self.log(f"[gts] refused an offer on {state['info'].get('species')}: {why}")
             return
@@ -378,6 +415,8 @@ class Service:
                          gts.trade_body(state["id"], offer_id, state["game"], self._record(state)), expires)
         sold = self._relist(state, "traded", winner=offer_id)
         state.update(status="traded", winner=offer_id, partner=str(body.get("trainer", ""))[:24])
+        if len(state["answers"]) >= ANSWERS_KEPT:
+            del state["answers"][next(iter(state["answers"]))]
         state["answers"][offer_id] = reply
         self._save(state)           # before anything leaves: a restart publishes the same answer again
         self.pool.publish(reply)
@@ -398,21 +437,22 @@ class Service:
         else:
             record, game = gts.record_of(body), body.get("game")
             listing = gts.parse_listing(state["listing"])
-            if record is None or game not in EXTENSIONS:
-                state["why"] = "the lister's answer carries no Pokemon"
-                info = {}
+            if listing is None or record is None or game not in EXTENSIONS:
+                why = "the lister's answer carries no Pokemon"
+            elif game != listing.game:
+                why = "it is not the game the listing showed"
+            elif gts.digest(record) != listing.sha256:
+                why = "it is not the Pokemon the listing showed"
             else:
                 why, info = self.validate(game, record)
-                if listing and gts.digest(record) != listing.sha256:
-                    why = why or "it is not the Pokemon the listing showed"
-                state["why"] = why
-                (self.folder / state["id"] / f"received.{EXTENSIONS[game]}").write_bytes(record)
-                if info:
-                    state["received"] = self._bank_received(state, game, record, info)
-            state["status"] = "traded"
-            self._let_go(state)
-            self._save(state)
-            self.log(f"[gts] received {info.get('species', 'a Pokemon')} for {state['info'].get('species')}")
+            if why:
+                self._return(state, why)
+            else:
+                state["received"] = self._bank_received(state, game, record, info)
+                state["status"] = "traded"
+                self._let_go(state)
+                self._save(state)
+                self.log(f"[gts] received {info.get('species', 'a Pokemon')} for {state['info'].get('species')}")
         self._delete(state, identity)
         self._subscribe()
 
@@ -453,6 +493,14 @@ class Service:
         now = self.clock()
         changed = False
         with self.lock:
+            if self.caught_up and self.held:
+                held, self.held = sorted(self.held, key=lambda h: h[0]), []
+                for _, state_id, body in held:
+                    state = self.states.get(state_id)
+                    if state is not None:
+                        before = (state["status"], len(state["answers"]))
+                        self._answer(state, body)
+                        changed |= before != (state["status"], len(state["answers"]))
             for state in list(self.states.values()):
                 if state["role"] == "listing" and state["status"] == "active" and now >= state["expires"]:
                     # Ended unanswered: no offer is taken after this, whatever arrives.

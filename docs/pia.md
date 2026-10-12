@@ -64,6 +64,26 @@ Sending 0 in both, as the console does, passes every path. The initializer `0x01
 `0x01774b60`, `0x01774d00` check `(byte & 0x7f) == 4` (BDSP: the same with 9). Below the header,
 version 4 shares version 9's session key and IV, and its framing plus one field.
 
+### Version 11: what a receiver drops (Scarlet 4.0.0)
+
+`0x6e9744` accepts or drops a whole packet before any protocol reads it; a dropped packet is lost
+to every protocol at once. With `st` the station at the source address, `V` the receiver's variable
+id, `D` the header destination and `S` the header source:
+
+| check | dropped when |
+|---|---|
+| sender | `st` flagged (`+0x78`) or in state 3 |
+| destination | `D >= 2` and `D != V` |
+| source id | `S != 0` names no station, when `D == V`, or when `D` is 0 or 1 with a footer |
+| packet id, `D == 1` | not newer than the last from `st` on the destination-1 counter (`st+0x60`, `0x6e9854`) |
+| packet id, other `D` | not newer than the last from `st` on the other counter (`st+0x48`, `0x6e98b4`) |
+
+The counter check `0x6f3ff4` passes packet id 0 and stores nothing; otherwise it needs
+`(int16)(id - last) >= 1`, so a resend under the same id is dropped. With no station at the source
+address, during a join, no packet id is checked. No check reads the footer's ids. A retail sender
+(`0x6b6b38`) numbers destination-1 packets from one counter (`0x696d04`) and packets to one
+variable id from a per-recipient counter (`0x696ce4`); both skip 0.
+
 ## Message framing
 
 A Pia payload carries one or more messages, each opening with a presence byte saying which header

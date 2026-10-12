@@ -31,6 +31,33 @@ HELLO_TIMEOUT = 12.0         # paired, but nothing heard back: search again
 LOST_AFTER = 45.0
 TICK = 0.1
 ACK_DELAY = 0.3              # one ack covers what arrives together; relays rate-limit bursts
+EVENT_LIMIT = 8192
+PEERS_LIMIT = 128
+WINDOW = 64
+ROUND_WINDOW = 2
+CHECKS_PER_MINUTE = 30
+SHARED_SIZES = {"party:0": 200, "party:1": 200, "party:2": 200,
+                "mail": 220, "ribbons": 40, "pick": 1}
+
+
+def _hex(value):
+    return (isinstance(value, str) and len(value) == 64
+            and all(c in "0123456789abcdef" for c in value))
+
+
+def _text(value, limit):
+    return (isinstance(value, str) and len(value) <= limit
+            and all(ord(c) >= 32 and ord(c) != 127 for c in value))
+
+
+def _record(value, limit):
+    if not isinstance(value, str) or len(value) > 4 * ((limit + 2) // 3):
+        return None
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except ValueError:
+        return None
+    return raw if 0 < len(raw) <= limit else None
 
 
 def room_id(game: str, code: str) -> str:
@@ -47,11 +74,13 @@ def _seal(key: bytes, payload: dict) -> str:
 
 
 def _open(key: bytes, content: str) -> dict | None:
+    if not isinstance(content, str) or len(content) > EVENT_LIMIT:
+        return None
     try:
         raw = base64.b64decode(content, validate=True)
         cipher = AES.new(key, AES.MODE_GCM, nonce=raw[:12])
         payload = json.loads(cipher.decrypt_and_verify(raw[12:-16], raw[-16:]))
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, RecursionError):
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -99,11 +128,14 @@ class Partner:
         self.last_announce = 0.0
         self.round = 1
         self.rounds: dict[int, Round] = {}
+        self.checks = []
+        self.shared_checks = []
+        self.events = []
         self.ended = ""                       # why the partner left
         self.traded = False                   # an offer went either way: a lost partner stays lost
         self.mine = {"offer": None, "accepted": False, "shared": {}}   # the local console, this round
         factory = pool_factory or (lambda on_event: relays.RelayPool(relays.relay_urls(), on_event,
-                                                                     log=log))
+                                                                     log=log, max_size=EVENT_LIMIT + 256))
         self.pool = factory(self._on_event)
         self.thread = threading.Thread(target=self._run, name="online partner", daemon=True)
 
@@ -185,15 +217,33 @@ class Partner:
         with self.lock:
             self._send({"t": "done", "r": self.round})
             self.round += 1
+            self.rounds = {n: r for n, r in self.rounds.items() if n >= self.round - 1}
             self.mine = {"offer": None, "accepted": False, "shared": {}}
 
     # Relay events, on a relay thread
 
     def _on_event(self, event):
+        now = self.clock()
+        if (not isinstance(event, dict) or not isinstance(event.get("content"), str)
+                or len(event["content"]) > EVENT_LIMIT
+                or type(event.get("created_at")) is not int
+                or not now - LOST_AFTER <= event["created_at"] <= now + 10):
+            return
+        tags = event.get("tags")
+        if (not isinstance(tags, list) or len(tags) > 8
+                or any(not isinstance(t, list) or not 1 <= len(t) <= 4
+                       or any(not isinstance(v, str) or len(v) > 128 for v in t) for t in tags)):
+            return
         if event.get("pubkey") == self.me.public or event.get("kind") != KIND:
             return
-        tags = event.get("tags") or []
         if ["t", self.room] not in tags:
+            return
+        with self.lock:
+            self.events = [t for t in self.events if now - t < 1]
+            if len(self.events) >= 32:
+                return
+            self.events.append(now)
+        if not relays.valid(event):
             return
         outer = _open(self.room_key, event.get("content", ""))
         if outer is None:
@@ -204,21 +254,31 @@ class Partner:
             if outer.get("t") == "here":
                 self._on_announce(sender, outer)
             elif to == self.me.public and isinstance(outer.get("x"), str) and isinstance(outer.get("c"), str):
+                if self.state == "paired" and (sender != self.peer or outer["x"] != self.peer_x):
+                    return
+                if self.invite and sender == self.invite[0] and outer["x"] != self.invite[2]:
+                    return
                 key = self._pair_key(sender, outer["x"])
                 inner = _open(key, outer["c"]) if key else None
                 if inner is not None:
                     self._on_direct(sender, outer["x"], key, inner)
 
     def _on_announce(self, sender, body):
-        if body.get("v") != PROTOCOL or not isinstance(body.get("x"), str):
+        if (body.get("v") != PROTOCOL or not _hex(body.get("x"))
+                or not _text(body.get("n", ""), 24) or not _text(body.get("a", ""), 64)
+                or type(body.get("busy")) is not bool):
             return
         now = self.clock()
         known = self.peers.get(sender)
+        if not known and len(self.peers) >= PEERS_LIMIT:
+            return
         self.peers[sender] = {"x": body["x"], "name": str(body.get("n", ""))[:24],
                               "app": str(body.get("a", ""))[:24], "seen": now,
                               "first": known["first"] if known else now, "busy": bool(body.get("busy"))}
 
     def _pair_key(self, peer, x_hex):
+        if not _hex(x_hex):
+            return None
         try:
             shared = DH.key_agreement(static_priv=self.dh,
                                       static_pub=DH.import_x25519_public_key(bytes.fromhex(x_hex)),
@@ -230,12 +290,22 @@ class Partner:
 
     def _direct(self, peer, x_hex, key, inner):
         content = _seal(self.room_key, {"x": self.dh_public, "c": _seal(key, inner)})
-        event = self.me.event(KIND, [["t", self.room], ["p", peer]], content)
+        event = self.me.event(KIND, [["t", self.room], ["p", peer]], content, int(self.clock()))
         self.pool.publish(event)
 
     def _on_direct(self, sender, x_hex, key, msg):
         kind = msg.get("t")
         now = self.clock()
+        if not isinstance(kind, str) or kind not in {"invite", "yes", "no", "hello", "ping", "bye",
+                                                    "offer", "share", "withdraw", "accept", "unaccept",
+                                                    "refused", "done"}:
+            return
+        if not _text(msg.get("n", ""), 24) or not _text(msg.get("why", ""), 200):
+            return
+        if self.state == "paired" and (sender != self.peer or x_hex != self.peer_x or key != self.key):
+            return
+        if self.invite and sender == self.invite[0] and x_hex != self.invite[2]:
+            return
         if kind == "invite":
             if self.state == "searching" and self.invite is None and sender < self.me.public:
                 self._direct(sender, x_hex, key, {"t": "yes", "n": self.name})
@@ -263,19 +333,21 @@ class Partner:
             return
         self.heard = now
         ack = msg.get("a")
-        if isinstance(ack, int):
+        if type(ack) is int and 0 <= ack <= self.out_seq:
             for seq in [s for s in self.unacked if s <= ack]:
                 del self.unacked[seq]
         seq = msg.get("s")
         if kind == "bye":
             self._lose(f"the partner left ({msg.get('why', '')})".replace(" ()", ""))
             return
-        if not isinstance(seq, int):
+        if type(seq) is not int or not 1 <= seq < self.in_next + WINDOW:
             return
         if seq >= self.in_next:
             self.early[seq] = msg
         while self.in_next in self.early:
             self._deliver(self.early.pop(self.in_next))
+            if self.state != "paired":
+                return
             self.in_next += 1
         self.ack_due = self.ack_due or now + ACK_DELAY
 
@@ -284,14 +356,20 @@ class Partner:
         if kind == "hello":
             self.log(f"[online] connected to {self.peer_name or 'a partner'}")
             return
-        if not isinstance(number, int) or number < 1:
+        if type(number) is not int or not max(1, self.round - 1) <= number <= self.round + ROUND_WINDOW:
             return
         theirs = self.rounds.setdefault(number, Round())
         if kind == "offer":
-            try:
-                record = base64.b64decode(msg.get("d", ""), validate=True)
-            except ValueError:
+            theirs.offer, theirs.accepted = None, False
+            record = _record(msg.get("d"), 768)
+            if record is None:
                 return
+            now = self.clock()
+            self.checks = [t for t in self.checks if now - t < 60]
+            if len(self.checks) >= CHECKS_PER_MINUTE:
+                self._lose("the partner sent too many Pokemon to check")
+                return
+            self.checks.append(now)
             reason, what = self.validate(record) if self.validate else (None, "a Pokemon")
             if reason:
                 self.log(f"[online] refused the partner's Pokemon: {reason}")
@@ -301,10 +379,20 @@ class Partner:
             self.traded = True
             self.log(f"[online] {self.peer_name} offers {what}")
         elif kind == "share" and isinstance(msg.get("k"), str):
-            try:
-                theirs.shared[msg["k"][:32]] = base64.b64decode(msg.get("d", ""), validate=True)
-            except ValueError:
+            size = SHARED_SIZES.get(msg["k"]) if self.game == "frlg" else None
+            record = _record(msg.get("d"), size) if size else None
+            if record is None or len(record) != size or (msg["k"] == "pick" and record[0] >= 6):
                 return
+            if theirs.shared.get(msg["k"]) == record:
+                return
+            if msg["k"].startswith("party:"):
+                now = self.clock()
+                self.shared_checks = [t for t in self.shared_checks if now - t < 60]
+                if len(self.shared_checks) >= CHECKS_PER_MINUTE * 3:
+                    self._lose("the partner sent too many party blocks to check")
+                    return
+                self.shared_checks.append(now)
+            theirs.shared[msg["k"]] = record
         elif kind == "withdraw":
             theirs.offer, theirs.accepted = None, False
             theirs.withdrawn += 1
@@ -360,6 +448,9 @@ class Partner:
                 return
             body = dict(msg, a=self.in_next - 1)
             if reliable:
+                if len(self.unacked) >= WINDOW:
+                    self._lose("the partner stopped acknowledging messages")
+                    return
                 self.out_seq += 1
                 body["s"] = self.out_seq
                 self.unacked[self.out_seq] = body
@@ -374,7 +465,7 @@ class Partner:
         self.last_announce = now
         body = {"t": "here", "v": PROTOCOL, "x": self.dh_public, "n": self.name, "a": self.app,
                 "busy": self.state != "searching"}
-        self.pool.publish(self.me.event(KIND, [["t", self.room]], _seal(self.room_key, body)))
+        self.pool.publish(self.me.event(KIND, [["t", self.room]], _seal(self.room_key, body), int(now)))
 
     # The ticker
 
@@ -391,6 +482,8 @@ class Partner:
 
     def _tick(self):
         now = self.clock()
+        self.peers = {p: info for p, info in self.peers.items() if now - info["seen"] < PEER_STALE}
+        self.skip = {p: deadline for p, deadline in self.skip.items() if deadline > now}
         if self.state == "connecting":
             if self.pool.connected():
                 self.state = "searching"
@@ -410,7 +503,7 @@ class Partner:
                     x_hex = self.peers[peer]["x"]
                     key = self._pair_key(peer, x_hex)
                     if key:
-                        self.invite = (peer, now + INVITE_TIMEOUT)
+                        self.invite = (peer, now + INVITE_TIMEOUT, x_hex)
                         self._direct(peer, x_hex, key, {"t": "invite", "n": self.name})
             return
         if self.state != "paired":

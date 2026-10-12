@@ -4,10 +4,12 @@ import re
 import time
 from functools import cache
 
+from pokeldn import gen9
 from pokeldn.app import events_gallery, gift_builder
 from pokeldn.app.catalog import Field, Tool
 from pokeldn.app.introspect import flags_of
 from pokeldn.lgpe.session import code_picks
+from pokeldn.sv import raid_partners
 from pokeldn.sv.raid import REWARD_ROWS
 
 
@@ -20,6 +22,26 @@ def value_of(field: Field, values: dict):
     if field.kind == "builder" and field.key not in values:
         return values.get("--record", field.default)
     return values.get(field.key, field.default)
+
+
+def raid_consoles(tool: Tool, values: dict) -> int:
+    """-> the consoles a Tera Raid host waits for, by its Consoles joining field; 1 without one."""
+    field = next((f for f in tool.fields if f.key == "--raid-players"), None)
+    try:
+        return int(value_of(field, values)) if field else 1
+    except (TypeError, ValueError):
+        return 1
+
+
+def raid_pokemon_level(values: dict) -> int:
+    """-> the level of the Pokemon a Tera Raid host's player brings, read from its record; 0 when none
+    is built or it cannot be read."""
+    value = values.get("--raid-pokemon")
+    try:
+        with open(value["file"], "rb") as fh:
+            return gen9.read(gen9.load(fh.read())).get("level", 0)
+    except (OSError, KeyError, TypeError, ValueError):
+        return 0
 
 
 def applies(field: Field, tool: Tool, values: dict) -> bool:
@@ -65,6 +87,10 @@ def _args(field: Field, value, tool: Tool) -> list[str]:
                 for part in (flags[0], f"{row.get('item_id', '')}:{row.get('quantity', '')}")]
     if field.kind == "raidevent":     # the event's folder in the app's gallery
         return [flags[0], events_gallery.event_path(value)] if value else []
+    if field.kind == "raidpartners":  # {"progress": a stage or "", "picks": trainers in slot order}
+        value = value if isinstance(value, dict) else {}
+        progress = [flags[1], value["progress"]] if value.get("progress") else []
+        return progress + [a for name in value.get("picks", ()) for a in (flags[0], name)]
     if value in ("", None):
         return list(field.unset)
     items = str(value).split() if field.kind == "multi" else [field.template.format(value) if field.template
@@ -133,6 +159,14 @@ def problems(tool: Tool, values: dict) -> list[str]:
     for field in tool.fields:
         if field.kind == "builder" and (error := gift_builder.problem(tool, value_of(field, values))):
             errors.append(error)
+        if field.kind == "raidpartners" and applies(field, tool, values):
+            value = value_of(field, values)
+            picks = list(value.get("picks", ())) if isinstance(value, dict) else []
+            consoles = raid_consoles(tool, values)
+            free = raid_partners.slots(consoles)
+            if len(picks) > free:
+                errors.append(f"With {consoles} consoles joining, the raid seats "
+                              + (f"{free} partner." if free else "no partner."))
     return errors
 
 
@@ -150,6 +184,19 @@ def code_error(field: Field, value) -> str:
     app's event gallery."""
     if field.kind == "raidseed":
         return "" if re.fullmatch(r"[0-9A-Fa-f]{8}", str(value or "")) else "Enter eight hexadecimal digits."
+    if field.kind == "raidpartners":
+        value = value if isinstance(value, dict) else {}
+        picks = list(value.get("picks", ()))
+        if len(picks) > raid_partners.HOSTED:
+            return f"A raid seats {raid_partners.HOSTED} partners at most."
+        if value.get("progress") and value["progress"] not in raid_partners.STAGES:
+            return "Choose the partners' progress again."
+        stage = (raid_partners.STAGES.index(value["progress"]) if value.get("progress")
+                 else raid_partners.SIX_STARS)
+        known = {p.trainer for p in raid_partners.pool(stage)}
+        if any(name not in known for name in picks):
+            return "A chosen partner is not among this progress's trainers."
+        return ""
     if field.kind == "raidevent":
         if not value or events_gallery.holds(value):
             return ""

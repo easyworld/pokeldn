@@ -47,12 +47,17 @@ def valid(event) -> bool:
     """The event's id is the hash of its fields and its key signed that id (NIP-01). A relay can serve
     anything; a stored event read back is checked before it is believed."""
     try:
+        if (not isinstance(event, dict)
+                or any(not isinstance(event.get(k), str) or len(event[k]) != n
+                       or any(c not in "0123456789abcdef" for c in event[k])
+                       for k, n in (("pubkey", 64), ("id", 64), ("sig", 128)))):
+            return False
         serial = json.dumps([0, event["pubkey"], event["created_at"], event["kind"], event["tags"],
                              event["content"]], separators=(",", ":"), ensure_ascii=False)
         event_id = hashlib.sha256(serial.encode()).digest()
         return (event_id.hex() == event["id"]
                 and schnorr.verify(bytes.fromhex(event["pubkey"]), event_id, bytes.fromhex(event["sig"])))
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, RecursionError):
         return False
 
 
@@ -92,7 +97,7 @@ class Relay(threading.Thread):
             try:
                 secure = {"ssl": _ssl_context()} if self.url.startswith("wss:") else {}
                 with connect(self.url, **secure, open_timeout=8, close_timeout=2,
-                             proxy=None, max_size=1 << 20) as ws:
+                             proxy=None, max_size=self.pool.max_size) as ws:
                     with self.lock:
                         self.ws = ws
                     for sub_id, filters in self.pool.subscriptions():
@@ -122,7 +127,7 @@ class Relay(threading.Thread):
     def _on_message(self, raw):
         try:
             message = json.loads(raw)
-        except ValueError:
+        except (ValueError, RecursionError):
             return
         if not isinstance(message, list) or not message:
             return
@@ -137,7 +142,8 @@ class Relay(threading.Thread):
             else:
                 self.refused += 1
                 reason = str(message[3]) if len(message) > 3 else ""
-                if reason not in self.reasons:
+                reason = reason[:256]
+                if reason not in self.reasons and len(self.reasons) < 64:
                     self.reasons.add(reason)
                     self.pool.log(f"[online] {self.url} refused an event: {reason}")
         elif message[0] == "NOTICE" and len(message) >= 2:
@@ -147,9 +153,10 @@ class Relay(threading.Thread):
 class RelayPool:
     """Publishes to every connected relay; on_event(event) sees each event id once, on a relay thread."""
 
-    def __init__(self, urls, on_event, log=print, on_change=None, on_eose=None):
+    def __init__(self, urls, on_event, log=print, on_change=None, on_eose=None, max_size=1 << 20):
         self.on_event, self.log, self.on_change, self.on_eose = on_event, log, on_change, on_eose
         self.closed = threading.Event()
+        self.max_size = max_size
         self.lock = threading.Lock()
         self.subs: dict[str, list] = {}
         self.seen: dict[str, float] = {}
@@ -193,8 +200,12 @@ class RelayPool:
             self.on_eose(relay.url, sub_id)
 
     def stored(self, relay, event_id):
+        if not isinstance(event_id, str) or len(event_id) != 64:
+            return
         with self.lock:
-            self.kept.setdefault(str(event_id), set()).add(relay.url)
+            if event_id not in self.kept and len(self.kept) >= 1024:
+                del self.kept[next(iter(self.kept))]
+            self.kept.setdefault(event_id, set()).add(relay.url)
 
     def publish(self, event) -> int:
         with self.lock:
@@ -212,6 +223,8 @@ class RelayPool:
             self.seen[event_id] = now
             if len(self.seen) > 4096:
                 self.seen = {k: t for k, t in self.seen.items() if now - t < 120}
+                while len(self.seen) > 4096:
+                    del self.seen[next(iter(self.seen))]
         try:
             self.on_event(event)
         except Exception as exc:

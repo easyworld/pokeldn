@@ -1,0 +1,6 @@
+id = "hello"
+name = "Hello"
+version = "1.0.0"
+author = "pokeldn"
+description = "The smallest plugin: one tool under FireRed & LeafGreen that greets your trainer."
+api = 1

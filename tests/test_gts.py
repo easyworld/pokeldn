@@ -299,3 +299,133 @@ def test_a_deletion_a_relay_missed_is_sent_again_when_the_app_opens(world):
     relay.drop = lambda event: False
     world["app"]("bob")()
     assert offer["event"]["id"] not in relay.events
+
+
+@pytest.mark.parametrize('field,value', [
+    ('species_id', 'not-a-number'), ('species_id', True), ('species_id', -1),
+    ('level', 101), ('form', {}), ('moves', [123]), ('moves', ['A'] * 5),
+    ('nickname', 'x' * 1000), ('legal', 'yes'),
+])
+def test_signed_malformed_listing_never_reaches_the_page(world, field, value):
+    relay, receive = world['relay'], world['receive']
+    alice = world['app']('alice')()
+    state = alice.deposit(receive('alice', 'sv', 25, 30), gts.Wants(133, 'Eevee'))
+    alice.close()
+    event = state['event']
+    body = json.loads(event['content'])
+    body['pokemon'][field] = value
+    identity = relays.Identity(bytes.fromhex(state['secret']))
+    relay.store(identity.event(gts.LISTING, event['tags'], json.dumps(body),
+                               created_at=event['created_at'] + 1))
+    bob = world['app']('bob')()
+    assert _browse(bob, relay) == []
+
+
+@pytest.mark.parametrize('attack', ['illegal', 'hash', 'game', 'missing', 'listing', 'oversized'])
+def test_hostile_signed_reply_preserves_the_offered_pokemon(world, service, attack):
+    relay, receive, banked = world['relay'], world['receive'], world['banked']
+    pikachu = receive('alice', 'sv', 25, 30)
+    promised = bank.data(pikachu)
+    incoming = promised
+    if attack == 'illegal':
+        reply = service.check_bytes('sv', promised, fields={'moves': [150]})
+        assert reply['legal'] is False
+        incoming = base64.b64decode(reply['data'])
+    alice = world['app']('alice')()
+    mine = alice.deposit(pikachu, gts.Wants(133, 'Eevee'))
+    alice.close()
+    identity = relays.Identity(bytes.fromhex(mine['secret']))
+    if attack == 'illegal':
+        body = json.loads(mine['event']['content'])
+        body['sha256'] = gts.digest(incoming)
+        mine['event'] = identity.event(gts.LISTING, mine['event']['tags'], json.dumps(body),
+                                       created_at=mine['event']['created_at'] + 1)
+        relay.store(mine['event'])
+    bob = world['app']('bob')()
+    (listing,) = _browse(bob, relay)
+    eevee = receive('bob', 'sv', 133, 20)
+    original = bank.data(eevee)
+    state = bob.offer(listing, eevee)
+    if attack == 'hash':
+        incoming = original
+    elif attack == 'missing':
+        incoming = b''
+    elif attack == 'oversized':
+        incoming = b'MZ' + bytes(65536)
+    body = gts.trade_body('wrong-listing' if attack == 'listing' else listing.d,
+                          state['event']['id'], 'bdsp' if attack == 'game' else 'sv', incoming)
+    relay.store(gts.wrap(identity, state['key'], body, int(world['now'][0] + DAY)))
+    relay.pump()
+    assert not list(bob.folder.glob('*/received.*'))
+    if attack in ('listing', 'oversized'):
+        assert state['status'] == 'waiting' and banked('bob') == set()
+        assert bob._record(state) == original
+    else:
+        assert state['status'] == 'returned' and state['why']
+        assert banked('bob') == {('sv', 133)}
+        assert bank.data(bank.find(eevee.id, bob.bank_dir)) == original
+    bob.close()
+    reopened = world['app']('bob')()
+    assert reopened.states[state['id']]['status'] == state['status']
+    assert not list(reopened.folder.glob('*/received.*'))
+
+
+def test_invalid_record_size_is_rejected_before_the_parser(monkeypatch):
+    from pokeldn import pokemon
+    instance = pokemon.Service()
+    monkeypatch.setattr(instance, '_ask', lambda _: pytest.fail('untrusted size reached PKHeX'))
+    for game in pokemon.EXTENSIONS:
+        for payload in (b'', b'MZ' + bytes(1000), bytes(65536)):
+            with pytest.raises(pokemon.BuilderError):
+                instance.check_bytes(game, payload)
+    assert gts.record_of({'record': base64.b64encode(bytes(65536)).decode()}) is None
+
+
+def test_listing_cache_and_held_offers_have_local_limits(world, monkeypatch):
+    from pokeldn.app import gts as app_gts
+    relay, receive = world['relay'], world['receive']
+    alice = world['app']('alice')()
+    state = alice.deposit(receive('alice', 'sv', 25, 30), gts.Wants(133, 'Eevee'))
+    monkeypatch.setattr(app_gts, 'LISTINGS_SHOWN', 3)
+    monkeypatch.setattr(app_gts, 'OFFERS_HELD', 2)
+    identity = relays.Identity(bytes.fromhex(state['secret']))
+    alice.caught_up = 0
+    for n in range(10):
+        event = dict(state['event'])
+        event['tags'] = [[*tag] if tag[0] != 'd' else ['d', str(n)] for tag in event['tags']]
+        alice._on_event(identity.event(gts.LISTING, event['tags'], event['content'],
+                                       created_at=event['created_at'] + n))
+        sender = relays.Identity()
+        wrap = gts.wrap(sender, state['key'],
+                        {'t': 'offer', 'listing': state['id'], 'game': 'sv',
+                         'record': base64.b64encode(bytes(344)).decode()},
+                        int(world['now'][0] + DAY))
+        alice._on_event(wrap)
+        alice._on_event(wrap)
+    assert len(alice.listings) == 3 and len(alice.held) == 2
+
+
+def test_refusal_limits_keep_the_listing_available_for_a_valid_offer(world, monkeypatch):
+    from pokeldn.app import gts as app_gts
+    monkeypatch.setattr(app_gts, 'ANSWERS_KEPT', 1)
+    monkeypatch.setattr(app_gts, 'CHECKS_PER_MINUTE', 2)
+    alice = world['app']('alice')()
+    state = alice.deposit(world['receive']('alice', 'sv', 25, 30), gts.Wants(133, 'Eevee'))
+    world['relay'].pump()
+    listing = gts.parse_listing(state['event'])
+    for _ in range(2):
+        identity = relays.Identity()
+        body = gts.offer_body(listing, 'sv', bytes(344), 'MALLORY')
+        alice._on_event(gts.wrap(identity, state['key'], body, int(world['now'][0] + DAY)))
+    assert state['status'] == 'active' and len(state['answers']) == 1
+    eevee = world['receive']('bob', 'sv', 133, 20)
+    identity = relays.Identity()
+    body = gts.offer_body(listing, 'sv', bank.data(eevee), 'BOB')
+    event = gts.wrap(identity, state['key'], body, int(world['now'][0] + DAY))
+    alice._on_event(event)
+    assert state['status'] == 'active' and world['banked']('alice') == set()
+    world['now'][0] += 61
+    alice.tick()
+    assert state['status'] == 'traded' and state['winner'] == event['id']
+    assert len(state['answers']) == 1 and event['id'] in state['answers']
+    assert world['banked']('alice') == {('sv', 133)}

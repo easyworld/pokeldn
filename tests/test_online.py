@@ -619,3 +619,110 @@ def test_a_host_whose_partner_left_withdraws_the_partner_offer_from_its_console(
     b.close()
     assert run(hub, now, [a], lambda: a.state == "lost", seconds=5)
     assert a.theirs().offer is None and not a.theirs().accepted
+
+
+@pytest.mark.parametrize("damage", ["signature", "identity", "old", "future", "oversize", "tags"])
+def test_untrusted_relay_events_cannot_pair(damage):
+    hub, now = Hub(), [1000.0]
+    a, b = sorted(partners(hub, now, 2), key=lambda p: p.me.public)
+    a.state = b.state = "searching"
+    key = a._pair_key(b.me.public, b.dh_public)
+    a._direct(b.me.public, b.dh_public, key, {"t": "invite", "n": "attacker"})
+    event = dict(hub.queue[-1][1])
+    if damage == "signature":
+        event["sig"] = "0" * 128
+    elif damage == "identity":
+        event["pubkey"] = "0" * 64
+    elif damage == "old":
+        event["created_at"] = 0
+    elif damage == "future":
+        event["created_at"] = 2000
+    elif damage == "oversize":
+        event["content"] = "x" * (link.EVENT_LIMIT + 1)
+    else:
+        event["tags"] = [["t", b.room], 1]
+    b._on_event(event)
+    assert not b.paired
+
+
+def test_paired_identity_cannot_change_its_encryption_key():
+    hub, now = Hub(), [1000.0]
+    a, b = partners(hub, now, 2)
+    assert run(hub, now, [a, b], lambda: a.paired and b.paired)
+    impostor = link.Partner(a.game, a.code, clock=lambda: now[0], log=lambda *a: None, pool_factory=hub.pool)
+    impostor.me = b.me
+    impostor._direct(a.me.public, a.dh_public, impostor._pair_key(a.me.public, a.dh_public),
+                     {"t": "offer", "r": 1, "s": a.in_next, "d": "Zm9yZ2Vk"})
+    hub.deliver()
+    assert a.theirs().offer is None and a.peer_x == b.dh_public
+
+
+def test_sequence_and_round_floods_do_not_grow_state_or_ack_unsent_messages():
+    hub, now = Hub(), [1000.0]
+    a, b = partners(hub, now, 2)
+    assert run(hub, now, [a, b], lambda: a.paired and b.paired)
+    a.offer(b"mine")
+    retained = dict(a.unacked)
+    for i in range(1000):
+        a._on_direct(b.me.public, b.dh_public, a.key, {"t": "accept", "s": a.in_next + 1000 + i,
+                                                    "r": 1000 + i, "a": a.out_seq + 1000})
+        a._deliver({"t": "accept", "r": 1000 + i})
+    assert not a.early and not a.rounds and a.unacked == retained
+
+
+def test_record_and_validation_limits_protect_the_online_checker():
+    import base64
+    checked = []
+    hub, now = Hub(), [1000.0]
+    a, b = partners(hub, now, 2, validate=lambda raw: (checked.append(raw) or None, "test"))
+    assert run(hub, now, [a, b], lambda: a.paired and b.paired)
+    a._deliver({"t": "offer", "r": 1, "d": base64.b64encode(b"x" * 769).decode()})
+    assert not checked
+    for i in range(link.CHECKS_PER_MINUTE + 1):
+        a._deliver({"t": "offer", "r": 1, "d": base64.b64encode(bytes([i])).decode()})
+    assert len(checked) == link.CHECKS_PER_MINUTE and a.state == "lost"
+
+
+def test_shared_blocks_have_known_names_and_exact_sizes():
+    import base64
+    hub, now = Hub(), [1000.0]
+    a, b = partners(hub, now, 2, game="frlg")
+    for name, data in [("arbitrary", b"x"), ("party:0", b"x" * 201), ("pick", b"\x06")]:
+        a._deliver({"t": "share", "r": 1, "k": name, "d": base64.b64encode(data).decode()})
+    assert not a.theirs().shared
+    a._deliver({"t": "share", "r": 1, "k": "party:0", "d": base64.b64encode(b"x" * 200).decode()})
+    assert a.theirs().shared == {"party:0": b"x" * 200}
+
+
+def test_long_online_sessions_prune_completed_rounds_and_stale_peers():
+    hub, now = Hub(), [1000.0]
+    a, b = partners(hub, now, 2)
+    for i in range(100):
+        a.theirs()
+        a.done()
+    assert len(a.rounds) <= 1
+    a.state = "searching"
+    for i in range(link.PEERS_LIMIT + 20):
+        a._on_announce(f"{i:064x}", {"t": "here", "v": 1, "x": b.dh_public, "busy": True})
+    assert len(a.peers) == link.PEERS_LIMIT
+    now[0] += link.PEER_STALE + 1
+    a.tick()
+    assert not a.peers
+
+
+def test_rejected_replacement_offer_clears_the_previous_confirmation():
+    hub, now = Hub(), [1000.0]
+    a, b = partners(hub, now, 2)
+    a.theirs().offer, a.theirs().accepted = b"previous", True
+    a._deliver({"t": "offer", "r": 1, "d": "!invalid!"})
+    assert a.theirs().offer is None and not a.theirs().accepted
+
+
+def test_outgoing_messages_are_bounded_when_the_partner_never_acknowledges():
+    hub, now = Hub(), [1000.0]
+    a, b = partners(hub, now, 2)
+    assert run(hub, now, [a, b], lambda: a.paired and b.paired)
+    a.traded = True
+    for i in range(link.WINDOW + 10):
+        a.accept()
+    assert a.state == "lost" and len(a.unacked) <= link.WINDOW

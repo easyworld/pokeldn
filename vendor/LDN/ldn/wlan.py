@@ -1878,8 +1878,8 @@ def set_factory(factory) -> None:
 
 @contextlib.asynccontextmanager
 async def create_factory() -> AsyncIterator[Factory]:
-    if _factory_override is None and os.environ.get("POKELDN_RADIO", "").startswith("esp32:"):
-        from pokeldn.ldn.esp32_wlan import use_from_environment
+    if _factory_override is None and os.environ.get("POKELDN_RADIO"):
+        from pokeldn.ldn.radios import use_from_environment
         use_from_environment(log=print)
     if _factory_override is not None:
         async with _factory_override() as factory:

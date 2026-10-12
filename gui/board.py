@@ -291,13 +291,9 @@ def detect_chip(port: str) -> str:
 
 
 def _get(url: str, limit: int) -> bytes:
-    import urllib.request
-    from pokeldn.app.sprites import _context
-    request = urllib.request.Request(url, headers={"User-Agent": "pokeldn-desktop"})
-    with urllib.request.urlopen(request, timeout=30, context=_context()) as reply:
-        data = reply.read(limit + 1)
-    if len(data) > limit:
-        raise OSError(f"{url} is larger than {limit} bytes")
+    from pokeldn.app import update
+    with update._open(url) as reply:
+        data = update.read_bytes(reply, limit, 30)
     return data
 
 
@@ -307,15 +303,24 @@ def download_firmware(say=print, folder: str = os.path.dirname(FIRMWARE)) -> str
     only when all match. Returns the release tag."""
     import hashlib
     import json
+    from pokeldn.app import update
 
     releases = json.loads(_get(RELEASES, 1_000_000))
+    if not isinstance(releases, list):
+        raise OSError("the firmware response holds no releases")
     known = [os.path.basename(f) for f in (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6, FIRMWARE_PAD,
                                            FIRMWARE_PAD_ESP32)]
     for release in releases:
-        files = {a.get("name"): a.get("browser_download_url") for a in release.get("assets") or []}
+        if not isinstance(release, dict) or not isinstance(release.get("assets"), list):
+            continue
+        files = {a.get("name"): a.get("browser_download_url") for a in release["assets"]
+                 if isinstance(a, dict) and isinstance(a.get("name"), str)}
         if release.get("draft") or not all(n in files for n in (known[0], "SHA256SUMS")):
             continue
         names = [n for n in known if n in files]
+        page = release.get("html_url", "")
+        if any(not update.release_asset(page, files[n], n) for n in [*names, "SHA256SUMS"]):
+            raise OSError("the firmware files are not from the pokeldn release")
         sums = {name.lstrip("*"): digest.lower() for digest, name in
                 (line.split() for line in _get(files["SHA256SUMS"], 100_000).decode().splitlines()
                  if len(line.split()) == 2)}

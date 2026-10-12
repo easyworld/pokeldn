@@ -24,7 +24,8 @@ from pokeldn import pokemon as pokemon_service
 from pokeldn import config
 from pokeldn import sv
 from pokeldn.ldn import pia6, pia_connect, reliable5
-from pokeldn.sv import pokemon, port2, raid, raid_encounter, raid_event, reference, streams, trade
+from pokeldn.sv import (pokemon, port2, raid, raid_encounter, raid_event, raid_partners, reference,
+                        streams, trade)
 from pokeldn.ldn import game_channel
 from pokeldn.ldn.ldn_mitm_host import IpHostTransport
 from pokeldn.ldn.transport import HostTransport, board_radio, find_ap_phy
@@ -400,6 +401,16 @@ def build_parser():
     ap.add_argument("--raid-players", type=int, default=1, metavar="N",
                     help=f"consoles the raid waits for, 1 to {raid.CONSOLES}; it starts once N "
                          "are in the lobby and every one is Ready, or when the lobby timer runs out")
+    ap.add_argument("--raid-partner", action="append", default=[], metavar="TRAINER",
+                    help=f"an NPC partner the raid seats, in slot order, one per slot the consoles "
+                         f"leave empty ({raid_partners.HOSTED} with one console, 1 with two, none "
+                         f"with three): {', '.join(raid_partners.TRAINERS)}; the host draws a "
+                         f"partner seed that seats them, the rest drawn freely (docs/sv_raid.md, "
+                         f"Partners)")
+    ap.add_argument("--raid-partner-progress", choices=raid_partners.STAGES, default=None,
+                    help="the unlock stage the partners come from, which sets their pool, their "
+                         "level being four fifths of --raid-pokemon's; by default --raid-progress's, "
+                         "six stars for a black crystal or a seven-star event raid")
     ap.add_argument("--send", action="append", default=[],
                     help="PROTO:PORT:HEX, a reliable data message to send once the console has "
                          "joined (host seq 1 on that port, INITIALIZED); repeatable")
@@ -407,8 +418,8 @@ def build_parser():
 
 
 def prepare_raid(ap, args):
-    """-> the raid this host stages, its Pokemon checked by PKHeX and its rewards by the bag's list,
-    before the radio is up."""
+    """-> the RaidGroup this host stages: its Pokemon checked by PKHeX, its rewards by the bag's list
+    and its NPC partners drawn, before the radio is up."""
     if args.raid_pokemon is None:
         ap.error("--raid-seed needs --raid-pokemon, the Pokemon our player brings")
     if args.trade_offer:
@@ -444,8 +455,19 @@ def prepare_raid(ap, args):
                                         args.raid_progress, args.raid_content)
         where = f"{args.raid_version}, {args.raid_map}, {args.raid_progress}, {args.raid_content}"
         catch = ""
+    if args.raid_partner_progress:
+        stage = raid_partners.STAGES.index(args.raid_partner_progress)
+    else:
+        stage = raid_partners.stage_of(found.progress, found.content)
+    free = raid_partners.slots(args.raid_players)
     try:
-        raid.RaidGroup(found, record, args.raid_reward or None, players=args.raid_players)
+        wanted = [raid_partners.trainer(name) for name in args.raid_partner]
+        if len(wanted) > free:
+            raise ValueError(f"--raid-partner: {args.raid_players} console(s) leave {free} slot(s) "
+                             "to NPC partners")
+        partner_seed = raid_partners.seed_for(stage, wanted)
+        group = raid.RaidGroup(found, record, args.raid_reward or None, players=args.raid_players,
+                               partner_seed=partner_seed, stage=stage)
     except ValueError as exc:
         ap.error(str(exc))
     rewards = args.raid_reward or found.rewards
@@ -454,16 +476,21 @@ def prepare_raid(ap, args):
           f"{', shiny' if found.is_shiny else ''}{catch}")
     print(f"[sv] raid rewards{'' if args.raid_reward else ' of the seed'}: "
           + ", ".join(f"{item} x{quantity}" for item, quantity in rewards))
-    print(f"[sv] our raid Pokemon: {pokemon.describe(pokemon.load(record))}")
-    return found, record
+    pool = raid_partners.pool(stage)
+    seated = ", ".join(f"{pool[i].trainer} ({pool[i].name})"
+                       for i in raid_partners.draw(partner_seed, stage, free)) or "none"
+    level = raid_partners.level_for(pokemon.read(group.pokemon).get("level", 0))
+    print(f"[sv] raid partners from the {raid_partners.STAGES[stage]} pool, level {level}, partner seed "
+          f"{partner_seed:016X}: {seated} ({len(wanted)} of {free} chosen)")
+    print(f"[sv] our raid Pokemon: {pokemon.describe(group.pokemon)}")
+    return group
 
 
 def main(argv=None):
     ap = build_parser()
     args = ap.parse_args(argv)
     raiding = args.raid_seed is not None
-    if raiding:
-        raid_found, raid_record = prepare_raid(ap, args)
+    raid_group = prepare_raid(ap, args) if raiding else None
     if args.trade_offer:
         args.trade_offer = [pokemon_service.prepare_file("sv", p, fresh=args.fresh_pid,
             transform=lambda raw: trade.load_offer(raw, args.offer_set)) for p in args.trade_offer]
@@ -599,11 +626,10 @@ def main(argv=None):
     channel_window = reliable5.SendWindow(0.25)
     raid_window = reliable5.SendWindow(0.5)
     raid_hosts = {}             # src_ip -> raid.RaidHost, from the port-2 answer on
-    raid_group = (raid.RaidGroup(raid_found, raid_record, args.raid_reward or None,
-                                 players=args.raid_players) if raiding else None)
     raid_seating = set()        # src_ip whose station list is not yet acknowledged
     list_waiting = {}           # src_ip -> the station-list sequence it has yet to acknowledge
     list_seq = [args.update_seq]
+    listed = set()              # src_ip already sent a station list on this seat
     finished_ips = set()
     battle_seq = [None]         # the station list's sequence at the battle
     net_request_seq = {}        # src_ip -> the one Net 0x11 sequence a raid host repeats
@@ -617,6 +643,14 @@ def main(argv=None):
     def seat_of(ip):
         """-> the station index of the console at `ip`: 1 to 3 in a raid, 1 in a trade."""
         return station_ids.get(ip, {}).get("index", CONSOLE_STATION_INDEX)
+
+    net_tables = {}             # src_ip -> the Net 0x11 station addresses it was last sent
+
+    def net_table(ip):
+        """-> the Net 0x11 addresses for `ip`: ours, the seated consoles by index, then `ip` if
+        not yet seated."""
+        seated = sorted((o for o in station_ids if o in current_ips and raiding), key=seat_of)
+        return (transport.our_ip, *seated, *(() if ip in seated else (ip,)))
 
     def seated_stations():
         """-> the station list: ours, then every seated console by index."""
@@ -640,8 +674,11 @@ def main(argv=None):
             st["stations"] = stations
             upd = pia_connect.build_session_update_v11(st["host_const"], st["host_var"], stations,
                                                        sequence_id=sequence)
+            # A seated station drops a repeated non-zero packet id (`0x6f3ff4`); 0 is never checked.
+            pid = 0 if ip in listed else args.session_packet_id
+            listed.add(ip)
             pkt = build_reply(keys, transport.our_ip, upd, st["console_var"], os.urandom(8),
-                              flags=session_flags, packet_id=args.session_packet_id, mesh=raiding)
+                              flags=session_flags, packet_id=pid, mesh=raiding)
             pending_update[ip] = (time.time() + delay, pkt)
             if raiding:
                 list_waiting[ip] = sequence
@@ -770,8 +807,10 @@ def main(argv=None):
                                       streams.open_payload(4 + n), index=n)
         msgs += pia6.build_message(opening, PROTO_STREAM_BROADCAST_RELIABLE, port=4 + n,
                                    message_flags=0)
+        # Packet id 0 is never checked; any other must exceed the last from us, or a station drops
+        # the packet, the station list's resends included (`0x6e9854`, docs/sv_raid.md).
         pkt = pia6.build_packet(keys.session_key, keys.network_id, transport.our_ip, msgs,
-                                dst_var=MESH_DESTINATION, src_var=PIA_HOST_VAR, packet_id=87,
+                                dst_var=MESH_DESTINATION, src_var=PIA_HOST_VAR, packet_id=0,
                                 nonce8=os.urandom(8), footer_ids=(station_ids[ip]["console_var"],))
         transport.send(pkt, dst(ip))
         host_seq[(ip, PROTO_STREAM_BROADCAST_RELIABLE, 4 + n)] = 2
@@ -912,6 +951,15 @@ def main(argv=None):
                                             code=args.code))
                 print(f"[sv] advertising {players} player(s)")
             if not args.no_net_probe:
+                if raiding:
+                    # A Pia host sends every station the new table on each seat change (`0x69c79c`,
+                    # docs/sv_raid.md, Several consoles).
+                    for ip in [o for o in station_ids if o in current_ips]:
+                        table = net_table(ip)
+                        if ip in net_tables and net_tables[ip] != table:
+                            net_answered.discard(ip)
+                            net_request_seq.pop(ip, None)
+                            net_sent.pop(ip, None)
                 for ip in list(seen_ips):
                     # A retail host sends Net 0x11 once; a repeat is a fresh connection request.
                     if ip in net_answered:
@@ -923,13 +971,12 @@ def main(argv=None):
                     if not raiding or ip not in net_request_seq:
                         net_seqid += 1
                         net_request_seq[ip] = net_seqid
-                    others = [o for o, _ in sorted(((o, seat_of(o)) for o in station_ids
-                                                    if o != ip and o in current_ips and raiding),
-                                                   key=lambda item: item[1])]
-                    if len(others) >= raid.CONSOLES:
+                    table = net_table(ip)
+                    if len(table) > raid.CONSOLES + 1:
                         continue                # every seat is taken
+                    net_tables[ip] = table
                     probe = build_net_probe(
-                        keys, transport.our_ip, transport.our_mac, [transport.our_ip, *others, ip],
+                        keys, transport.our_ip, transport.our_mac, list(table),
                         net_request_seq[ip], os.urandom(8),
                         args.max_participants if args.net_stations is None else args.net_stations,
                         net_flags=(ESTABLISHING_FLAGS if args.net_flags is None
@@ -1176,6 +1223,7 @@ def main(argv=None):
                                 raid_group.leave(raid_hosts[src_ip].index)
                             raid_hosts.pop(src_ip, None)
                             list_waiting.pop(src_ip, None)
+                            listed.discard(src_ip)
                             raid_seating.discard(src_ip)
                             net_request_seq.pop(src_ip, None)
                             # A console rejoining after a failed opening restarts from nothing.

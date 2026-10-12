@@ -2159,7 +2159,7 @@ OPTION_HELP = {'--ot': '训练家名称，默认使用 DEFAULT_TRAINER。',
 def description(value: str, option: str = "") -> str:
     """Translate parser help, including options with no help in the current entry point."""
     normalized = " ".join(value.split())
-    return HELP.get(normalized, value) if normalized else OPTION_HELP.get(option, "")
+    return HELP.get(normalized, OPTION_HELP.get(option, value)) if normalized else OPTION_HELP.get(option, "")
 
 
 HELP.update({"copy the console's whole 128 KB save into FILE (.sav); the console's save is not changed [docs/frlg_gift.md, Save backup and restore]": '将游戏机完整的 128 KB 存档复制到 FILE（.sav），不改变游戏机存档。', 'write the .sav FILE onto the console: beside its newest save, every sector read back, then the game loads it and saves; anything short of that keeps the old save': '将 .sav 文件写入游戏机，逐扇区读取校验后加载并保存；失败时保留旧存档。', 'with --save-backup: keep a backup the link cut short here; the next one goes on from it': '配合 --save-backup 使用：在此保留中断的备份，下次从断点继续。', "whose addresses a hook, a stub or a ROM call is built with: BPRF, BPGF, BPRE, BPGE, BPRS, BPGS, BPRD, BPGD, BPRI, BPGI, BPRJ, BPGJ. auto (the default) builds for each and sends the one the console's game code names, before anything address-dependent is sent; another code is refused. A game code serves only that cartridge. Bytes with no build address go to any console either way": '选择生成代码使用的卡带地址。auto 根据游戏机报告的卡带代码自动选择对应语言和版本，不匹配的代码会被拒绝。'})
@@ -2193,4 +2193,9 @@ HELP.update({
         '通过局域网的 ldn_mitm 加入模拟游戏机主持的会话；无需无线开发板、root 或密钥。--scans 的每次扫描等待 --dwell 秒获取回应。',
     '--ip-join: our own address on that LAN': '--ip-join：本机在该局域网中的地址。',
     '--ip-join: the address a scan leaves from; default --our-ip': '--ip-join：扫描请求的源地址，默认使用 --our-ip。',
+})
+
+OPTION_HELP.update({
+    "--raid-partner": "按空位顺序指定 NPC 搭档：一台游戏机可指定两名，两台可指定一名，三台没有空位。主机寻找对应搭档种子，其余搭档随机安排。详见 docs/sv_raid.md。",
+    "--raid-partner-progress": "搭档池对应的团体战解锁阶段；等级为我方出战宝可梦的五分之四。默认跟随团体战剧情进度，黑色结晶或七星活动使用六星阶段。",
 })

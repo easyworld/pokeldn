@@ -147,7 +147,7 @@ class SettingsView:
             *(advanced if self.show_advanced else []),
             t.card('更新', ft.Row([t.button('立即检查', self._check_update, "refresh", filled=False),
                                       self.update_state], spacing=10),
-                   '应用启动时向 GitHub 查询 pokeldn 新版本，不发送个人或游戏信息。',
+                   "应用启动时向 GitHub 查询 pokeldn 新版本，并向已安装插件各自的更新地址查询插件新版本。不发送个人或游戏信息。",
                    trailing=t.switch(s.check_updates, lambda e: self.save("check_updates", e.control.value))),
             t.card(f'关于 pokeldn {__version__}', ft.Row([link(label, url) for label, url in LINKS], spacing=4),
                    'pokeldn 使用 AGPLv3 许可，宝可梦由 PKHeX.Core（GPLv3）检查。'),

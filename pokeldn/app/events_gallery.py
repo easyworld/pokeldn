@@ -11,13 +11,12 @@ import os
 import re
 import shutil
 import urllib.parse
-import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from pokeldn.app import paths, update
+from pokeldn.app import archives, paths, update
 from pokeldn.sv import raid_event
 
 REPOSITORY = "projectpokemon/EventsGallery"
@@ -30,6 +29,9 @@ MANIFEST = "gallery.json"
 PLACEHOLDER = "000 Base Data"     # the game's own table, no delivery
 TABLES = (raid_event.ENEMY, raid_event.FIXED, raid_event.LOTTERY, raid_event.PRIORITY)
 TIMEOUT = 10.0
+MAX_FILES = 100_000
+MAX_TABLE = 8 << 20
+MAX_UNPACKED = 256 << 20
 
 Progress = Callable[[str, int, int], None]   # what is happening, bytes done, bytes in all (0 unknown)
 
@@ -135,14 +137,20 @@ def newest_tables(names) -> dict[str, str]:
 def extract(archive: Path, folder: Path) -> int:
     """Unpacks every event's newest tables from GitHub's zip of the gallery (whose entries sit under
     one top folder); -> how many files."""
-    with zipfile.ZipFile(archive) as z:
+    with archives.open_zip(archive, MAX_FILES) as z:
+        if len(z.infolist()) > MAX_FILES:
+            raise OSError("the gallery holds too many files")
+        for info in z.infolist():
+            archives.relative(info.filename)
         inside = {info.filename.partition("/")[2]: info for info in z.infolist() if not info.is_dir()}
         wanted = newest_tables(inside)
+        archives.bounded(((path, inside[name].file_size, inside[name]) for path, name in wanted.items()),
+                         MAX_FILES, MAX_UNPACKED, MAX_TABLE)
         for path, name in wanted.items():
-            target = long_path(folder / path)
+            target = long_path(archives.destination(folder, path))
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with z.open(inside[name]) as source, open(target, "wb") as out:
-                shutil.copyfileobj(source, out)
+                archives.copy(source, out, inside[name].file_size)
     if not wanted:
         raise OSError("the download holds no raid events")
     return len(wanted)

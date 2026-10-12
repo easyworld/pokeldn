@@ -23,6 +23,7 @@ BLUE = "#47AEFA"
 RED = "#FD474D"
 GREEN = "#3DD68C"
 AMBER = "#FF9F0A"
+SILVER = "#BCC3CE"
 BRAND_BLUE = ("#4FD9F5", "#4E61FC")   # the logo's two gradients (assets/logo.svg)
 BRAND_RED = ("#FAA555", "#FD474D")
 SELECTED = ft.Colors.with_opacity(0.14, BLUE)

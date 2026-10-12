@@ -47,6 +47,11 @@ REWARD_COLUMNS = (10, 40, 70, 90)
 TERA_SHARDS = (1862, 1868, 1871, 1869, 1870, 1874, 1873, 1875, 1878,
                1863, 1864, 1866, 1865, 1872, 1867, 1876, 1877, 1879)
 REWARD_MATERIAL, REWARD_SHARD = 1, 2
+# A retail host's bonus rows after the lottery: three more draws under subject 4 (kept per Raid Power
+# level), the Tera Shards RaidGemItemRewardBoost gives stars 1 to 7 under subject 5 (Glimmering Charm).
+SUBJECT_POWER, SUBJECT_CHARM = 4, 5
+POWER_DRAWS = 3
+SHARD_BOOST = (0, 0, 2, 5, 10, 12, 0)
 TOXTRICITY = 849
 # Toxtricity's nature comes from its form's list [ToxtricityUtil.cs].
 TOXTRICITY_NATURES = ((3, 4, 2, 8, 9, 19, 22, 11, 13, 14, 0, 6, 24),
@@ -241,41 +246,50 @@ def boss_fields(seed, row):
     }
 
 
-def rewards(seed, row, stars, fixed=None, lottery=None):
-    """-> [(item, quantity)]: the encounter's fixed rows, then the seed's lottery draws. `fixed`
-    and `lottery` are the reward tables by name, the base game's unless an event brings its own."""
+def reward_rows(seed, row, stars, fixed=None, lottery=None):
+    """-> [(item, quantity, rare, subject)] as a retail host writes a RaidPoint's rows: the fixed
+    rows with their table subject, the seed's lottery draws, then the bonus rows
+    (docs/sv_raid.md, The battle bootstrap). `fixed` and `lottery` are the reward tables by name,
+    the base game's unless an event brings its own."""
     data = tables()
     gem = tera_type(seed, row)
     out = []
 
-    def add(entry):
+    def add(entry, subject):
         item = entry["item"] or {
             REWARD_MATERIAL: int(data["material_items"].get(str(row["species"]), 0)),
             REWARD_SHARD: TERA_SHARDS[gem]}.get(entry["category"], 0)
         if item and entry["amount"]:
-            out.append((item, entry["amount"]))
+            out.append((item, entry["amount"], entry.get("rare", 0), subject))
 
     fixed = data["fixed_rewards"] if fixed is None else fixed
     lottery = data["lottery_rewards"] if lottery is None else lottery
     # An event's record can name a table its delivery lacks; a lottery without weight draws nothing
     # (a draw under a total of 0 never ends).
     for entry in fixed.get(row["fixed_rewards"], ()):
-        add(entry)
+        add(entry, entry.get("subject", 0))
     draws = lottery.get(row["lottery_rewards"], ())
     total = sum(entry["probability"] for entry in draws)
-    if not total:
-        return out
-    rand = Xoroshiro(seed)
-    roll = rand.next_int(100)
-    count = REWARD_SLOTS[stars - 1][sum(roll >= edge for edge in REWARD_COLUMNS)]
-    for _ in range(count):
-        threshold = rand.next_int(total)
-        for entry in draws:
-            if entry["probability"] > threshold:
-                add(entry)
-                break
-            threshold -= entry["probability"]
+    if total:
+        rand = Xoroshiro(seed)
+        roll = rand.next_int(100)
+        count = REWARD_SLOTS[stars - 1][sum(roll >= edge for edge in REWARD_COLUMNS)]
+        for draw in range(count + POWER_DRAWS):
+            threshold = rand.next_int(total)
+            for entry in draws:
+                if entry["probability"] > threshold:
+                    add(entry, 0 if draw < count else SUBJECT_POWER)
+                    break
+                threshold -= entry["probability"]
+    if SHARD_BOOST[stars - 1]:
+        out.append((TERA_SHARDS[gem], SHARD_BOOST[stars - 1], 0, SUBJECT_CHARM))
     return out
+
+
+def rewards(seed, row, stars, fixed=None, lottery=None):
+    """-> [(item, quantity)]: the fixed rows and the seed's lottery draws, without the bonus rows."""
+    return [(item, quantity) for item, quantity, _, subject in reward_rows(seed, row, stars, fixed, lottery)
+            if subject < SUBJECT_POWER]
 
 
 @dataclass(frozen=True)
@@ -289,6 +303,7 @@ class Raid:
     row: dict
     boss: dict
     rewards: tuple
+    rows: tuple = ()      # reward_rows: what a RaidPoint carries, bonus rows included
 
     @property
     def species(self):
@@ -313,5 +328,6 @@ def generate(seed, version="violet", map_name="paldea", progress="4star", conten
     """-> the Raid a console in that state makes of the seed."""
     seed &= 0xFFFFFFFF
     row, stars = select(seed, version, map_name, progress, content)
+    rows = tuple(reward_rows(seed, row, stars))
     return Raid(seed, version, map_name, progress, content, stars, row, boss_fields(seed, row),
-                tuple(rewards(seed, row, stars)))
+                tuple((r[0], r[1]) for r in rows if r[3] < SUBJECT_POWER), rows)

@@ -45,6 +45,7 @@ PAGES = (
     ("controller", '手柄控制', "joystick"),
     ("docs", '文档', "book-open"),
 )
+PLUGINS = ("plugins", "插件", "plug")
 SETTINGS = ("settings", '设置', "gear")
 UPDATE = ("update", '更新', "download")
 
@@ -90,13 +91,17 @@ def main(page: ft.Page) -> None:
         if key == "docs":
             from gui.views.docs import DocsView
             return DocsView(app)
+        if key == "plugins":
+            from gui.views.plugins import PluginsView
+            return PluginsView(app)
         from gui.views.settings import SettingsView
         return SettingsView(app)
 
     def item(entry) -> ft.Control:
         key, label, icon = entry
         active = key == current["key"]
-        color = t.GREEN if key == "update" else t.RED if active else t.MUTED
+        fresh = key == "update" or (key == "plugins" and bool(app.plugin_updates))
+        color = t.RED if active else t.GREEN if fresh else t.MUTED
         return ft.Semantics(selected=active, button=True, label=label, exclude_semantics=True,
                             on_tap=lambda e, k=key: navigate(k), content=ft.Container(ft.Column([
             t.pixel_icon(icon, size=24, color=color),
@@ -104,11 +109,12 @@ def main(page: ft.Page) -> None:
         ], spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
             width=56, padding=ft.Padding(0, 8, 0, 7), border_radius=12,
             bgcolor=ft.Colors.with_opacity(0.12, t.RED) if active else None,
-            on_click=lambda e, k=key: navigate(k), tooltip=label))
+            on_click=lambda e, k=key: navigate(k),
+            tooltip='插件有更新' if key == "plugins" and app.plugin_updates else label))
 
     def render_rail() -> None:
         rail.controls = [item(p) for p in PAGES]
-        bottom.controls = [item(UPDATE)] * bool(app.update) + [item(SETTINGS)]
+        bottom.controls = [item(UPDATE)] * bool(app.update) + [item(PLUGINS), item(SETTINGS)]
 
     def navigate(key: str, **kwargs) -> None:
         if key == "update":
@@ -146,15 +152,19 @@ def main(page: ft.Page) -> None:
         welcome(app)
     elif outcome:
         updated_notice(app, outcome)
+    elif app.plugin_stopped:
+        plugin_stopped_notice(app)
 
     def updated() -> None:
         render_rail()
         page.update()
     app.update_listeners.append(updated)
+    app.plugin_update_listeners.append(updated)
     if getattr(sys, "frozen", False):
         threading.Thread(target=prune_viewers, daemon=True).start()
     if app.settings.check_updates:
         app.check_update()
+        app.check_plugin_updates()
     from gui.views.gts import resume
     resume(app)      # a listing or an offer left open is answered while the app runs
 
@@ -294,6 +304,19 @@ def updated_notice(app: App, outcome: dict) -> None:
                                     f"{translate(error) if error else '打开了旧版本'}。当前应用未更改。",
                                     13, t.MUTED), width=460),
         actions=[t.button("关闭", lambda e: app.page.pop_dialog())]))
+
+
+def plugin_stopped_notice(app: App) -> None:
+    """A plugin froze or closed the app last time while it started; App turned it off."""
+    def open_plugins(e):
+        app.page.pop_dialog()
+        app.navigate("plugins")
+    app.page.show_dialog(t.dialog(
+        semantics_label='插件已停用',
+        title=t.text('插件已停用', 17, weight=ft.FontWeight.W_600),
+        content=ft.Container(t.text(f"上次启动插件 {app.plugin_stopped} 时，pokeldn 关闭或停止响应。该插件现已停用；作者修复后，可在“插件”页面重新启用。", 13, t.MUTED), width=460),
+        actions=[t.secondary_button("关闭", lambda e: app.page.pop_dialog()),
+                 t.button('打开插件页', open_plugins, "plug")]))
 
 
 def welcome(app: App) -> None:

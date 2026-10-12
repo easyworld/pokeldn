@@ -22,7 +22,10 @@ X, Poke Portal, Tera Raid Battle, offline search. `--raid-seed` with the four co
 raid ([The seed](#the-seed)), `--raid-pokemon` is the party record our player brings (PKHeX checks
 it), and `--raid-reward ITEM:QUANTITY`, repeated, replaces the seed's rewards with rows of items the
 Scarlet/Violet bag holds (the PKHeX helper's `bag` list: every pouch but the key items, unreleased
-items out). The app's Tera Raid (Host) tool carries the flags below.
+items out). `--raid-partner TRAINER`, up to once for each slot the consoles leave empty (two with
+one console, one with two), seats those NPC partners in slot order, and
+`--raid-partner-progress STAGE` picks the stage they come from ([Partners](#partners)). The app's
+Tera Raid (Host) tool carries the flags below.
 
     --channel 1 --scene-id 7 --max-participants 4 --code 4970 --scarlet-response --session-flags 0
     --session-packet-id 1 --no-session-ack --join-seq 0 --update-seq 0 --update-delay 0.02
@@ -53,7 +56,7 @@ a single one, with that console's index wherever a single console's raid has 1:
 |---|---|
 | join response | station index and join order *k* |
 | station list | every seated station, ours first; each new seat and each departure from the lobby sends the list to every seated console under the next sequence, resent until each one's type 6 |
-| Net 0x11 | our station, then the seated consoles by index, then the joiner |
+| Net 0x11 | our station, then the seated consoles by index, then the joiner; each change of seats goes to every seated console under its next sequence |
 | destination bitmap | `1 << k` under three destination bits |
 | bulk ack | entry *k* |
 | opening | 0x81 ports *k* and 4 + *k*, the ports the console sends on |
@@ -77,10 +80,11 @@ ids at `+0xa0`, their codes at `+0xc0`, the count at `+0xc4` and the closed byte
 receiver `0x279b9c4` replays a type 9 for each member.
 
 The lobby's participants are the port-2 members: the Lua lobby (chunk `be21e654`, receiver
-`0.15829`) files every message under its sender's code, and under 253 a sender with no code. Each
-console sends its state 0x18 and its Pokemon to the others on entering the lobby, and a station
-receiving a 0x18 answers with its own Ready state and Pokemon; the consoles of one lobby exchange
-their Pokemon among themselves.
+`0.15829`; a `0.N` here is the chunk's main function's prototype N, counted from 0) files every
+message under its sender's code, and under 253 a sender with no code. Each console sends its state
+0x18 and its Pokemon to the others on entering the lobby, and a station receiving a 0x18 answers
+with its own Ready state and Pokemon; the consoles of one lobby exchange their Pokemon among
+themselves.
 
 The reliable header's receive check (`0x6f0410`..`0x6f0430`) tests the receiver's own bit,
 `index & 31` of word `index >> 5` (bit 0 station 0), for any destination count from 1 to 23. A
@@ -90,6 +94,31 @@ the number of stations.
 The host hands the network to the lowest index still on it, as for one console; the other consoles
 draw the is-migrating Net 0x11 and NetStartHostMigration with no Session type 7. The run ends once
 every console has left the network or each handover has run out.
+
+A Pia host sends the new Net 0x11 to every station on each change of LDN participants: `0x69c310`
+compares the previous and current connection status, `0x69c79c` increments the one counter
+`[NetProtocol+0x60]` and sends every slot to each station but its own, rankings in ascending IPv4
+order (`0x6a05ec`). On LDN a joiner's 0x11 receiver `0x69db14` creates no station from its entries
+(`0x6a2fac` returns 0): it stores the host's address and ids, copies rankings onto stations it already
+has and answers 0x12. A joiner's stations come from the LDN node list (`nn::ldn::GetNetworkInfo`,
+`0x6b43a8`), port 12345.
+
+The type-5 receiver `0x6d7f8c` creates each newly listed station in `0x6d840c` only when its IPv4
+and port are in that node list (`0x6a8320`); otherwise it sends no type 6 and resets its applied
+sequence to 0xffff (`0x6d81a4`), so a later copy of the same list is evaluated again.
+
+Session type 9 (`0x6d4ef0`), from a joiner to the host, `09 | its constant id | count | count
+constant ids`, names the stations it has not heard from (`0x6d4a60`) and repeats every 3000 ms. The
+host's receiver `0x6d940c` hands a single named station to the kick job (`0x6dc878`) and resends the
+station list to every station.
+
+After a console's join a raid host sends packet id 0, or the seated console drops what follows a
+higher id
+([docs/pia.md](pia.md#version-11-what-a-receiver-drops-scarlet-400)): a station list resent under
+packet id 1 after a packet with id 87 left the first console of a two-console lobby on its old list
+(retail and emulated), and the second showed "Communicating..." until it reported the first silent.
+Sent the later lists under packet id 0, two emulated consoles and two retail Scarlets listed each
+other and fought one raid, in sync after the host left.
 
 A random player id of the form `10 00` and fourteen random bytes drew no type 6 from a retail
 console; the anonymous id `00000000000000010000000000000000` (`pia_connect.DEFAULT_PLAYER_ID`) seated
@@ -207,12 +236,16 @@ not, since a ready console resends it to each newcomer.
 
 In the game's code a guest answers 0x0c with 0x0d at once, with no Ready check, and a guest whose
 timer reaches 0 waits for the bootstrap (`Raid_Start_Ready`, `0.27137`): only the host starts a
-battle. A retail host readies on its player's first choice and sends 0x0c on the second, with no
-test of the guests' Ready (`0.27095`); at timer 0 it breaks the lobby up when no member is ready
-and starts otherwise. `Raid_Start_Go` (`0.27140`) resends 0x0c until every member has answered
-0x0d, then sends the bootstrap, slot *k* the Pokemon of the member with code *k*; ours waits for
-every console's 0x0d too. Waiting for every console's Ready before the start is this host's own
-rule, and it starts at timer 0 whoever is ready.
+battle. A guest that holds the bootstrap without having readied ends its lobby before the timer
+(`0.27104`) and goes to the battle the same way. A retail host readies on its player's first choice
+and sends 0x0c on the second (`0.27095`). `Raid_Start_Ready` turns the menu's first three items off
+(`f6277C172(false)`) on entry, on host and guest alike; on a host it turns the first, the one that
+starts, and the menu back on while every other member is ready, and off again when one is not: its
+player can start only once every guest is ready. Whether `f6277C172(false)` hides an item or greys
+it out is unresolved. At timer 0 it breaks the lobby up when no member is ready and starts
+otherwise. `Raid_Start_Go` (`0.27140`) resends 0x0c until every member has answered 0x0d, then sends
+the bootstrap, slot *k* the Pokemon of the member with code *k*; ours waits for every console's 0x0d
+too, and starts once every console is ready or at timer 0 whoever is ready.
 
 A gated message leaves 50 ms after its milestone; the Net 0x50 and the station list repeat every
 0.5 s until answered, and the raid messages every 0.5 s until acknowledged. A retail console once
@@ -265,8 +298,8 @@ The RaidPoint, offsets from its start:
 | 0x0e4 | 45 x 16 | reward rows: item, quantity, a rare-item flag, subject |
 | 0x3b4 | u8 | 0 in a retail standard point, 1 in a retail black one |
 | 0x3b8 | 7 x u32 | stars, species (DevID), form, gender, level, 0, Tera type |
-| 0x3d8 | u64 | nonzero in retail points, zero from `raid_point` |
-| 0x3e0 | u32 | 4 in every retail point seen; `raid_point` writes 2, which a retail Scarlet accepts |
+| 0x3d8 | u64 | `randSeed`, the partner seed ([Partners](#partners)): nonzero in retail points; `raid_point` writes the one it is given, 0 by default |
+| 0x3e0 | u32 | `raidNpcGroupID`, the host's raid unlock stage, which picks the partner pool ([Partners](#partners)): 4 in every retail point seen; `raid_point` writes the stage of the raid's progress unless given one |
 
 In the raid tables every six-star record's `raidTimeData` is active with `gameLimit` 450 and
 `commandLimit` 60, every one-star record's inactive with `gameLimit` 300, and the rest zero; a retail
@@ -293,7 +326,7 @@ subject 4 against a Steel Tera boss and listed it against a Ghost Tera boss; sen
 rows there, it listed the first only.
 
 Scarlet 4.0.0's Lua reward filter, `C07C34FC3B976E5A7.F316609DEA110601D`
-(source lines 78707 to 78765), keeps subject 0 for every player, 1 for the host, 2 for a guest
+(lines 78707 to 78765 as its bytecode records them), keeps subject 0 for every player, 1 for the host, 2 for a guest
 and 3 when its once-reward eligibility argument is true. It keeps the first N subject-4 rows,
 where N is the highest level of an active Raid Power matching the boss's Tera type. Meal kind 5
 is Raid Power; type 18 matches every Tera type. Subject 5 requires item 2481, the Glimmering Charm,
@@ -307,7 +340,7 @@ rare-item flag, writes ordinary lottery rows under subject 0, then appends three
 lottery draws under subject 4. It appends the difficulty's Tera Shard boost under subject 5
 when its quantity is positive. Each receiver applies its own meal and charm eligibility.
 
-The timer initializer `C2D7F486425487755.F0C64BA9B6853E61A` (source lines 79486 to 79513)
+The timer initializer `C2D7F486425487755.F0C64BA9B6853E61A` (lines 79486 to 79513 as its bytecode records them)
 uses supplied time fields when `raidTimeData.active` is true. With it false, a group battle uses
 game limit 300, command limit 60, client limit 0, revive time 30, AI interval 17 and AI interval
 randomness 6. Executing its unchanged Lua function with the six-star table data yielded
@@ -315,9 +348,133 @@ randomness 6. Executing its unchanged Lua function with the six-star table data 
 Both functions are in Lua chunk `be21e65463b9a98f`, SHA-256
 `c1a4f4e2625912cf0b739a642a79ba3357df0557a544b92da22a6cb139de2815`.
 
-`raid_point` writes the seed's rows (or the chosen ones) under subject 0 and no bonus rows, so a
-guest receives every row, the host's included. A retail console awarded a row rewritten to Quick Ball x500, with the other
+`raid_point` builds the seed's rows as a retail host does: each fixed row's table subject, the
+lottery table's rare flag, three more lottery draws under subject 4 and the difficulty's Tera Shard
+boost under subject 5. For seeds 7B741233 (three stars) and 09F3E337 (black) its 45 rows equal the
+retail points' bytes. A retail Scarlet guest holding the Glimmering Charm, sent seed 7B741233's
+rows, listed Ice Tera Shard x1 and x2: the subject-5 row, and not the host's subject-1 x1 row.
+Chosen rewards go under subject 0 with no bonus rows, so a guest receives
+every one. A retail console awarded a row rewritten to Quick Ball x500, with the other
 rows cleared and one bonus row left, as written.
+
+## Partners
+
+Every console fills the participant slots no lobby member holds with the same NPC trainers, drawn
+from two RaidPoint words the Lua calls `randSeed` (u64 at 0x3d8) and `raidNpcGroupID` (u32 at 0x3e0)
+(`0.4453`). The natives behind their getters read +0x3b8 (`0x1be5ac0`) and +0x3c0 (`0x1be5c20`) of
+the 0x3c8-byte struct that follows the RaidPoint's first 0x20 bytes. The guest's bootstrap handler
+reads both (`0.15829`); a retail host draws a new `randSeed` at each start and writes both
+(`Raid_Start_Go`, `0.27140`). The u64 seeds xoroshiro128+ whole (native `0x17ebec0`), with
+`0x82A2B175229D6A5B` as the second word. The console draws three trainers (`0.7804`), each
+`next_int(n)` over the n trainers still in the pool (masked to the bits of n − 1, redrawing values
+of n or more) and taken out of the pool, so in the full pool the bounds run 18, 17, 16. The empty
+slots take the draws in slot order (`0.4455`): one empty slot takes the first, wherever it sits.
+
+The u32 at 0x3e0 picks the pool, the data table field `difficulty_0`*N+1* (`0.7797`), its trainers
+and their Pokemon (the table below): 0 and 1 the first 16 trainers, 2 all 18, 3 and 4 all 18. A
+partner's Pokemon is built at level int(0.8 × the level of the Pokemon in battle slot 0, the
+host's), not its preset's (`0.4455`, `0.4901`), so Serebii's levels 16, 40 and 80 are those of Lv
+20, 50 and 100 hosts. In a pokeldn raid slot 0 holds `--raid-pokemon`. Retail Scarlets showed Eli's
+Gardevoir at Lv 80 beside a Lv 100 one and at Lv 29 beside a Lv 37 one, whatever their own Pokemon's
+levels (100 and 84), and the first stages' Eli's Kirlia and Charlotte's Staravia at Lv 80 beside a
+Lv 100 one, past their pool's 16. At 5 a retail Scarlet's partners were Pikachu named after the boss
+and its battle crashed later, so `raid_point` refuses a stage past 4.
+
+A retail host writes its raid unlock stage at 0x3e0: `raidNpcGroupID` comes from native `0xe2826c`
+(Lua binding `0x193a560`, `0.2895`), which reads four save flags through the flag getter `0xeb1cf4`
+and returns the highest set, no other flag counting:
+
+| flag key | name (PKHeX) | stage |
+|---|---|---|
+| none set | | 0 |
+| `0xEC95D8EF` | `FSYS_RAID_DIFFICTLTY3_RELEASE` (`KUnlockedRaidDifficulty3`) | 1 |
+| `0xA9428DFE` | `FSYS_RAID_DIFFICTLTY4_RELEASE` (`KUnlockedRaidDifficulty4`) | 2 |
+| `0x9535F471` | `FSYS_RAID_DIFFICTLTY5_RELEASE` (`KUnlockedRaidDifficulty5`) | 3 |
+| `0x6E7F8220` | `FSYS_RAID_DIFFICTLTY6_RELEASE` (`KUnlockedRaidDifficulty6`) | 4 |
+
+Executed under unicorn with a mocked flag store, all 16 flag combinations return this mapping. The
+Tera Raid unlock flag (`0x27025EBF`) is not read, so 0 is a save with one- and two-star raids or
+none. The stage is the story progress less one (`raid_encounter.PROGRESS` from `tera`), and the
+seven-star events share stage 4. The pool of stage 2 (Serebii's level 40) comes with four stars, one
+stage after the "3 Star Raids Unlocked" heading Serebii gives it.
+
+One den gives different partners on different attempts. A retail console ignored party records in
+bootstrap slots no lobby station held: it still drew two partners. The bootstrap goes out after the
+host's start, so a guest that leaves the lobby before it never holds the RaidPoint.
+
+`pokeldn.sv.raid_partners` holds the table and the draw. `bin/sv_host.py` writes the stage of
+`--raid-progress`, six stars for a black crystal or a seven-star event raid, or the one
+`--raid-partner-progress` names, and draws a new partner seed for each run. With `--raid-partner` it
+draws seeds until the first draws are those trainers in that order: 306 seeds on average for two of
+eighteen, about a millisecond. Its log names the seed, the partners it seats and their level, four
+fifths of `--raid-pokemon`'s (`raid_partners.level_for`). Our player and each console joining
+(`--raid-players`) hold a slot, so a pokeldn raid seats two partners with one console, one with two
+and none with three (`raid_partners.slots`); more `--raid-partner` than that are refused before the
+radio. The host takes the seed's first draws to fill the empty slots left to right; a console that
+misses the start leaves one more empty slot, which a further draw fills. Two retail Scarlets joining
+`--raid-players 2 --raid-partner Eli` showed Eli's Gardevoir in the one empty slot, the fourth.
+
+The pool, in draw-index order, from Serebii's Tera Raid Battle partners page:
+
+| # | trainer | 0x3e0 0, 1 | 2 | 3, 4 |
+|---|---|---|---|---|
+| 0 | Austin | Growlithe | Camerupt | Arcanine |
+| 1 | Ava | Buizel | Floatzel | Toxapex |
+| 2 | Logan | Skiddo | Gogoat | Arboliva |
+| 3 | Hailey | Magnemite | Magneton | Bellibolt |
+| 4 | Evan | Skwovet | Greedent | Dudunsparce |
+| 5 | Charlotte | Staravia | Altaria | Staraptor |
+| 6 | Kylie | Crabrawler | Primeape | Tauros |
+| 7 | Hunter | Drifloon | Drifblim | Drifblim |
+| 8 | Gianna | Stunky | Sneasel | Umbreon |
+| 9 | Eli | Kirlia | Hypno | Gardevoir |
+| 10 | Henry | Pawniard | Bronzong | Corviknight |
+| 11 | Chase | Dedenne | Sylveon | Sylveon |
+| 12 | Claire | Kricketune | Scyther | Heracross |
+| 13 | Brooklyn | Rockruff | Lycanroc | Garganacl |
+| 14 | Zoe | Sandile | Sandaconda | Mudsdale |
+| 15 | Samantha | Snorunt | Glalie | Weavile |
+| 16 | Dylan | | Dragonair | Haxorus |
+| 17 | Luke | | Toxicroak | Clodsire |
+
+A retail Scarlet joining `bin/sv_host.py` (two empty slots) showed, with these two words in the
+RaidPoint:
+
+| 0x3d8 | 0x3e0 | partners |
+|---|---|---|
+| 0 | 2 | Samantha (Glalie), Zoe (Sandaconda) |
+| 0x12345678deadbeef | 2 | Henry (Bronzong), Ava (Floatzel) |
+| 0x26 | 2 | Ava (Floatzel), Logan (Gogoat) |
+| 0 | 0, 1 | Chase (Dedenne), Samantha (Snorunt) |
+| 0 | 3, 4 | Samantha (Weavile), Zoe (Mudsdale) |
+| 0xaf05b3d1838735c0 | 4 | Eli (Gardevoir), Ava (Toxapex) |
+
+### Favoured partners
+
+Raiders rate ten partners of the stage 3 and 4 pool (Serebii's level 80) above the rest.
+`raid_partners.RECOMMENDED` holds them, and the app's card for each ends on why and a star: gold for
+the four raiders favour, silver for the next tier.
+
+| rank | trainer | Pokemon | why |
+|---|---|---|---|
+| gold | Eli | Gardevoir | Life Dew heals the whole team; seven-star solo guides ask for it, often with Bellibolt. |
+| gold | Hailey | Bellibolt | Light Screen, when she sets it, cuts the boss's special damage; Discharge can paralyze. |
+| gold | Logan | Arboliva | Safeguard keeps status conditions off the team; Grassy Terrain heals each turn and also powers a boss's Grass moves. |
+| gold | Charlotte | Staraptor | Intimidate on every respawn and Feather Dance cut the boss's physical Attack. |
+| silver | Austin | Arcanine | Intimidate on every respawn; Leer lowers the boss's Defense. |
+| silver | Kylie | Tauros | Intimidate on every respawn; Raging Bull breaks the boss's screens. |
+| silver | Hunter | Drifblim | Will-O-Wisp burns the boss, halving its physical damage. |
+| silver | Gianna | Umbreon | Thunder Wave paralysis can give a free turn, by chance. |
+| silver | Evan | Dudunsparce | Glare paralyzes at 100% accuracy, except a boss with an Electric Tera type. |
+| silver | Samantha | Weavile | Leer lowers the boss's Defense before its shield; Ice Punch can freeze. |
+
+Intimidate raises the Attack of a Defiant or Competitive boss, such as Annihilape, on every respawn.
+The earlier stages' pools have no Life Dew, Light Screen or Safeguard. The partners' moves changed
+with The Teal Mask update; the sets above are Serebii's, which the sources describe.
+
+Sources, read 2026-10-11: Amiibo Doctor's Tera Raid NPC Partners Tier List (June 2025); Game8's
+seven-star event guides (Skeledirge, Goodra, Dragonite); Smogon's seven-star raid threads
+(Porygon2, Glimmora, Annihilape and others).
 
 ## The seed
 
@@ -471,7 +628,8 @@ is legal only with the Mightiest Mark (`RibbonMarkMightiest`), which the console
 Magikarp the console caught under 2026071799 has it.
 
 A fixed reward row's subject 3 (`Only Once` in `Encounters.txt`: a seven-star raid's TM and Ability
-Patch) is a separate rule, and `raid_point` gives every row to every player anyway.
+Patch) is a separate rule; `raid_point` writes the table's subject and each console's reward
+filter applies it.
 An event boss can be any species, so the personal entries, move PP and names past the raid bosses'
 come from `pokeldn/sv/data/species.json` (`scripts/gen_sv_species_data.py`, the PKHeX revision of
 `raid_base.json`).
@@ -610,13 +768,8 @@ the host start; its Pokemon stayed in the battle.
   `0x1527b, 7` at `+0x38` and 0x2713 at `+0x40` when the builders first read it at the join.
   Every raid hosted with it began its battle, on retail and emulated consoles.
 - End-to-end reward-screen checks for Raid Power Lv. 2 and 3 and six-star bonus rows.
-- What the RaidPoint's u64 at 0x3d8 and byte 0x3b4 hold.
-- What a retail console does with a fixed reward row's subject (host, guests, once), which
-  `raid_point` writes as 0, every player's.
+- What the RaidPoint's byte 0x3b4 holds.
+- Whether a retail console's reward screen follows the Lua filter for subjects 2 to 4; subjects 1
+  and 5 are measured on a retail guest, the rest on an emulated one.
 - Whether the five-star catch-once records go in the save's list as the seven-star ones do.
-- Several consoles in one lobby are tested against scripted consoles only: whether retail
-  consoles mesh with each other over the board's network, and what the consoles other than the
-  next host do on NetStartHostMigration, are unmeasured.
-- What the menu element `Raid_Start_Ready` switches when every guest is ready is on a retail
-  host's screen (`f6277C172`, `0.27137`), and when the second end test of `0.27104` ends a lobby
-  before its timer.
+- What the consoles other than the next host do on NetStartHostMigration is unmeasured.

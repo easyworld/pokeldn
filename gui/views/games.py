@@ -3,6 +3,8 @@ import shlex
 import threading
 import time
 
+from pathlib import Path
+
 import flet as ft
 
 from gui import board
@@ -12,11 +14,14 @@ from pokeldn.sv import raid_event as raid_events
 from gui import theme as t
 from gui.localization import SERVICE, translate, summary as pokemon_summary, summary_text, raid_label
 from gui.advanced_zh_hans import description as advanced_description
-from pokeldn.app.catalog import GAMES, Field, Game, Tool
+from pokeldn import plugins
+from pokeldn.app.catalog import Field, Game, Tool
+
 from pokeldn.app.introspect import flags_of
 from pokeldn.app.paths import SESSION
 from gui.views.pokemon import NAME_LISTS, LinkCodePicker, NamePicker, OfferQueue, PokemonPicker
 from gui.views.raid_event import FOLDED, RaidEventPicker
+from gui.views.raid_partners import RaidPartnersPicker
 from gui.views.raid_seed import RaidSeedPicker
 from gui.views.rewards import RewardPicker
 from gui.views.gifts import GiftBuilder
@@ -33,6 +38,8 @@ ADVANCED_NOTE = "经过测试的默认值适用于大多数玩家。请仅按指
 
 
 def tool_icon(tool: Tool):
+    if plugins.owner(tool.key):
+        return "plug"
     if "-raid-" in tool.key:
         return "diamond-gem"
     if tool.key.endswith("-online"):
@@ -41,7 +48,9 @@ def tool_icon(tool: Tool):
 
 
 def tool_role(tool: Tool) -> str:
-    """Who looks for whom, said from the console's side."""
+    """Who looks for whom, said from the console's side; a plugin's tool names its plugin."""
+    if owner := plugins.owner(tool.key):
+        return f"来自插件 {owner.name}"
     if tool.key.endswith("-host"):
         return '游戏机加入 pokeldn'
     if tool.key.endswith("-join"):
@@ -54,7 +63,9 @@ def tool_role(tool: Tool) -> str:
 class GamesView:
     def __init__(self, app):
         self.app = app
-        self.game: Game = GAMES[0]
+        self.catalog = plugins.games()   # the catalog with the enabled plugins' tools
+        self.generation = plugins.generation
+        self.game: Game = self.catalog[0]
         self.tool: Tool = self.game.tools[0]
         self.tab = "basic"
         self.search = ""
@@ -62,6 +73,11 @@ class GamesView:
         self.visible = False
         # The Tera Raid host's Raid event card is unfolded while its event is in use (show_raid_event).
         self.raid_event_open = False
+        # Its Raid NPC partners card only folds: the choice stays in force (show_raid_partners). The
+        # width its cards last had lets a redraw start on the columns that fit.
+        self.raid_partners_open = False
+        self.raid_partners_width = 0
+        self.raid_partners = None              # the card shown, whose level follows Our Pokemon
         # The override of a boss a save catches once starts unchecked at every launch.
         for stored in app.settings.tool_values.values():
             stored.get("values", {}).pop(RAID_CATCH, None)
@@ -91,7 +107,12 @@ class GamesView:
     def enter(self, game: str = "", tool: str = "", **_) -> None:
         """`game` and `tool` are catalog keys: the bank opens the trade it queued a Pokemon for."""
         self.visible = True
-        chosen = next(((g, x) for g in GAMES for x in g.tools if g.key == game and x.key == tool), None)
+        if self.generation != plugins.generation:     # a plugin was turned on, off, added or removed
+            self.generation, self.catalog = plugins.generation, plugins.games()
+            game_now = next((g for g in self.catalog if g.key == self.game.key), self.catalog[0])
+            tool_now = next((x for x in game_now.tools if x.key == self.tool.key), game_now.tools[0])
+            self.app.ui(lambda: self.select(game_now, tool_now))
+        chosen = next(((g, x) for g in self.catalog for x in g.tools if g.key == game and x.key == tool), None)
         if chosen:   # once the view is back on the page: a list rebuilt off it shows empty
             self.app.ui(lambda: self.select(*chosen))
         self.session.refresh(update=False)
@@ -119,6 +140,8 @@ class GamesView:
         if rebuild:
             self.render_body()
             self.cards.update()
+        elif field.kind == "pokemon" and self.raid_partners:
+            self.raid_partners.follow_host()
         self.session.refresh()
 
     def redraw(self) -> None:
@@ -152,6 +175,13 @@ class GamesView:
             self.values[RAID_EVENT] = self.values.pop(FOLDED)
         elif not unfolded and self.values.get(RAID_EVENT):
             self.values[FOLDED] = self.values.pop(RAID_EVENT)
+        self.redraw()
+
+    # NPC partners
+
+    def show_raid_partners(self, unfolded: bool) -> None:
+        """Unfolds or folds the Raid NPC partners card; its choice goes to the raid either way."""
+        self.raid_partners_open = unfolded
         self.redraw()
 
     def raid_event(self):
@@ -217,10 +247,10 @@ class GamesView:
 
     def render_tree(self) -> None:
         rows = []
-        for game in GAMES:
+        for game in self.catalog:
             open_ = game is self.game
             rows.append(ft.Container(ft.Row([
-                ft.Container(ft.Image(src=f"games/{game.key}.png", width=36, height=36,
+                ft.Container(ft.Image(src=Path(game.icon).read_bytes() if game.icon else f"games/{game.key}.png", width=36, height=36,
                                       fit=ft.BoxFit.CONTAIN, filter_quality=ft.FilterQuality.NONE,
                                       semantics_label=game.name),
                              width=40, height=36, alignment=ft.Alignment.CENTER),
@@ -244,6 +274,7 @@ class GamesView:
         self.tree.controls = rows
 
     def render_body(self) -> None:
+        self.raid_partners = None
         if self.tool.unavailable:
             self.tabs.visible = False
             self.cards.controls = [t.card('暂不可用', None, self.tool.unavailable)]
@@ -257,7 +288,7 @@ class GamesView:
         self.cards.update()
 
     def _open_doc(self, e) -> None:
-        self.app.navigate("docs", doc=self.tool.doc or self.game.doc)
+        self.app.navigate("docs", doc=self.tool.doc or self.game.doc or "plugins.md")
 
     # Basic tab
 
@@ -281,6 +312,9 @@ class GamesView:
                 out.extend(GiftBuilder(self, item).cards())
             elif kind == "field" and item.kind == "raidevent":
                 out.append(RaidEventPicker(self, item).control)
+            elif kind == "field" and item.kind == "raidpartners":
+                self.raid_partners = RaidPartnersPicker(self, item)
+                out.append(self.raid_partners.control)
             elif kind == "field" and item.kind == "switch":
                 out.append(t.card(item.label, None, item.help, trailing=self.input(item)))
             elif kind == "field" and item.kind == "pokemon" and item.queue > 1:
@@ -300,12 +334,12 @@ class GamesView:
                     t.labeled_control(f.label, self.input(f, grouped=True), expand=True)
                     for f in fields[i:i + per_row]], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)
                     for i in range(0, len(fields), per_row)]
-                if item == "Console" and self.tool.key == "frlg-gift":
+                if item == "游戏机" and self.tool.key == "frlg-gift":
                     rows.append(ft.Column([
-                        t.text("Game language", 12, t.MUTED),
-                        t.text("Detected automatically", 13, t.TEXT),
-                        t.text("English · French · German · Italian · Spanish · Japanese", 12, t.MUTED),
-                        t.text("After you choose pokeldn in the Friend list, your game reports its language.",
+                        t.text("游戏语言", 12, t.MUTED),
+                        t.text("自动检测", 13, t.TEXT),
+                        t.text("英语 · 法语 · 德语 · 意大利语 · 西班牙语 · 日语", 12, t.MUTED),
+                        t.text("在好友列表中选择 pokeldn 后，游戏会报告自己的语言。",
                                12, t.MUTED),
                     ], spacing=4))
                 out.append(t.card(item, ft.Column(rows, spacing=10),
@@ -595,14 +629,20 @@ class SessionPanel:
     def checklist(self) -> list[tuple[str, str, str, str]]:
         """(state, what, how to fix it, the page that fixes it) for each thing Start needs.
         state is ok, wait, warn (Start still allowed) or block."""
-        status = self.app.board_status()
-        board_state = ("ok" if status.ready else "wait" if status.state == "checking" else
-                       "block" if status.state in ("missing", "choose", "controller") else "warn")
         items = [
             ("ok", '已添加 Switch 密钥', "", "") if keys_found(self.app.settings.keys) else
             ("block", '添加 Switch 密钥', '请在设置中选择 prod.keys。', "settings"),
-            (board_state, status.title, "" if status.ready else status.detail, "board"),
         ]
+        if self.app.settings.radio:
+            radio = self.app.plugin_radio()
+            items.append(("ok", f"无线通信后端：{radio.label}", "", "") if radio else
+                         ("block", '无线通信插件未加载', '请启用对应插件，或选择开发板。',
+                          "plugins"))
+        else:
+            status = self.app.board_status()
+            board_state = ("ok" if status.ready else "wait" if status.state == "checking" else
+                           "block" if status.state in ("missing", "choose", "controller") else "warn")
+            items.append((board_state, status.title, "" if status.ready else status.detail, "board"))
         if missing := command.missing_offer(self.tool, self.games.values):
             missing = translate(missing)
             hint = '选择种类，然后点击“生成”。' if missing.startswith('请先生成') else ""
@@ -618,7 +658,7 @@ class SessionPanel:
                            t.secondary_button('开发板', lambda e: self.app.navigate("board"), "cpu")], spacing=8)
         looks = {"ok": ("checkbox-on", t.GREEN), "wait": ("refresh", t.BLUE),
                  "warn": ("warning-diamond", t.AMBER), "block": ("warning-diamond", t.RED)}
-        labels = {"settings": '设置', "board": '开发板'}
+        labels = {"settings": "设置", "board": "开发板", "plugins": "插件"}
         rows = []
         for state, what, how, page in items:
             icon, color = looks[state]
@@ -692,13 +732,13 @@ class SessionPanel:
                                               trailing=t.text(progress, 12, t.GREEN if self.traded else t.MUTED))
 
     def show_transfer(self, what: str, done: int, total: int) -> None:
-        unit = "KB" if what == "backup" else "parts"
-        title = "Backing up the save" if what == "backup" else "Putting the save on the console"
+        unit = "KB" if what == "backup" else "部分"
+        title = "正在备份存档" if what == "backup" else "正在向游戏机写入存档"
         self.transfer.visible = True
         self.transfer.content = t.section(title, ft.Column([
             ft.ProgressBar(value=done / total if total else 0, color=t.BLUE, bgcolor=t.BORDER,
                            bar_height=6, border_radius=3),
-            t.text(f"{done} of {total} {unit}. Keep the Switch near the board.", 12, t.MUTED)], spacing=6))
+            t.text(f"{done} / {total} {unit}。请让 Switch 靠近开发板。", 12, t.MUTED)], spacing=6))
         self.transfer.update()
 
     def show_partner(self, partner) -> None:
@@ -802,9 +842,10 @@ class SessionPanel:
             return
         if self.app.busy:
             return
-        port = self.app.radio_port()
+        radio = self.app.plugin_radio() if s.radio else None
+        port = radio.scheme if radio else "" if s.radio else self.app.radio_port()
         problems = [p for p in (
-            "" if port else '未找到开发板。请连接开发板，或在“开发板”页选择一个。',
+            "" if port else "无线通信插件未加载。" if s.radio else '未找到开发板。请连接开发板，或在“开发板”页选择一个。',
             "" if os.path.isfile(os.path.expanduser(s.keys)) else '请在设置中选择自己的 prod.keys。',
             command.missing_offer(tool, self.games.values), *command.problems(tool, self.games.values)) if p]
         self.log.clear()

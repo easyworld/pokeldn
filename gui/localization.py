@@ -41,6 +41,25 @@ def translate(value: str) -> str:
         if value.startswith(prefix) and value.endswith(")"):
             return target + translate(value[len(prefix):-1]) + "）"
     patterns = (
+        ('Party, slot (\\d+)', '同行队伍，第 \\1 个位置'),
+        ('Box (\\d+), slot (\\d+)', '盒子 \\1，第 \\2 个位置'),
+        ('(.+), slot (\\d+)', '\\1，第 \\2 个位置'),
+        ('Left its (.+) behind', '已移除携带道具：\\1'),
+        ('Forgot (.+)', '已忘记：\\1'),
+        ('(.+) is in no game HOME can send it to\\.', 'HOME 可传入的游戏中均不存在 \\1。'),
+        ('The plugin package could not be read \\((.+)\\)\\.', '无法读取插件包（\\1）。'),
+        ('(.+) is not a plugin package \\((.+)\\)\\.', '\\1 不是插件包（\\2）。'),
+        ('The package holds an unsafe path or is too large: (.+)', '插件包包含不安全的路径，或大小超出限制：\\1'),
+        ('The package holds an unsafe path: (.+)', '插件包包含不安全的路径：\\1'),
+        ('plugin.toml does not parse: (.+)', '无法解析 plugin.toml：\\1'),
+        ('The package has no (.+)\\.py next to plugin.toml\\.', 'plugin.toml 旁缺少 \\1.py。'),
+        ('Ships (\\d+) compiled files? this check cannot read', '附带 \\1 个编译后的文件，扫描无法读取'),
+        ('It needs plugin API (.+) and this pokeldn runs plugin API (.+)\\. Update pokeldn to use it\\.', '此插件需要 API \\1，当前 pokeldn 使用 API \\2。请更新 pokeldn。'),
+        ('It was written for plugin API (.+), which this pokeldn runs plugin API (.+) no longer supports\\. Ask its author for a newer version\\.', '此插件使用 API \\1，当前 pokeldn 的 API \\2 已不再支持它。请向作者获取新版。'),
+        ('It uses plugin API (.+), which (.+) stops supporting\\. Ask its author for a newer version\\.', '此插件使用 API \\1，版本 \\2 将停止支持它。请向作者获取新版。'),
+        ('(.+) is not an HTTPS address', '\\1 不是 HTTPS 地址'),
+        ('(.+) names no \\.pokeplugin to download', '\\1 未提供可下载的 .pokeplugin 文件'),
+
         (r"a search covers 1 to ([\d,]+) seeds in each context", r"每个上下文的搜索种子数量须为 1 到 \1"),
         (r"friendship (\d+)", r"亲密度 \1"),
         (r"delivery group (\d+) has no (.+) encounter at (.+) progress", r"分发组 \1 在版本 \2、进度 \3 下没有可用遭遇"),
@@ -185,6 +204,24 @@ def game_terms(game: str) -> dict[str, str]:
         result.update((n["name"], localized[n["id"]]) for n in english.names(game, kind)
                       if n["id"] in localized)
     return result
+
+
+def import_note(value: str) -> str:
+    """Translate import notes with PKHeX item and move names, preserving saved records."""
+    parts = []
+    for part in value.split(" · "):
+        if part.startswith("Left its ") and part.endswith(" behind"):
+            item = part[len("Left its "):-len(" behind")]
+            # Earlier generations have distinct item IDs, so resolve their names first.
+            terms = {**game_terms("swsh"), **game_terms("frlg")}
+            parts.append("已移除携带道具：" + terms.get(item, translate(item)))
+        elif part.startswith("Forgot "):
+            moves = part[len("Forgot "):].split(", ")
+            terms = game_terms("sv")
+            parts.append("已忘记：" + "、".join(terms.get(move, translate(move)) for move in moves))
+        else:
+            parts.append(translate(part))
+    return " · ".join(parts)
 
 
 def summary(info: dict) -> str:

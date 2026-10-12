@@ -18,6 +18,8 @@ class Settings:
     keys: str = str(Path.home() / ".switch" / "prod.keys")
     received: str = str(RECEIVED)
     radio_port: str = ""
+    radio: str = ""         # a plugin radio's scheme (pokeldn.plugins); empty: the board
+    plugins: list = field(default_factory=list)   # plugin ids turned on
     baud: int = 921600
     capture: bool = True
     board_trace: bool = False

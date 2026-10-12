@@ -1051,16 +1051,21 @@ class HostTradeEngine:
         """A party block reaches the console only when PKHeX can read each Pokemon in it."""
         if not self._held.startswith("party:") or self.partner.validate is None:
             return True
+        cached = getattr(self, "_online_block_check", None)
+        if cached is not None and cached[:2] == (self._held, block_data):
+            return cached[2]
         for at in range(0, len(block_data), monmod.PARTY_MON_SIZE):
             raw = block_data[at:at + monmod.PARTY_MON_SIZE]
             if any(raw):
                 reason, _ = self.partner.validate(raw)
                 if reason:
+                    self._online_block_check = (self._held, block_data, False)
                     if self._refused != self._held:
                         self._refused = self._held
                         self.partner.refuse(reason)
                         self.info(f"[online] refused the partner's party: {reason}")
                     return False
+        self._online_block_check = (self._held, block_data, True)
         return True
 
     def incoming_mon(self):

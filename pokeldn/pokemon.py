@@ -4,6 +4,7 @@ import glob
 import json
 import os
 import re
+import queue
 import subprocess
 import sys
 import threading
@@ -20,6 +21,10 @@ EXE = "pokeldn-pkhex.exe" if sys.platform == "win32" else "pokeldn-pkhex"
 EXTENSIONS = {"frlg": "pk3", "lgpe": "pb7", "bdsp": "pb8", "swsh": "pk8", "pla": "pa8", "sv": "pk9",
               "za": "pa9"}
 ZA_OFFER_HEADER = bytes.fromhex("0101b90300bc815801")   # SelectPokemon, round 0 (docs/za.md)
+RECORD_SIZES = {"frlg": (80, 100), "lgpe": (232, 260), "bdsp": (328, 344),
+                "swsh": (328, 344), "pla": (360, 376), "sv": (328, 344), "za": (328, 344)}
+CHECK_TIMEOUT = 10.0
+RECORD_LIMIT = 768
 
 
 class BuilderError(Exception):
@@ -58,9 +63,7 @@ class Service:
                     self.proc = subprocess.Popen(_command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                                  stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
                                                  creationflags=flags)
-                self.proc.stdin.write(json.dumps(request) + "\n")
-                self.proc.stdin.flush()
-                line = self.proc.stdout.readline()
+                line = self._exchange(request)
                 if not line:
                     raise BuilderError("The Pokemon builder stopped.")
                 reply = json.loads(line)
@@ -71,6 +74,36 @@ class Service:
                 self._close()
                 if attempt:
                     raise BuilderError("PKHeX could not complete its legality analysis after restarting the builder.")
+
+    def _exchange(self, request):
+        proc = self.proc
+        replies = queue.Queue(maxsize=1)
+
+        def exchange():
+            try:
+                proc.stdin.write(json.dumps(request) + "\n")
+                proc.stdin.flush()
+                replies.put(proc.stdout.readline())
+            except (OSError, ValueError) as exc:
+                replies.put(exc)
+
+        if request.get("cmd") != "check":
+            exchange()
+        else:
+            worker = threading.Thread(target=exchange, name="pokemon check", daemon=True)
+            worker.start()
+        try:
+            reply = replies.get(timeout=CHECK_TIMEOUT)
+        except queue.Empty:
+            proc.kill()
+            proc.wait()
+            worker.join(timeout=2)
+            self._close()
+            raise BuilderError("PKHeX took too long to check this Pokemon.") from None
+        if isinstance(reply, Exception):
+            self._close()
+            raise BuilderError("The Pokemon builder stopped.") from reply
+        return reply
 
     def species(self, game: str) -> list[dict]:
         if game not in self.species_cache:
@@ -114,7 +147,14 @@ class Service:
                           "version": version})["sets"]
 
     def check_bytes(self, game: str, data: bytes, *, fresh=False, fields=None) -> dict:
-        data = entity_bytes(game, data)
+        if not isinstance(game, str) or game not in RECORD_SIZES or len(data) > RECORD_LIMIT:
+            raise BuilderError("This is not a Pokemon record of the selected game.")
+        try:
+            data = entity_bytes(game, data)
+        except ValueError as exc:
+            raise BuilderError("This is not a Pokemon record of the selected game.") from exc
+        if len(data) not in RECORD_SIZES[game]:
+            raise BuilderError("This is not a Pokemon record of the selected game.")
         return self._ask({"cmd": "check", "game": game, "data": base64.b64encode(data).decode(),
                           "fresh": fresh, "fields": fields or {}})
 
@@ -127,6 +167,12 @@ class Service:
             raise BuilderError(reply["report"])
         reply["file"] = self.keep(game, reply)
         return reply
+
+    def import_records(self, data: bytes, name: str, trainers: dict[str, dict]) -> dict:
+        """Each Pokemon in a Pokemon file or a game save, as the bank would keep it [services/pkhex Import].
+        `trainers` maps every game to the trainer who receives a Pokemon HOME moves there."""
+        return self._ask({"cmd": "import", "game": "sv", "name": name, "trainers": trainers,
+                          "data": base64.b64encode(data).decode()})
 
     def prepare(self, game: str, data: bytes, *, fresh=False, fields=None) -> bytes:
         reply = self.check_bytes(game, data, fresh=fresh, fields=fields)
@@ -187,7 +233,10 @@ class Service:
 
     def _close(self):
         if self.proc is not None:
-            self.proc.stdin.close()
+            try:
+                self.proc.stdin.close()
+            except OSError:
+                pass
             try:
                 self.proc.wait(timeout=2)
             except subprocess.TimeoutExpired:

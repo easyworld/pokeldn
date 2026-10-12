@@ -8,6 +8,7 @@ import flet as ft
 import serial
 
 from gui import board
+from pokeldn import plugins
 from pokeldn.app import settings, update
 from pokeldn.app.paths import SESSION
 from gui.views.widgets import on_ui
@@ -39,6 +40,7 @@ class App:
         self.page = page
         SESSION.mkdir(parents=True, exist_ok=True)
         self.settings = settings.load()
+        self.plugin_stopped = plugins.turn_off_the_one_that_stopped(self.settings)   # and watches this start
         self.picker = ft.FilePicker()
         self.clipboard = ft.Clipboard()
         self.launcher = ft.UrlLauncher()
@@ -53,6 +55,8 @@ class App:
         self.update: update.Release | None = None               # a newer release GitHub offered
         self.update_state = ""                                  # checking, current, available, offline
         self.update_listeners: list = []                        # called on the UI loop after a check
+        self.plugin_updates: dict = {}                          # plugin id -> plugin_updates.Available
+        self.plugin_update_listeners: list = []                 # called on the UI loop after a check
         self.gts = None                                         # gui.views.gts.service, once used
         threading.Thread(target=self._watch_controllers, daemon=True).start()
 
@@ -72,6 +76,12 @@ class App:
     @property
     def busy(self) -> bool:
         return self.storage_busy or self.board_busy or bool(self.process and self.process.running)
+
+    def plugin_radio(self):
+        """The plugin radio Settings chose (pokeldn.plugins.Radio), or None for the board."""
+        if not self.settings.radio:
+            return None
+        return plugins.radio(self.settings.radio)
 
     def radio_port(self, present: list[board.Port] | None = None) -> str:
         """The chosen board if it is plugged in, else the only board present."""
@@ -204,6 +214,20 @@ class App:
             self.ui(lambda: self._update_done(found, state))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def check_plugin_updates(self) -> None:
+        """Ask each installed plugin's update address for a newer version, in the background."""
+        def work():
+            from pokeldn.app import plugin_updates
+            found = plugin_updates.check(plugins.discover())
+            self.ui(lambda: self._plugin_updates_done(found))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _plugin_updates_done(self, found: dict) -> None:
+        self.plugin_updates = found
+        for listener in list(self.plugin_update_listeners):
+            listener()
 
     def _update_done(self, found, state: str) -> None:
         if state != "offline":   # a failed check keeps a release an earlier one found

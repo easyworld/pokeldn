@@ -470,3 +470,29 @@ def test_the_sv_bag_holds_every_reward_a_raid_seed_gives(service):
     assert awarded <= bag
     assert 16 not in bag and 1230 not in bag          # Cherish Ball and TM00, unreleased
     assert 1829 not in bag and 2405 not in bag        # key items of PKHeX's Event pouch
+
+
+def test_a_hanging_parser_is_killed_and_the_next_check_recovers(tmp_path, monkeypatch):
+    helper = tmp_path / 'parser.py'
+    marker = tmp_path / 'first-request'
+    helper.write_text('''import json, sys, threading
+from pathlib import Path
+marker = Path(sys.argv[1])
+for line in sys.stdin:
+    request = json.loads(line)
+    if not marker.exists():
+        marker.write_text('started')
+        threading.Event().wait()
+    print(json.dumps({'ok': True, 'legal': True, 'parsed': True, 'data': request['data']}), flush=True)
+''', encoding='utf-8')
+    monkeypatch.setattr(pokemon, '_command', lambda: [sys.executable, str(helper), str(marker)])
+    monkeypatch.setattr(pokemon, 'CHECK_TIMEOUT', 0.5)
+    from pokeldn.pla.trade_box import REFERENCE_RECORD
+    instance = pokemon.Service()
+    try:
+        with pytest.raises(pokemon.BuilderError, match='took too long'):
+            instance.check_bytes('pla', REFERENCE_RECORD)
+        assert marker.exists() and instance.proc is None
+        assert instance.prepare('pla', REFERENCE_RECORD) == REFERENCE_RECORD
+    finally:
+        instance.close()

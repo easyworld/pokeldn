@@ -8,7 +8,7 @@ import struct
 
 from pokeldn import gen9
 from pokeldn.ldn import channel_table as tables, reliable5
-from pokeldn.sv import lz4, raid_encounter, streams, trade
+from pokeldn.sv import lz4, raid_encounter, raid_partners, streams, trade
 
 KEY_LOBBY = 0x3380
 KEY_BATTLE = 0x3480
@@ -54,11 +54,11 @@ BOOTSTRAP_SIZE = 5 * gen9.SIZE_PARTY + 0x3E8
 RAIDPOINT = 5 * gen9.SIZE_PARTY
 POINT_SIZE = 0x3E8
 POINT_NAME = "RaidPoint_POKELDN_0"
-POINT_REWARDS = 0x0E4             # rows of item, quantity, 0, subject
+POINT_REWARDS = 0x0E4             # rows of item, quantity, rare, subject
 POINT_SUMMARY = 0x3B8
 REWARD_ROWS = (POINT_SUMMARY - POINT_REWARDS) // 16           # 45
-SUBJECT_ALL = 0                   # the table's SubjectType: 0 everyone, 1 host, 2 guests
-CONTENT_STANDARD = 2
+SUBJECT_ALL = 0                   # the table's SubjectType: 0 everyone, 1 host, 2 guests, 3 once
+POINT_PARTNERS = 0x3D8            # the partner seed, u64, then the host's unlock stage, u32
 POINT_TIME = 0x30                 # the record's raidTimeData; zero leaves the console's own limits
 # The crystal word: the save's raid content, 0 standard, 1 black (retail), 2 an event, 3 a seven-star
 # event (Tera-Finder RaidContent); no retail event RaidPoint has been seen (docs/sv_raid.md).
@@ -163,11 +163,15 @@ def boss_record(raid):
     return gen9.encrypt(gen9.write(bytes(gen9.SIZE_PARTY), **raid.boss))
 
 
-def raid_point(raid, rewards=None, name=POINT_NAME):
+def raid_point(raid, rewards=None, name=POINT_NAME, partner_seed=0, stage=None):
     """-> the 0x3e8-byte RaidPoint: identity, stars, crystal and catch level, the boss's HP
-    coefficient and its 37-word action profile, reward rows every player receives, the summary.
-    Unknown words stay zero."""
-    rows = raid.rewards if rewards is None else tuple(rewards)
+    coefficient and its 37-word action profile, the reward rows, the summary, the partner seed and
+    the unlock stage that pick the NPC partners (the raid's own by default). The seed's rows keep
+    retail's subjects and bonus rows; chosen `rewards` go to every player. Unknown words stay zero."""
+    if rewards is not None:
+        rows = tuple((item, quantity, 0, SUBJECT_ALL) for item, quantity in rewards)
+    else:
+        rows = raid.rows or tuple((item, quantity, 0, SUBJECT_ALL) for item, quantity in raid.rewards)
     if len(rows) > REWARD_ROWS:
         raise ValueError(f"a RaidPoint holds at most {REWARD_ROWS} reward rows")
     out = bytearray(POINT_SIZE)
@@ -180,22 +184,27 @@ def raid_point(raid, rewards=None, name=POINT_NAME):
                      raid.row.get("capture_rate", 1), raid.row["capture_level"])
     struct.pack_into("<7I", out, POINT_TIME, *(raid.row.get("time") or (0,) * 7))
     struct.pack_into("<37I", out, 0x4C, *raid.row["boss_desc"])
-    for index, (item, quantity) in enumerate(rows):
-        struct.pack_into("<IIII", out, POINT_REWARDS + index * 16, item, quantity, 0, SUBJECT_ALL)
+    for index, row in enumerate(rows):
+        struct.pack_into("<IIII", out, POINT_REWARDS + index * 16, *row)
     struct.pack_into("<7I", out, POINT_SUMMARY, raid.stars, gen9.internal_index(raid.species),
                      raid.boss["form"], raid.boss["gender"], raid.boss["level"], 0, raid.tera_type)
-    struct.pack_into("<I", out, 0x3E0, CONTENT_STANDARD)
+    if stage is None:
+        stage = raid_partners.stage_of(raid.progress, raid.content)
+    if not 0 <= stage <= raid_partners.SIX_STARS:
+        raise ValueError(f"an unlock stage is 0 to {raid_partners.SIX_STARS}, not {stage}")
+    struct.pack_into("<QI", out, POINT_PARTNERS, partner_seed, stage)
     return bytes(out)
 
 
-def bootstrap(raid, participants, rewards=None, name=POINT_NAME):
+def bootstrap(raid, participants, rewards=None, name=POINT_NAME, partner_seed=0, stage=None):
     """-> the 0xaa0 plaintext: up to four party records (None an empty slot), the boss, the
     RaidPoint."""
     if len(participants) > PARTICIPANTS:
         raise ValueError(f"a raid has at most {PARTICIPANTS} participants")
     records = [empty_participant() if p is None else gen9.encrypt(gen9.load(p)) for p in participants]
     records += [empty_participant()] * (PARTICIPANTS - len(records))
-    return b"".join(records) + boss_record(raid) + raid_point(raid, rewards, name)
+    return (b"".join(records) + boss_record(raid)
+            + raid_point(raid, rewards, name, partner_seed, stage))
 
 
 def bootstrap_message(plain, counter=FIRST_COUNTER + 10):
@@ -209,15 +218,18 @@ class RaidGroup:
     """The lobby a raid host shares with up to three consoles, one per station index: who is seated
     and ready, the timer, the start, the one bootstrap they all receive and the handover. The start
     waits until `players` consoles are seated and every one has sent state 0x01, or until the timer
-    runs out. `left` is set once the host may go."""
+    runs out. The bootstrap's partner seed and unlock stage pick the NPCs for the seats no console
+    holds. `left` is set once the host may go."""
 
-    def __init__(self, raid, pokemon_record, rewards=None, players=1):
+    def __init__(self, raid, pokemon_record, rewards=None, players=1, partner_seed=0, stage=None):
         if not 1 <= players <= CONSOLES:
             raise ValueError(f"a raid seats 1 to {CONSOLES} consoles, not {players}")
         self.raid = raid
         self.pokemon = gen9.load(pokemon_record)
         self.rewards = None if rewards is None else tuple(rewards)
-        raid_point(raid, self.rewards)          # a list that does not fit raises before the radio
+        self.partners = partner_seed, stage
+        # A list or a stage that does not fit raises before the radio.
+        raid_point(raid, self.rewards, partner_seed=partner_seed, stage=stage)
         self.players = players
         self.members = {}                       # station index -> RaidHost
         self.opened_at = None
@@ -262,7 +274,7 @@ class RaidGroup:
         if self.plain is None:
             slots = [self.pokemon] + [self.members[i].guest if i in self.members else None
                                       for i in range(1, CONSOLES + 1)]
-            self.plain = bootstrap(self.raid, slots, self.rewards)
+            self.plain = bootstrap(self.raid, slots, self.rewards, POINT_NAME, *self.partners)
         return self.plain
 
     def next_host(self):

@@ -62,6 +62,17 @@ def platform_excludes():
     return excluded
 
 
+# Standard-library modules pokeldn never imports, bundled so a plugin can (docs/plugins.md, What a plugin
+# can import). Developer tools, multiprocessing and the platform-only modules stay out.
+PLUGIN_STDLIB = ("cmath", "cmd", "code", "codeop", "dbm", "filecmp", "fileinput", "graphlib", "imaplib",
+                 "mailbox", "optparse", "pickletools", "poplib", "sched", "shelve", "smtplib", "socketserver",
+                 "sqlite3", "symtable", "syslog", "timeit", "wave", "wsgiref", "xmlrpc", "zipapp", "zoneinfo")
+
+
+def plugin_stdlib() -> list[str]:
+    return [name for name in PLUGIN_STDLIB if importlib.util.find_spec(name) is not None]
+
+
 def strip_local_symbols(app: Path, keep: set[Path]) -> None:
     """Drops local symbols from the bundle's Mach-O libraries (1 to 2 MB); the exports stay. Never the
     executable or the PKHeX helper: both carry an archive after their Mach-O image."""
@@ -149,6 +160,7 @@ def main() -> int:
         for option in (f"--paths={dependencies}", f"--paths={ROOT}", f"--paths={ROOT / 'bin'}", f"--paths={ROOT / 'vendor' / 'LDN'}",
                        *console, *onedir,
                        *[f"--hidden-import={s}" for s in scripts],
+                       *[f"--collect-submodules={m}" for m in plugin_stdlib()],
                        *[f"--exclude-module={m}" for m in platform_excludes()], "--collect-all=esptool", "--collect-submodules=unicorn",
                        "--collect-all=esp_pylib", "--collect-submodules=pokeldn", "--collect-submodules=bleak",
                        "--collect-submodules=ldn"):

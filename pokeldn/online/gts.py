@@ -5,11 +5,13 @@ import base64
 import hashlib
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 
 from pokeldn.online import relays, schnorr
 from pokeldn.online.link import _open, _seal
+from pokeldn.pokemon import EXTENSIONS, RECORD_LIMIT
 
 PROTOCOL = 1
 LISTING = 30402        # NIP-99 classified listing: addressable, a relay keeps the newest per key and d
@@ -24,6 +26,38 @@ DEFAULT_RELAYS = ("wss://relay.primal.net", "wss://nostr.oxtr.dev", "wss://nos.l
                   "wss://offchain.pub", "wss://nostr-pub.wellorder.net", "wss://relay.nostr.net")
 SHOWN = ("species", "species_id", "form", "level", "shiny", "nickname", "nature", "ability", "ball",
          "held_item", "moves", "ot", "legal")
+EVENT_LIMIT = 8192
+
+
+def _text(value, limit):
+    return isinstance(value, str) and len(value) <= limit
+
+
+def _integer(value, low, high):
+    return type(value) is int and low <= value <= high
+
+
+def _hash(value):
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _event(event, kind):
+    if not isinstance(event, dict) or event.get("kind") != kind:
+        return False
+    tags = event.get("tags")
+    if (not isinstance(tags, list) or len(tags) > 32
+            or not all(isinstance(tag, list) and 1 <= len(tag) <= 4
+                       and all(_text(s, 256) for s in tag) for tag in tags)
+            or not _text(event.get("content"), EVENT_LIMIT)
+            or not _integer(event.get("created_at"), 0, 4102444800)):
+        return False
+    for name in ("d", "p", "expiration"):
+        if sum(tag[0] == name for tag in tags) > 1:
+            return False
+    try:
+        return len(json.dumps(event).encode()) <= EVENT_LIMIT and relays.valid(event)
+    except (ValueError, TypeError, RecursionError):
+        return False
 
 
 def relay_urls() -> tuple[str, ...]:
@@ -112,18 +146,37 @@ def listing_event(identity, d, game, info, record, wants: Wants, trainer, app, e
 
 def parse_listing(event) -> Listing | None:
     """A listing read from a relay, or None for anything else or anything forged."""
-    if event.get("kind") != LISTING or ["t", TAG] not in (event.get("tags") or []) or not relays.valid(event):
+    if not _event(event, LISTING) or ["t", TAG] not in event["tags"]:
         return None
     try:
         body = json.loads(event["content"])
         wants = body["wants"]
-        return Listing(event["pubkey"], str(_tag(event, "d")), int(event["created_at"]),
-                       int(_tag(event, "expiration") or 0), str(body.get("status", "active")),
-                       str(body["game"]), {k: body["pokemon"].get(k) for k in SHOWN}, str(body["sha256"]),
-                       Wants(int(wants["species"]), str(wants["name"])[:32], int(wants.get("min_level", 1)),
-                             int(wants.get("max_level", 100))),
-                       str(body.get("trainer", ""))[:24], str(body.get("winner", "")), event)
-    except (ValueError, KeyError, TypeError, AttributeError):
+        pokemon = body["pokemon"]
+        d, expires = _tag(event, "d"), int(_tag(event, "expiration") or 0)
+        low, high = wants.get("min_level", 1), wants.get("max_level", 100)
+        if (type(body.get("v")) is not int or body["v"] != PROTOCOL
+                or not _text(d, 64) or not d or not 0 < expires <= 4102444800
+                or not isinstance(body["game"], str) or body["game"] not in EXTENSIONS
+                or not _hash(body["sha256"])
+                or body.get("status", "active") not in ("active", "traded", "withdrawn")
+                or not _integer(pokemon["species_id"], 1, 2048)
+                or not _integer(pokemon["level"], 1, 100)
+                or not all(_text(pokemon.get(k), 96) for k in SHOWN
+                           if k not in ("species_id", "level", "shiny", "legal", "moves"))
+                or type(pokemon.get("shiny")) is not bool or type(pokemon.get("legal")) is not bool
+                or not isinstance(pokemon.get("moves"), list) or len(pokemon["moves"]) > 4
+                or not all(_text(move, 96) for move in pokemon["moves"])
+                or not _integer(wants["species"], 1, 2048) or not _text(wants["name"], 32)
+                or not _integer(low, 1, 100) or not _integer(high, low, 100)
+                or not _text(body.get("trainer", ""), 24)
+                or not _text(body.get("app", ""), 64)
+                or not (body.get("winner", "") == "" or _hash(body["winner"]))):
+            return None
+        return Listing(event["pubkey"], d, event["created_at"], expires, body.get("status", "active"),
+                       body["game"], {k: pokemon[k] for k in SHOWN}, body["sha256"],
+                       Wants(wants["species"], wants["name"], low, high),
+                       body.get("trainer", ""), body.get("winner", ""), event)
+    except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
         return None
 
 
@@ -135,13 +188,24 @@ def wrap(identity, to: str, body: dict, expires: int) -> dict:
 
 def unwrap(identity, event) -> dict | None:
     """-> the body of a wrap addressed to `identity`, with "from" and "id" added, or None."""
-    if event.get("kind") != WRAP or _tag(event, "p") != identity.public or not relays.valid(event):
+    if not _event(event, WRAP) or _tag(event, "p") != identity.public:
         return None
     try:
         body = _open(_key(identity, event["pubkey"]), event["content"])
-    except ValueError:
+    except (ValueError, TypeError, RecursionError):
         return None
-    if body is None or body.get("v") != PROTOCOL:
+    if (body is None or type(body.get("v")) is not int or body.get("v") != PROTOCOL
+            or body.get("t") not in ("offer", "trade", "refused")
+            or not _text(body.get("listing"), 64) or not body["listing"]):
+        return None
+    if body["t"] in ("offer", "trade"):
+        if (not isinstance(body.get("game"), str) or body["game"] not in EXTENSIONS
+                or not _text(body.get("record"), 4 * ((RECORD_LIMIT + 2) // 3))
+                or not _text(body.get("trainer", ""), 24)):
+            return None
+    if body["t"] in ("trade", "refused") and not _hash(body.get("offer")):
+        return None
+    if body["t"] == "refused" and not _text(body.get("why", ""), 200):
         return None
     return dict(body, **{"from": event["pubkey"], "id": event["id"]})
 
@@ -162,7 +226,11 @@ def refusal_body(listing_d, offer_id, why) -> dict:
 
 def record_of(body) -> bytes | None:
     try:
-        return base64.b64decode(body.get("record", ""), validate=True) or None
+        encoded = body.get("record", "")
+        if not _text(encoded, 4 * ((RECORD_LIMIT + 2) // 3)):
+            return None
+        record = base64.b64decode(encoded, validate=True)
+        return record if 0 < len(record) <= RECORD_LIMIT else None
     except (ValueError, TypeError):
         return None
 

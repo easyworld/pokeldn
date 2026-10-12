@@ -167,7 +167,8 @@ def time_words(time):
 
 def reward_tables(table, lottery):
     """-> {name: [entry]} as raid_base.json holds them (scripts/gen_sv_raid_data.py), a fixed row
-    with its subject: 0 every player, 1 the host, 2 the guests, 3 once. A lottery slot with a rate
+    with its subject: 0 every player, 1 the host, 2 the guests, 3 once; a lottery row the table
+    flags rare carries `rare` 1. A lottery slot with a rate
     and nothing in it stays: it weighs in the total, and a draw that lands on it gives nothing."""
     out = {}
     for row in table["Table"]:
@@ -177,6 +178,8 @@ def reward_tables(table, lottery):
                 continue
             entry = {"category": item["Category"], "item": item["ItemID"], "amount": item["Num"],
                      "probability": item["Rate"] if lottery else 100}
+            if lottery and item["RareItemFlag"]:
+                entry["rare"] = 1
             if not lottery:
                 entry["subject"] = item["SubjectType"]
             if entry["item"] or entry["category"] or lottery and entry["probability"]:
@@ -276,10 +279,11 @@ def generate(event, seed, version="violet", progress="6star", group=None):
         group = groups[0]
     row = select(event, seed, version, progress, group)
     stars = row["stars"]
+    rows = tuple(encounter.reward_rows(seed, row, stars, event.fixed, event.lottery))
     return encounter.Raid(seed, version, "paldea", progress,
                           CONTENT_MIGHTY if stars == MIGHTY else CONTENT_EVENT, stars, row,
                           encounter.boss_fields(seed, row),
-                          tuple(encounter.rewards(seed, row, stars, event.fixed, event.lottery)))
+                          tuple((r[0], r[1]) for r in rows if r[3] < encounter.SUBJECT_POWER), rows)
 
 
 @dataclass(frozen=True)

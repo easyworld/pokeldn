@@ -9,7 +9,6 @@ import struct
 import threading
 import time
 import urllib.error
-import urllib.request
 import zlib
 from functools import lru_cache
 from pathlib import Path
@@ -23,6 +22,8 @@ TIMEOUT = 5.0
 OFFLINE_COOLDOWN = 60.0         # after a network failure, no request for this long
 MISSING_TTL = 7 * 86400.0       # a 404 is remembered this long, then asked again
 MAX_BYTES = 200_000
+MAX_DIMENSION = 256
+MAX_PIXELS = 65536
 PNG = b"\x89PNG\r\n\x1a\n"
 
 
@@ -36,32 +37,57 @@ def _context() -> ssl.SSLContext:
 
 
 def valid(data: bytes) -> bool:
-    return data[:8] == PNG and data[12:16] == b"IHDR" and len(data) <= MAX_BYTES
+    return pixels(data) is not None
 
 
 CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=8)
 def pixels(data: bytes) -> tuple[int, int, tuple[tuple[tuple[int, int, int, int], ...], ...]] | None:
     """(width, height, rows of (r, g, b, a)) of a PNG; None for one this does not read (16-bit,
     interlaced). Pillow is not in the packaged app."""
     try:
+        if len(data) > MAX_BYTES or data[:8] != PNG:
+            return None
         chunks, pos = {}, 8
         while pos < len(data):
             size = struct.unpack(">I", data[pos:pos + 4])[0]
             kind = data[pos + 4:pos + 8]
-            chunks[kind] = chunks.get(kind, b"") + data[pos + 8:pos + 8 + size]
+            end = pos + 12 + size
+            if end > len(data) or (pos == 8 and kind != b"IHDR"):
+                return None
+            if (len(kind) != 4 or any(not (65 <= c <= 90 or 97 <= c <= 122) for c in kind)
+                    or (not kind[0] & 32 and kind not in (b"IHDR", b"PLTE", b"IDAT", b"IEND"))
+                    or kind in (b"acTL", b"fcTL", b"fdAT", b"iCCP", b"zTXt", b"iTXt")):
+                return None
+            body = data[pos + 8:pos + 8 + size]
+            if zlib.crc32(kind + body) != struct.unpack(">I", data[end - 4:end])[0]:
+                return None
+            if kind in chunks and kind != b"IDAT":
+                return None
+            if kind == b"IEND" and (size or end != len(data)):
+                return None
+            chunks[kind] = chunks.get(kind, b"") + body
             pos += 12 + size
-        width, height, depth, color, _, _, interlace = struct.unpack(">IIBBBBB", chunks[b"IHDR"])
-        if depth > 8 or interlace or color not in CHANNELS:
+        width, height, depth, color, compression, filtering, interlace = struct.unpack(">IIBBBBB", chunks[b"IHDR"])
+        depths = {0: (1, 2, 4, 8), 2: (8,), 3: (1, 2, 4, 8), 4: (8,), 6: (8,)}
+        if (not 1 <= width <= MAX_DIMENSION or not 1 <= height <= MAX_DIMENSION
+                or width * height > MAX_PIXELS or depth not in depths.get(color, ())
+                or compression or filtering or interlace or b"IEND" not in chunks):
             return None
-        raw = zlib.decompress(chunks[b"IDAT"])
+        expected = height * (1 + (width * CHANNELS[color] * depth + 7) // 8)
+        inflater = zlib.decompressobj()
+        raw = inflater.decompress(chunks[b"IDAT"], expected + 1)
+        if len(raw) != expected or not inflater.eof or inflater.unused_data or inflater.unconsumed_tail:
+            return None
     except (KeyError, struct.error, zlib.error):
         return None
     channels = CHANNELS[color]
     step, stride = max(1, channels * depth // 8), (width * channels * depth + 7) // 8
     trns, palette = chunks.get(b"tRNS", b""), chunks.get(b"PLTE", b"")
+    if color == 3 and (not palette or len(palette) % 3 or len(palette) > 768 or len(trns) > len(palette) // 3):
+        return None
     # A pixel is clear when its alpha is 0, or it is the colour (or palette entry) tRNS marks clear.
     clear_key = struct.unpack(">H", trns[:2])[0] if color == 0 and len(trns) >= 2 else None
     rgb_key = struct.unpack(">HHH", trns[:6]) if color == 2 and len(trns) >= 6 else None
@@ -70,7 +96,7 @@ def pixels(data: bytes) -> tuple[int, int, tuple[tuple[tuple[int, int, int, int]
     for y in range(height):
         start = y * (stride + 1)
         kind, line = raw[start], bytearray(raw[start + 1:start + 1 + stride])
-        if len(line) < stride:
+        if kind > 4 or len(line) < stride:
             return None
         for i in range(stride):
             a = line[i - step] if i >= step else 0
@@ -99,7 +125,9 @@ def pixels(data: bytes) -> tuple[int, int, tuple[tuple[tuple[int, int, int, int]
                 bit = x * depth
                 value = (line[bit // 8] >> (8 - depth - bit % 8)) & ((1 << depth) - 1)
                 if color == 3:
-                    rgb = tuple(palette[value * 3:value * 3 + 3]) or (0, 0, 0)
+                    if value * 3 + 3 > len(palette):
+                        return None
+                    rgb = tuple(palette[value * 3:value * 3 + 3])
                     row.append(rgb + (trns[value] if value < len(trns) else 255,))
                 else:
                     grey = value * 255 // ((1 << depth) - 1)
@@ -146,7 +174,8 @@ class SpriteCache:
             return self.memory[key]
         path = self._path(species, shiny)
         try:
-            data = path.read_bytes()
+            with path.open("rb") as source:
+                data = source.read(MAX_BYTES + 1)
         except OSError:
             return None
         if valid(data):
@@ -177,13 +206,14 @@ class SpriteCache:
             return self._download(species, shiny)
 
     def _download(self, species: int, shiny: bool) -> bytes | None:
+        from pokeldn.app import update
         path = self._path(species, shiny)
         url = f"{self.base}/{'shiny/' if shiny else ''}{species}.png"
         try:
-            request = urllib.request.Request(url, headers={"User-Agent": "pokeldn-desktop"})
-            with urllib.request.urlopen(request, timeout=TIMEOUT, context=_context()) as reply:
-                data = reply.read(MAX_BYTES + 1)
+            with update._open(url, TIMEOUT) as reply:
+                data = update.read_bytes(reply, MAX_BYTES, TIMEOUT)
         except urllib.error.HTTPError as exc:
+            exc.close()
             if exc.code in (403, 404):
                 self._remember_missing(path)
             elif exc.code >= 500 or exc.code == 429:

@@ -220,3 +220,24 @@ def test_bounds_undoes_each_scanline_filter(kind):
 def test_bounds_of_a_broken_png_is_none(data):
     assert sprites.bounds(png()) == (0, 0, 1, 1)
     assert sprites.bounds(data) is None
+
+
+def hostile_png(width=1, height=1, raw=b"", depth=8, color=6):
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+    return (sprites.PNG + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, color, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+@pytest.mark.parametrize("data", [
+    hostile_png(raw=b""), hostile_png(raw=b"\0" * 1_000_000),
+    hostile_png(width=0, raw=b"\0"), hostile_png(width=1000000, raw=b"\0"),
+    hostile_png(depth=0, raw=b"\0" * 5), hostile_png(raw=b"\x05\0\0\0\0"),
+    hostile_png(color=3, raw=b"\0\xff"), png()[:-1], png() + b"junk",
+])
+def test_hostile_pngs_are_rejected_without_rendering_or_caching(host, tmp_path, data):
+    assert not sprites.valid(data)
+    assert sprites.pixels(data) is None and sprites.bounds(data) is None
+    host.routes = {"/pokemon/25.png": (200, data)}
+    cache = sprites.SpriteCache(tmp_path, host.url)
+    assert cache.get(25) is None and not list(tmp_path.rglob("*.png"))

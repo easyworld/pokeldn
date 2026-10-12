@@ -8,16 +8,18 @@ import hashlib
 import json
 import os
 import platform
+import posixpath
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -25,6 +27,7 @@ from typing import Callable
 from pokeldn import __version__
 from pokeldn.app.paths import DATA
 from pokeldn.app.sprites import _context
+from pokeldn.app import archives
 
 LATEST = os.environ.get("POKELDN_UPDATE_URL",
                         "https://api.github.com/repos/Decryptu/pokeldn/releases/latest")
@@ -50,7 +53,7 @@ class Release:
 
 def parse(version: str) -> tuple[int, ...] | None:
     """(0, 10, 2) for "v0.10.2"; None for a pre-release ("0.3.0-rc1") or anything else."""
-    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", version.strip())
+    match = re.fullmatch(r"v?([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})", version.strip())
     return tuple(int(part) for part in match.groups()) if match else None
 
 
@@ -68,8 +71,9 @@ def newer(reply: dict, current: str = __version__, name: str | None = None) -> R
     if theirs is None or ours is None or theirs <= ours:
         return None
     name = asset_name() if name is None else name
-    files = {a.get("name"): a.get("browser_download_url") for a in reply.get("assets") or []
-             if isinstance(a, dict)}
+    assets = reply.get("assets")
+    files = {a["name"]: a.get("browser_download_url") for a in assets if isinstance(a, dict)
+             and isinstance(a.get("name"), str)} if isinstance(assets, list) else {}
     download, sums = files.get(name), files.get("SHA256SUMS")
     return Release(".".join(map(str, theirs)), page, download if isinstance(download, str) else page,
                    sums if isinstance(sums, str) else "")
@@ -78,15 +82,14 @@ def newer(reply: dict, current: str = __version__, name: str | None = None) -> R
 def github_json(url: str, timeout: float = TIMEOUT, what: str = "release", limit: int = MAX_BYTES):
     """-> what GitHub's API answers at url; an HTTPError (an OSError) for a refusal, an OSError
     naming `what` for an answer that is not JSON."""
-    request = urllib.request.Request(url, headers={"User-Agent": "pokeldn-desktop",
-                                                   "Accept": "application/vnd.github+json"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout, context=_context()) as reply:
-            return json.loads(reply.read(limit))
+        with _open(url, timeout) as reply:
+            data = read_bytes(reply, limit, timeout)
+            return json.loads(data)
     except urllib.error.HTTPError as error:
         error.close()   # an HTTPError keeps its socket open until closed
         raise
-    except ValueError as error:
+    except (ValueError, RecursionError) as error:
         raise OSError(f"GitHub sent no {what}: {error}") from error
 
 
@@ -104,6 +107,9 @@ WORK = DATA / "update"           # the download, the unpacked app and the helper
 OUTCOME = WORK / "outcome.json"
 READY = WORK / "helper.ready"    # the helper's window is up; the old app may close its own
 MAX_ARCHIVE = 600_000_000
+MAX_UNPACKED = 3_000_000_000
+MAX_FILES = 30_000
+MAX_FILE = 600_000_000
 EXIT_WAIT = 120.0                # how long the helper waits for the old app to quit
 RENAME_WAIT = 30.0               # Windows keeps a quitting exe's folder locked for a moment
 # Takes the administrator path in a folder the user can write (CI runners); scripts/check_update.py.
@@ -173,8 +179,57 @@ def checksums(text: str) -> dict[str, str]:
 
 
 def _open(url: str, timeout: float = 30.0):
+    def allowed(address):
+        parts = urllib.parse.urlsplit(address)
+        return (parts.scheme == "https" and bool(parts.hostname) and not parts.username and not parts.password
+                or parts.scheme == "http" and parts.hostname in ("127.0.0.1", "localhost"))
+
+    class Redirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            if not allowed(newurl):
+                raise OSError("the download redirected to an unsafe address")
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+    if not allowed(url):
+        raise OSError("the download is not an HTTPS address")
     request = urllib.request.Request(url, headers={"User-Agent": "pokeldn-desktop"})
-    return urllib.request.urlopen(request, timeout=timeout, context=_context())
+    opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=_context()), Redirect())
+    return opener.open(request, timeout=timeout)
+
+
+def release_asset(page: str, url: str, name: str) -> bool:
+    if not isinstance(page, str) or not isinstance(url, str):
+        return False
+    origin = urllib.parse.urlsplit(page)
+    if origin.scheme == "http" and origin.hostname in ("127.0.0.1", "localhost"):
+        asset = urllib.parse.urlsplit(url)
+        return asset.scheme == "http" and asset.netloc == origin.netloc and asset.path == "/" + name
+    prefix = "https://github.com/Decryptu/pokeldn/releases/tag/"
+    if not page.startswith(prefix):
+        return False
+    tag = page[len(prefix):]
+    return parse(tag) is not None and url == f"https://github.com/Decryptu/pokeldn/releases/download/{tag}/{name}"
+
+
+def chunks(reply, timeout: float):
+    deadline = time.monotonic() + timeout
+    read = getattr(reply, "read1", reply.read)
+    while True:
+        if time.monotonic() > deadline:
+            raise OSError("the download took too long")
+        chunk = read(65536)
+        if not chunk:
+            return
+        yield chunk
+
+
+def read_bytes(reply, limit: int, timeout: float = 30.0) -> bytes:
+    data = bytearray()
+    for chunk in chunks(reply, timeout):
+        if len(data) + len(chunk) > limit:
+            raise OSError("the response is too large")
+        data.extend(chunk)
+    return bytes(data)
 
 
 def fetch(url: str, dest: Path, progress: Callable[[int, int], None] = lambda done, total: None,
@@ -186,7 +241,7 @@ def fetch(url: str, dest: Path, progress: Callable[[int, int], None] = lambda do
             total = int(reply.headers.get("Content-Length") or 0)
             if total > MAX_ARCHIVE:
                 raise OSError(f"the download is {total} bytes")
-            while chunk := reply.read(1 << 18):
+            for chunk in chunks(reply, 600):
                 if cancelled():
                     raise Cancelled
                 done += len(chunk)
@@ -201,23 +256,88 @@ def fetch(url: str, dest: Path, progress: Callable[[int, int], None] = lambda do
     return digest.hexdigest()
 
 
+def _links_safe(names, links):
+    links = {name.casefold(): target.casefold() for name, target in links.items()}
+    for name in names:
+        parts = name.casefold().split("/")
+        if any("/".join(parts[:i]) in links for i in range(1, len(parts))):
+            raise OSError("the archive writes through a link")
+    for name in links:
+        pending = name.split("/")
+        resolved, hops = [], 0
+        while pending:
+            resolved.append(pending.pop(0))
+            path = "/".join(resolved)
+            if path in links:
+                hops += 1
+                if hops > 40:
+                    raise OSError("the archive holds a link cycle")
+                pending = links[path].split("/") + pending
+                resolved = []
+
+
+def _target(name, target, hard=False):
+    if not target or target.startswith("/") or "\\" in target:
+        raise OSError("the archive holds an unsafe link")
+    return archives.relative(posixpath.normpath(target if hard else posixpath.join(posixpath.dirname(name), target)))
+
+
 def unpack(archive: Path, folder: Path, system: str = sys.platform) -> Path:
     """Unpacks the release archive into an empty folder; returns the app inside it."""
     shutil.rmtree(folder, ignore_errors=True)
     folder.mkdir(parents=True)
-    if archive.name.endswith(".tar.gz"):
-        with tarfile.open(archive) as tar:
-            tar.extractall(folder, filter="data")
-    elif system == "darwin":
-        # ditto wrote the zip; it alone restores the bundle's symlinks and modes.
-        subprocess.run(["ditto", "-x", "-k", str(archive), str(folder)], check=True, capture_output=True)
-    else:
-        with zipfile.ZipFile(archive) as z:
-            z.extractall(folder)
-    root = folder / ("pokeldn.app" if system == "darwin" else "pokeldn")
-    if not executable_in(root, system).is_file():
-        raise OSError(f"the archive holds no {executable_in(root, system).relative_to(folder)}")
-    return root
+    try:
+        if archive.name.endswith(".tar.gz"):
+            with tarfile.open(archive) as tar:
+                members = archives.bounded(((m.name, m.size, m) for m in tar),
+                                           MAX_FILES, MAX_UNPACKED, MAX_FILE)
+                links = {}
+                for m in members:
+                    if not (m.isfile() or m.isdir() or m.issym() or m.islnk()):
+                        raise OSError("the archive holds a special file")
+                    if m.issym() or m.islnk():
+                        name = archives.relative(m.name)
+                        links[name] = _target(name, m.linkname, m.islnk())
+                _links_safe([archives.relative(m.name) for m in members], links)
+                tar.extractall(folder, members=members, filter="data")
+        else:
+            with archives.open_zip(archive, MAX_FILES) as z:
+                members = archives.bounded(((m.filename, m.file_size, m) for m in z.infolist()),
+                                           MAX_FILES, MAX_UNPACKED, MAX_FILE)
+                links = {}
+                for m in members:
+                    mode = stat.S_IFMT(m.external_attr >> 16)
+                    if mode == stat.S_IFLNK:
+                        if system != "darwin" or m.file_size > 4096:
+                            raise OSError("the archive holds an unsafe link")
+                        name = archives.relative(m.filename)
+                        links[name] = _target(name, z.read(m).decode("utf-8"))
+                    elif mode not in (0, stat.S_IFREG, stat.S_IFDIR):
+                        raise OSError("the archive holds a special file")
+                _links_safe([archives.relative(m.filename) for m in members], links)
+                if system != "darwin":
+                    z.extractall(folder, members=members)
+                else:
+                    for m in members:
+                        out = archives.destination(folder, m.filename)
+                        out.parent.mkdir(parents=True, exist_ok=True)
+                        if m.is_dir():
+                            out.mkdir(exist_ok=True)
+                        elif stat.S_ISLNK(m.external_attr >> 16):
+                            os.symlink(z.read(m).decode("utf-8"), out)
+                        else:
+                            with z.open(m) as source, out.open("wb") as target:
+                                archives.copy(source, target, m.file_size)
+                            mode = (m.external_attr >> 16) & 0o777
+                            if mode:
+                                out.chmod(mode)
+        root = folder / ("pokeldn.app" if system == "darwin" else "pokeldn")
+        if not executable_in(root, system).is_file():
+            raise OSError(f"the archive holds no {executable_in(root, system).relative_to(folder)}")
+        return root
+    except BaseException:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
 
 
 def prepare(release: Release, progress: Callable[[int, int], None] = lambda done, total: None,
@@ -227,10 +347,14 @@ def prepare(release: Release, progress: Callable[[int, int], None] = lambda done
     if not release.installable:
         raise OSError("the release has no file for this computer or no SHA256SUMS")
     name = release.download.rsplit("/", 1)[-1]
+    if (name not in ASSETS.values() or not release_asset(release.page, release.download, name)
+            or not release_asset(release.page, release.checksums, "SHA256SUMS")):
+        raise OSError("the release files are not from the pokeldn release")
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
     with _open(release.checksums) as reply:
-        expected = checksums(reply.read(MAX_BYTES).decode("utf-8", "replace")).get(name)
+        data = read_bytes(reply, MAX_BYTES)
+        expected = checksums(data.decode("utf-8", "replace")).get(name)
     if not expected:
         raise OSError(f"SHA256SUMS does not list {name}")
     archive = work / name

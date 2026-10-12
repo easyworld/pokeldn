@@ -193,11 +193,14 @@ def test_a_seven_star_raidpoint_carries_its_crystal_catch_and_rewards():
     assert list(struct.unpack_from("<37I", point, 0x4C)) == CHARIZARD_DESC
     rows = [struct.unpack_from("<IIII", point, raid.POINT_REWARDS + 16 * i) for i in range(raid.REWARD_ROWS)]
     rows = [r for r in rows if r[0]]
-    # The fixed rows in order, a shard as the boss's Dragon one, then 7 to 11 lottery draws.
+    # The fixed rows in order with the table's subjects (1 the host, 3 once), a shard as the boss's
+    # Dragon one, 7 to 11 lottery draws, three Raid Power draws; seven stars add no shard boost.
     assert rows[:7] == [(1127, 6, 0, 0), (1128, 4, 0, 0), (49, 5, 0, 0), (DRAGON_SHARD, 10, 0, 0),
-                        (DRAGON_SHARD, 5, 0, 0), (2217, 1, 0, 0), (1606, 1, 0, 0)]
+                        (DRAGON_SHARD, 5, 0, 1), (2217, 1, 0, 3), (1606, 1, 0, 3)]
     drawn = {(i or DRAGON_SHARD, n) for _, i, n, _ in LOTTERY}
-    assert 7 <= len(rows) - 7 <= 11 and all((i, n) in drawn for i, n, _, _ in rows[7:])
+    assert [s for *_, s in rows[-3:]] == [4, 4, 4] and 7 <= len(rows) - 10 <= 11
+    assert all((i, n) in drawn and s == (4 if k >= len(rows) - 10 else 0)
+               for k, (i, n, _, s) in enumerate(rows[7:]))
     assert struct.unpack_from("<7I", point, raid.POINT_SUMMARY) == (7, 6, 0, 0, 100, 0, 15)
     assert struct.unpack_from("<11I", raid.descriptor(0x105, found), 18) == (
         0, 6, 0, 0, 7, 15, 0, 2022120201, 0, 0x33, 0)

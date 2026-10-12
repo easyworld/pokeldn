@@ -1992,11 +1992,26 @@ LABELS.update({
 })
 
 
-LABELS.update({'This is not a FireRed or LeafGreen save PKHeX can read.': '此存档不是 PKHeX 可读取的火红或叶绿存档。', 'A party Pokemon is not a Gen 3 Pokemon.': '队伍中有宝可梦不属于第三世代。', "A party Pokemon's checksum is invalid.": '队伍中有宝可梦的校验和无效。', 'A party holds one to six Pokemon.': '队伍必须包含一至六只宝可梦。', 'A save backup or restore sends no gift.': '备份或恢复存档时不会发送礼物。'})
+LABELS.update({'This is not a FireRed or LeafGreen save PKHeX can read.': '此存档不是 PKHeX 可读取的火红或叶绿存档。',
+ 'A party Pokemon is not a Gen 3 Pokemon.': '队伍中有宝可梦不属于第三世代。',
+ "A party Pokemon's checksum is invalid.": '队伍中有宝可梦的校验和无效。',
+ 'A party holds one to six Pokemon.': '队伍必须包含一至六只宝可梦。',
+ 'A save backup or restore sends no gift.': '备份或恢复存档时不会发送礼物。'})
 
-LABELS.update({'Only the packed app updates itself.': '只有打包后的应用支持自动更新。', 'Move pokeldn to your Applications folder, open it from there, then update.': '请将 pokeldn 移到“应用程序”文件夹，从那里打开后再更新。', 'the download is too large': '下载文件过大', 'the release has no file for this computer or no SHA256SUMS': '发布版本没有适用于此电脑的文件或 SHA256SUMS', 'the copied app has no executable': '复制的应用中没有可执行文件', 'The Pokemon checksum is invalid.': '宝可梦数据校验和无效。', 'Nothing goes back to this game: HOME only takes from it.': '无法传回此游戏：HOME 只允许从此游戏传出。', 'An egg stays in its own game.': '蛋只能保留在当前游戏中。', 'HOME takes a FireRed or LeafGreen Pokemon only without a held item.': '从《火红／叶绿》传出到 HOME 的宝可梦不能携带道具。', 'HOME takes a FireRed or LeafGreen Pokemon only without an HM move.': '从《火红／叶绿》传出到 HOME 的宝可梦不能学有秘传招式。', 'This species or form is absent from that game.': '目标游戏中不存在此种类或形态。'})
+LABELS.update({'Only the packed app updates itself.': '只有打包后的应用支持自动更新。',
+ 'Move pokeldn to your Applications folder, open it from there, then update.': '请将 pokeldn '
+                                                                               '移到“应用程序”文件夹，从那里打开后再更新。',
+ 'the download is too large': '下载文件过大',
+ 'the release has no file for this computer or no SHA256SUMS': '发布版本没有适用于此电脑的文件或 SHA256SUMS',
+ 'the copied app has no executable': '复制的应用中没有可执行文件',
+ 'The Pokemon checksum is invalid.': '宝可梦数据校验和无效。',
+ 'Nothing goes back to this game: HOME only takes from it.': '无法传回此游戏：HOME 只允许从此游戏传出。',
+ 'An egg stays in its own game.': '蛋只能保留在当前游戏中。',
+ 'HOME takes a FireRed or LeafGreen Pokemon only without a held item.': '从《火红／叶绿》传出到 HOME 的宝可梦不能携带道具。',
+ 'HOME takes a FireRed or LeafGreen Pokemon only without an HM move.': '从《火红／叶绿》传出到 HOME 的宝可梦不能学有秘传招式。',
+ 'This species or form is absent from that game.': '目标游戏中不存在此种类或形态。'})
 
-LABELS.update({"Online trade": "在线交换", "The bank": "宝可梦银行"})
+LABELS.update({'Online trade': '在线交换', 'The bank': '宝可梦银行'})
 
 LABELS.update({
     "Tera Raids": "太晶团体战",
@@ -2049,3 +2064,60 @@ LABELS.update({
     "it is not the Pokemon the listing showed": "收到的宝可梦与挂牌展示的记录不一致",
     "refused": "已拒绝", "not legal": "不合法",
 })
+
+# New app and plugin presentation strings.
+LABELS.update({'Random': '随机',
+ 'Has Python files pokeldn cannot read': '含有 pokeldn 无法读取的 Python 文件',
+ 'Names your Switch keys file': '代码引用了你的 Switch 密钥文件',
+ 'Uses the internet or the network': '访问互联网或网络',
+ 'Starts other programs': '启动其他程序',
+ 'Calls native code directly, which the guardrails cannot watch': '直接调用原生代码，无法由防护机制监控',
+ 'Deletes files': '删除文件',
+ 'Runs code it builds while running, which this check cannot read': '执行运行时生成的代码，扫描无法读取这些代码',
+ 'The package changed after it was checked.': '插件包在检查后发生了变化。',
+ 'Only a plugin installed in the app can be removed here.': '此处只能移除通过应用安装的插件。',
+ 'The package is too large to be a plugin.': '插件包大小超过限制。',
+ 'The package has too much Python source to review safely.': '插件包的 Python 源码量超过可安全扫描的限制。',
+ "plugin.toml must sit at the top of the package, beside the plugin's files.": 'plugin.toml '
+                                                                               '必须位于插件包顶层，与插件文件放在一起。',
+ 'plugin.toml needs an id of lowercase letters, digits, dots, dashes or underscores.': 'plugin.toml 的 id '
+                                                                                       '只能包含小写字母、数字、点、连字符或下划线。',
+ 'This plugin was changed after its author signed it, or its signature is damaged. Get it again from its author.': '插件在作者签名后被修改，或签名损坏。请从作者处重新获取。',
+ 'The package has no plugin.toml at its top.': '插件包顶层缺少 plugin.toml。',
+ 'The package holds several plugins; install them one by one.': '插件包包含多个插件，请逐个安装。',
+ 'plugin.toml names no plugin API version (api = 1).': 'plugin.toml 未指定插件 API 版本（如 api = 1）。',
+ 'GitHub sent no release': 'GitHub 未返回发布版本',
+ 'no plugin version': '缺少插件版本号',
+ 'the plugin download is invalid': '插件下载信息无效',
+ 'the download is too large to be a plugin': '下载的插件包超过大小限制',
+ 'PKHeX reads neither a Pokemon nor a game save in this file.': 'PKHeX 无法将此文件识别为宝可梦文件或游戏存档。',
+ 'New moves for its new game': '已为目标游戏更换招式',
+ 'HOME cannot send it into a game the bank holds.': 'HOME 无法将其传入银行支持的游戏。',
+ 'the firmware response holds no releases': '固件查询未返回发布版本',
+ 'the firmware files are not from the pokeldn release': '固件文件并非来自 pokeldn 的发布版本',
+ 'Intimidate on each respawn cuts Attack': '每次重新上场时以威吓降低攻击',
+ "Intimidate cuts the boss's Attack on every respawn; Leer lowers its Defense": '每次重新上场时以威吓降低首领的攻击；瞪眼降低防御',
+ 'Safeguard blocks status; terrain heals': '神秘守护防止异常状态；场地提供回复',
+ 'Safeguard keeps the team from status; Seed Sower sets Grassy Terrain, healing the team': '神秘守护防止队伍陷入异常状态；掉落种子展开青草场地，为队伍回复',
+ 'Light Screen cuts special damage; paralysis': '光墙降低特殊伤害；可造成麻痹',
+ "Light Screen, when she uses it, cuts the boss's special damage; Discharge can paralyze": '使用光墙时降低首领的特殊伤害；放电可造成麻痹',
+ '100% accurate Glare paralysis buys turns': '命中率 100% 的大蛇瞪眼造成麻痹',
+ 'Glare paralyzes at 100% accuracy, except a boss with an Electric Tera type': '大蛇瞪眼以 100% '
+                                                                               '命中率造成麻痹，但对电太晶属性的首领无效',
+ 'Intimidate and Feather Dance cut Attack': '威吓和羽毛舞降低攻击',
+ "Intimidate on every respawn and Feather Dance both cut the boss's physical Attack": '每次重新上场时的威吓与羽毛舞都能降低首领的攻击',
+ 'Intimidate cuts Attack; breaks screens': '威吓降低攻击；可破坏墙壁',
+ "Intimidate cuts the boss's Attack on every respawn; Raging Bull breaks its screens": '每次重新上场时以威吓降低首领的攻击；怒牛破坏墙壁',
+ 'Will-O-Wisp burn halves physical damage': '鬼火造成灼伤，物理伤害减半',
+ 'Will-O-Wisp burns the boss, halving the damage its physical moves deal': '鬼火使首领灼伤，其物理招式造成的伤害减半',
+ 'Thunder Wave paralysis buys free turns': '电磁波麻痹可创造行动机会',
+ 'Thunder Wave paralysis can give a free turn to set up, down to chance': '电磁波造成的麻痹有概率创造强化的行动机会',
+ 'Life Dew heals the whole team': '生命水滴为全队回复',
+ 'Life Dew heals the whole team; seven-star solo guides ask for it, often with Bellibolt': '生命水滴为全队回复；七星单人攻略常推荐此搭档，通常搭配电肚蛙',
+ 'Leer cuts Defense; Ice Punch can freeze': '瞪眼降低防御；冰冻拳可造成冰冻',
+ "Leer lowers the boss's Defense before its shield goes up; Ice Punch can freeze": '瞪眼在首领展开护盾前降低其防御；冰冻拳可造成冰冻'})
+
+LABELS.update({'Safeguard prevents status conditions; Grassy Terrain heals each turn but powers Grass moves': '神秘守护防止异常状态；青草场地每回合回复，也会增强草属性招式',
+ 'Light Screen cuts special damage; can paralyze': '光墙降低特殊伤害；可造成麻痹'})
+
+LABELS.update({"Plugins": "插件", "Command-line usage": "命令行用法"})

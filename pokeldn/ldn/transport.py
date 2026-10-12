@@ -14,7 +14,7 @@ import time
 import traceback
 from pathlib import Path
 
-from pokeldn.ldn import userspace_ip
+from pokeldn.ldn import radios, userspace_ip
 
 ETH_P_IP = 0x0800
 PROTO_UDP = 17
@@ -552,15 +552,16 @@ def list_phys():
 
 
 def board_radio():
-    """True when POKELDN_RADIO puts the LDN calls on the ESP32 board: no phy, no vif, no iw."""
-    return os.environ.get("POKELDN_RADIO", "").startswith("esp32:")
+    """True when POKELDN_RADIO puts the LDN calls on the ESP32 board or a plugin's radio: no phy,
+    no vif, no iw (pokeldn.ldn.radios)."""
+    return radios.selected() is not None
 
 
 def find_ap_phy(log=print):
     """First phy advertising AP mode (`--phy auto`); phy numbers change when the adapter reloads."""
     if board_radio():
-        log("[host] --phy auto -> esp32 (POKELDN_RADIO)")
-        return "esp32"
+        log(f"[host] --phy auto -> {radios.selected()} (POKELDN_RADIO)")
+        return radios.selected()
     for phy in list_phys():
         try:
             out = subprocess.check_output(["iw", "phy", phy, "info"],
@@ -674,7 +675,7 @@ def preflight_host(phyname, log=print, _iw_output=None):
     """`iw phy` 'Supported interface modes' is the driver's capability (MT7601U: managed and
     monitor only, IFTYPE_AP is EOPNOTSUPP). Raises RuntimeError with the verdict."""
     if _iw_output is None and board_radio():
-        log("[host] preflight: the ESP32 board hosts (POKELDN_RADIO)")
+        log(f"[host] preflight: the {radios.selected()} radio hosts (POKELDN_RADIO)")
         return True
     if _iw_output is None:
         try:

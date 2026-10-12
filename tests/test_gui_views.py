@@ -164,7 +164,7 @@ OLD = board_module.Identity("02:00:00:00:00:01", "02:00:00:00:00:02", 3, "pokeld
 
 def _app(port, ident, chip=""):
     app = App.__new__(App)
-    app.settings = SimpleNamespace(radio_port="", keys="")
+    app.settings = SimpleNamespace(radio_port="", radio="", keys="")
     app.identities = {port.device: ident} if ident is not None else {}
     app.chips = {port.device: chip} if chip else {}
     app.hidden_bridges = []
@@ -371,7 +371,7 @@ def test_the_released_firmware_lands_only_when_every_image_matches_its_checksum(
     every = [asset(n) for n in [*names, "SHA256SUMS"]]
     routes["/releases"] = json.dumps([{"tag_name": "v9.0.0", "draft": True, "assets": every},
                                       {"tag_name": "v8.0.0", "assets": [asset("pokeldn-macos-arm64.zip")]},
-                                      {"tag_name": "v7.0.0", "assets": every}]).encode()
+                                      {"tag_name": "v7.0.0", "html_url": f"{base}/page", "assets": every}]).encode()
     monkeypatch.setattr(board_module, "RELEASES", f"{base}/releases")
     try:
         if tamper:
@@ -1065,6 +1065,193 @@ def test_folding_the_raid_event_card_sets_its_event_aside_until_it_unfolds():
     GamesView.show_raid_event(view, False)
     GamesView.show_raid_event(view, True)
     assert view.values["--raid-event"] == "" and "#raid-event-folded" not in view.values
+
+
+def test_folding_the_raid_partners_card_keeps_its_choice():
+    """Folded or not, the host seats the trainers chosen, in order, from the progress chosen; with
+    none chosen it passes nothing and draws them itself."""
+    from pokeldn.app.catalog import GAMES
+    from pokeldn.app.command import build
+    from pokeldn.app.introspect import parser_of
+    from pokeldn.app.settings import Settings
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    redrawn = []
+    view = SimpleNamespace(tool=tool, raid_partners_open=True, redraw=lambda: redrawn.append(1),
+                           values={"--raid-pokemon": {"file": "/tmp/host.pk9"}, "--raid-seed": "52E6B438",
+                                   "--raid-partner": {"progress": "tera", "picks": ["Logan", "Ava"]}})
+
+    def hosted():
+        return parser_of(tool.script).parse_args(build(tool, view.values, {}, Settings()))
+    for unfolded in (False, True):
+        GamesView.show_raid_partners(view, unfolded)
+        args = hosted()
+        assert view.raid_partners_open == unfolded and redrawn
+        assert (args.raid_partner, args.raid_partner_progress) == (["Logan", "Ava"], "tera")
+    del view.values["--raid-partner"]
+    assert (hosted().raid_partner, hosted().raid_partner_progress) == ([], None)
+
+
+def test_the_raid_partners_card_shows_its_progress_s_pool_and_seats_two_at_most():
+    """The pool follows the story progress unless one is chosen; a trainer it lacks leaves the choice,
+    a third pick none, and choosing the story progress's own stage follows it again."""
+    from gui.views.raid_partners import RaidPartnersPicker
+    from pokeldn.app.catalog import GAMES
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    field = next(f for f in tool.fields if f.kind == "raidpartners")
+    values = {"--raid-partner": {"progress": "3star", "picks": ["Dylan", "Ava"]}}
+
+    def set_value(f, value, rebuild=False):
+        values[f.key] = value
+    view = SimpleNamespace(tool=tool, raid_partners_open=True, raid_partners_width=0,
+                           values=values, set_value=set_value,
+                           raid_context=lambda: {"progress": "6star", "content": "standard"},
+                           app=SimpleNamespace(settings=SimpleNamespace(save=lambda: None, sprites=False),
+                                               ui=lambda work: None))
+    picker = RaidPartnersPicker(view, field)
+    assert (picker.stage, picker.default, len(picker.pool)) == (1, 4, 16)
+    assert values["--raid-partner"]["picks"] == ["Ava"]
+    assert picker._summary() == "Ava，另 1 名随机安排 · 3 星团体战"
+    picker._pick("Zoe")
+    assert values["--raid-partner"]["picks"] == ["Ava", "Zoe"]
+    picker = RaidPartnersPicker(view, field)
+    picker._pick("Eli")
+    assert values["--raid-partner"]["picks"] == ["Ava", "Zoe"]
+    picker._pick("Ava")
+    assert values["--raid-partner"]["picks"] == ["Zoe"]
+    picker._progress(SimpleNamespace(control=SimpleNamespace(value="6star")))
+    assert values["--raid-partner"]["progress"] == ""
+    picker = RaidPartnersPicker(view, field)
+    assert (picker.stage, len(picker.pool), picker.pool[16].name) == (4, 18, "Haxorus")
+
+
+def test_each_console_joining_takes_a_partner_s_slot():
+    """Consoles joining sets how many partners there are to pick: one with two consoles, a second
+    pick leaving; none with three, the start refused while a pick stands."""
+    from gui.views.raid_partners import RaidPartnersPicker
+    from pokeldn.app import command
+    from pokeldn.app.catalog import GAMES
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    field = next(f for f in tool.fields if f.kind == "raidpartners")
+    values = {"--raid-pokemon": {"file": "/tmp/host.pk9"}, "--raid-seed": "52E6B438",
+              "--raid-players": "2", "--raid-partner": {"progress": "", "picks": ["Eli", "Gianna"]}}
+
+    def set_value(f, value, rebuild=False):
+        values[f.key] = value
+    view = SimpleNamespace(tool=tool, raid_partners_open=True, raid_partners_width=0,
+                           values=values, set_value=set_value,
+                           raid_context=lambda: {"progress": "6star", "content": "standard"},
+                           app=SimpleNamespace(settings=SimpleNamespace(save=lambda: None, sprites=False),
+                                               ui=lambda work: None))
+    picker = RaidPartnersPicker(view, field)
+    assert (picker.free, values["--raid-partner"]["picks"], picker._summary()) == (1, ["Eli"], "Eli")
+    picker._pick("Gianna")
+    assert values["--raid-partner"]["picks"] == ["Eli"]
+    assert not [e for e in command.problems(tool, values) if "consoles joining" in e]
+    values["--raid-players"] = "3"
+    assert "With 3 consoles joining, the raid seats no partner." in command.problems(tool, values)
+    picker = RaidPartnersPicker(view, field)
+    assert (picker.free, values["--raid-partner"]["picks"]) == (0, [])
+    assert picker._summary() == "无 NPC 搭档，3 台游戏机占满空位"
+
+
+def test_a_favoured_raid_partner_s_card_shows_a_star_and_why(tmp_path):
+    """The level-80 cards of the partners raiders want end on a star and its reason, gold for the
+    favoured and silver for the next tier; a pool without any, such as level 40's, shows neither. Each
+    card names the Pokemon and, on a line of its own, its level: four fifths of Our Pokemon's, unknown
+    until Our Pokemon is built."""
+    import flet as ft
+    from gui import theme
+    from gui.views.raid_partners import RaidPartnersPicker
+    from gui.localization import translate
+    from pokeldn import gen9
+    from pokeldn.app.catalog import GAMES
+    from pokeldn.sv import raid_partners
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    field = next(f for f in tool.fields if f.kind == "raidpartners")
+    ours = tmp_path / "ours.pk9"
+    ours.write_bytes(gen9.encrypt(gen9.build(species=184, level=37)))
+    for progress, wanted, values in (("6star", raid_partners.RECOMMENDED[80], {}),
+                                     ("4star", {}, {"--raid-pokemon": {"file": str(ours)}})):
+        view = SimpleNamespace(tool=tool, raid_partners_open=True, raid_partners_width=0,
+                               values=values, set_value=None,
+                               raid_context=lambda: {"progress": progress, "content": "standard"},
+                               app=SimpleNamespace(settings=SimpleNamespace(save=lambda: None, sprites=False),
+                                                   ui=lambda work: None))
+        card = list(raid_controls(RaidPartnersPicker(view, field).control))
+        for rank, ink, tier in ((1, theme.AMBER, "推荐搭档"),
+                                (2, theme.SILVER, "次选搭档")):
+            reasons = [translate(why) for r, why, _ in wanted.values() if r == rank]
+            assert [c.value for c in card if isinstance(c, ft.Text) and c.color == ink] == reasons
+            assert ([c.tooltip for c in card if isinstance(c, ft.Container) and str(c.tooltip).startswith(tier)]
+                    == [f"{tier}：{translate(detail)}。" for r, _, detail in wanted.values() if r == rank])
+        texts = {c.value for c in card if isinstance(c, ft.Text)}
+        if values:
+            assert {"喷火驼", "等级 29"} <= texts and "等级 —" not in texts
+            assert any(str(text).startswith("搭档等级为 29，即我方宝可梦等级 37 的五分之四。")
+                       for text in texts)
+        else:
+            assert {"沙奈朵", "等级 —"} <= texts
+
+
+def test_a_narrow_window_stands_the_raid_partners_two_to_a_row():
+    """Three cards to a row while each is CARD_WIDTH wide, two in a narrower window, such as the
+    smallest the app allows; a redraw starts on the last width's columns."""
+    import flet as ft
+    from gui.views.raid_partners import RaidPartnersPicker, columns
+    from pokeldn.app.catalog import GAMES
+    assert (columns(0), columns(500), columns(380)) == (3, 3, 2)
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    field = next(f for f in tool.fields if f.kind == "raidpartners")
+    view = SimpleNamespace(tool=tool, raid_partners_open=True, raid_partners_width=0,
+                           values={}, set_value=None,
+                           raid_context=lambda: {"progress": "6star", "content": "standard"},
+                           app=SimpleNamespace(settings=SimpleNamespace(save=lambda: None, sprites=False),
+                                               ui=lambda work: None))
+
+    def rows(picker):
+        cards = next(c for c in raid_controls(picker.control)
+                     if isinstance(c, ft.Container) and c.on_size_change == picker._spread)
+        return cards, [len(row.controls) for row in cards.content.controls]
+    picker = RaidPartnersPicker(view, field)
+    cards, shape = rows(picker)
+    assert shape == [3] * 6
+    cards.content.update = lambda: None
+    picker._spread(SimpleNamespace(control=cards, width=380))
+    assert [len(row.controls) for row in cards.content.controls] == [2] * 9
+    assert view.raid_partners_width == 380 and rows(RaidPartnersPicker(view, field))[1] == [2] * 9
+
+
+def test_the_raid_partners_level_follows_our_pokemon(tmp_path):
+    """Building or dropping Our Pokemon saves it without a redraw; the partners' card reads its level
+    again, its note and cards showing the new one."""
+    import flet as ft
+    from gui.views.raid_partners import RaidPartnersPicker
+    from gui.localization import translate
+    from pokeldn import gen9
+    from pokeldn.app.catalog import GAMES
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    field = next(f for f in tool.fields if f.kind == "raidpartners")
+    ours = next(f for f in tool.fields if f.key == "--raid-pokemon")
+    records = {}
+    for level in (100, 90):
+        records[level] = tmp_path / f"lv{level}.pk9"
+        records[level].write_bytes(gen9.encrypt(gen9.build(species=184, level=level)))
+    view = SimpleNamespace(tool=tool, raid_partners_open=True, raid_partners_width=0,
+                           values={"--raid-pokemon": {"file": str(records[100])}}, set_value=None,
+                           raid_context=lambda: {"progress": "6star", "content": "standard"},
+                           session=SimpleNamespace(refresh=lambda: None),
+                           app=SimpleNamespace(settings=SimpleNamespace(save=lambda: None, sprites=False),
+                                               ui=lambda work: None))
+
+    def shown():
+        texts = [c.value for c in raid_controls(view.raid_partners.control) if isinstance(c, ft.Text)]
+        return {text for text in texts if str(text).startswith(("等级 ", "搭档等级为"))}
+    view.raid_partners = RaidPartnersPicker(view, field)
+    view.raid_partners.body.update = lambda: None
+    assert view.raid_partners.level == 80 and "等级 80" in shown()
+    GamesView.set_value(view, ours, {"file": str(records[90])})
+    assert view.raid_partners.level == 72
+    assert shown() == {"等级 72", "搭档等级为 72，即我方宝可梦等级 90 的五分之四。 最多选择 2 名，依次填补空位；未选择的搭档在主持开始时随机安排。"}
 
 
 def test_the_finder_wants_the_rewards_its_unfolded_list_names():

@@ -9,6 +9,8 @@ var strings = GameInfo.GetStrings("en");
 var displayLanguage = "en";
 // Cut, Fly, Surf, Strength, Waterfall, Flash, Rock Smash, Dive
 var hiddenMoves = new HashSet<ushort> { 15, 19, 57, 70, 127, 148, 249, 291 };
+// Diamond to SoulSilver: Cut, Fly, Surf, Strength, Waterfall, Rock Smash, Whirlpool, Rock Climb, Defog
+var hiddenMoves4 = new HashSet<ushort> { 15, 19, 57, 70, 127, 249, 250, 431, 432 };
 var games = new Dictionary<string, Game>
 {
     ["frlg"] = new([FR, LG, E, R, S], PersonalTable.FR, EntityContext.Gen3, () => new PK3(), DecryptedParty),
@@ -46,6 +48,7 @@ while (Console.ReadLine() is { } line)
             "sav_read" => SaveRead(game, request),
             "sav_box" => SaveBox(game, request),
             "sav_edit" => SaveEdit(game, request),
+            "import" => Import(request),
             "move" => Move(game, request),
             "destinations" => Destinations(game, request),
             "raid_scan" => RaidScan.Run(request),
@@ -581,12 +584,15 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
 // another game carries the bank's HOME tracker, which PKHeX's legality check requires [HomeTrackerUtil].
 (PKM? Pokemon, LegalityAnalysis? Legality, string Refusal) Moved(Game from, Game to, byte[] data, ulong tracker,
                                                                    ITrainerInfo owner)
+    => Converted(Parse(from, data), to, tracker, owner, from != to);
+
+(PKM? Pokemon, LegalityAnalysis? Legality, string Refusal) Converted(PKM source, Game to, ulong tracker,
+                                                                       ITrainerInfo owner, bool transfer)
 {
-    var source = Parse(from, data);
     if (!source.ChecksumValid)
         return (null, null, "The Pokemon checksum is invalid.");
     PKM pk = source;
-    if (from != to)
+    if (transfer)
     {
         // Let's Go's format (7) is above FireRed's, so the converter alone would let a PK3 through.
         if (to.Context == EntityContext.Gen7b || !EntityConverter.IsConvertibleToFormat(source, to.Blank().Format))
@@ -615,7 +621,7 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
     }
     var la = new LegalityAnalysis(pk);
     // Sword/Shield's check wants a Pokemon from another game handled even by its own trainer.
-    if (!la.Valid && from != to && pk.CurrentHandler == 0)
+    if (!la.Valid && transfer && pk.CurrentHandler == 0)
     {
         pk.CurrentHandler = 1;
         pk.HandlingTrainerName = owner.OT;
@@ -630,13 +636,136 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
             pk.CurrentHandler = 0;
     }
     // A move the new game lacks: HOME's games replace the moves, so the bank takes PKHeX's suggestion.
-    if (!la.Valid && from != to && la.Info.Moves.Any(m => !m.Valid))
+    if (!la.Valid && transfer && la.Info.Moves.Any(m => !m.Valid))
     {
         Refit(pk, Wish.From(null));
         pk.RefreshChecksum();
         la = new LegalityAnalysis(pk);
     }
     return la.Valid ? (pk, la, "") : (pk, la, Plain(la));
+}
+
+// A Pokemon file or a game save, each Pokemon in it as the bank would keep it (docs/gui.md, Importing). A
+// record of a game the bank holds stays as it is; any other goes through HOME's conversion.
+JsonObject Import(JsonObject request)
+{
+    var data = Convert.FromBase64String((string)request["data"]!);
+    var name = (string?)request["name"] ?? "";
+    var found = new JsonArray();
+    var reply = new JsonObject { ["pokemon"] = found };
+    if (SaveUtil.TryGetSaveFile(data, out var sav, name))
+    {
+        // A GBA save does not say which of its pair it is; PKHeX guesses FireRed or Ruby.
+        var version = sav switch
+        {
+            SAV3FRLG => "FireRed/LeafGreen",
+            SAV3RS => "Ruby/Sapphire",
+            _ => GameInfo.GetVersionName(sav.Version),
+        };
+        reply["save"] = $"{version}, {sav.OT}";
+        if (sav.HasParty)
+            for (var slot = 0; slot < sav.PartyCount; slot++)
+                if (sav.GetPartySlotAtIndex(slot) is { Species: not 0 } pk)
+                    found.Add(Imported(request, pk, $"Party, slot {slot + 1}"));
+        if (sav.HasBox)
+            for (var box = 0; box < sav.BoxCount; box++)
+            {
+                var title = sav is IBoxDetailNameRead named && named.GetBoxName(box) is { Length: > 0 } n
+                    ? n : $"Box {box + 1}";
+                for (var slot = 0; slot < sav.BoxSlotCount; slot++)
+                    if (sav.GetBoxSlotAtIndex(box, slot) is { Species: not 0 } pk)
+                        found.Add(Imported(request, pk, $"{title}, slot {slot + 1}"));
+            }
+    }
+    else if (FileUtil.TryGetPKM(data, out var pk, Path.GetExtension(name)))
+        found.Add(Imported(request, pk, ""));
+    else
+        throw new InvalidDataException("PKHeX reads neither a Pokemon nor a game save in this file.");
+    return reply;
+}
+
+// `key` names the record as it sits in the file, so the app imports each one once.
+JsonObject Imported(JsonObject request, PKM source, string where)
+{
+    var stored = new byte[source.SIZE_STORED];
+    source.WriteDecryptedDataStored(stored);
+    JsonObject reply;
+    try
+    {
+        var (game, pk, la, notes) = Banked(request, source.Clone());
+        reply = Describe(games[game], pk, la);
+        reply["game"] = game;
+        reply["notes"] = notes;
+    }
+    catch (InvalidDataException e)
+    {
+        reply = new JsonObject
+        {
+            ["species"] = source.Species < strings.specieslist.Length ? strings.specieslist[source.Species] : "",
+            ["species_id"] = source.Species,
+            ["shiny"] = source.IsShiny,
+            ["refusal"] = e.Message,
+        };
+    }
+    reply["key"] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stored));
+    reply["where"] = where;
+    reply["source"] = source.GetType().Name;
+    return reply;
+}
+
+(string Game, PKM Pokemon, LegalityAnalysis Legality, JsonArray Notes) Banked(JsonObject request, PKM source)
+{
+    if (!source.ChecksumValid)
+        throw new InvalidDataException("The Pokemon checksum is invalid.");
+    source.ResetPartyStats();
+    source.RefreshChecksum();
+    foreach (var (key, game) in games)
+        if (source.GetType() == game.Blank().GetType())
+        {
+            var la = new LegalityAnalysis(source);
+            return la.Valid ? (key, source, la, []) : throw new InvalidDataException(Plain(la));
+        }
+    // What HOME's way in takes off: the held item goes back to the bag, and Pal Park and Poke Transfer
+    // refuse a Pokemon knowing an HM. The file is left as it is, so the item and moves stay in that game.
+    var notes = new JsonArray();
+    if (source.HeldItem != 0)
+    {
+        var items = strings.GetItemStrings(source.Context, source.Version);
+        notes.Add($"Left its {(source.HeldItem < items.Length ? items[source.HeldItem] : $"item {source.HeldItem}")} behind");
+        source.HeldItem = 0;
+    }
+    var hidden = source.Format switch { 3 => hiddenMoves, 4 => hiddenMoves4, _ => [] };
+    if (source.Moves.Where(hidden.Contains).ToArray() is { Length: > 0 } forgotten)
+    {
+        source.SetMoves(source.Moves.Where(m => m != 0 && !hidden.Contains(m)).ToArray());
+        source.FixMoves();
+        notes.Add($"Forgot {string.Join(", ", forgotten.Select(m => strings.movelist[m]))}");
+    }
+    source.RefreshChecksum();
+    // HOME's games replace moves a game lacks; a move its own game never allowed is no such move.
+    if (new LegalityAnalysis(source) is { Valid: false } own)
+        throw new InvalidDataException(Plain(own));
+    var refusals = new List<string>();
+    foreach (var key in new[] { "frlg", "sv", "swsh", "bdsp", "pla", "za" })
+    {
+        var tracker = (ulong)Random.Shared.NextInt64(1, long.MaxValue);
+        var owner = Trainer(games[key], new JsonObject { ["trainer"] = request["trainers"]![key]!.DeepClone() }).Item2;
+        var (pk, la, refusal) = Converted(source.Clone(), games[key], tracker, owner, true);
+        if (pk is null || la is null || refusal.Length > 0)
+        {
+            refusals.Add(refusal.Split('\n')[0]);
+            continue;
+        }
+        if (!pk.Moves.SequenceEqual(source.Moves))
+            notes.Add("New moves for its new game");
+        return (key, pk, la, notes);
+    }
+    // A game HOME cannot reach or without the species says least; PKHeX's own reason says most.
+    throw new InvalidDataException(
+        refusals.FirstOrDefault(r => !r.StartsWith("HOME cannot send") && !r.EndsWith("not in that game."))
+        ?? (refusals.Any(r => r.EndsWith("not in that game."))
+            ? $"{strings.specieslist[source.Species]} is in no game HOME can send it to."
+            : "HOME cannot send it into a game the bank holds."));
 }
 
 ulong Tracker(JsonObject request) => ulong.Parse((string?)request["tracker"] ?? "0");

@@ -18,6 +18,8 @@
 # The desktop app.
 !/gui/
 !/services/
+# Example plugins for authors (docs/plugins.md); not bundled into the app.
+!/examples/
 /firmware/**/build/
 /firmware/**/sdkconfig
 /firmware/**/sdkconfig.old

@@ -133,6 +133,10 @@ def reward_tables(path, lottery):
             entry = {"category": int(item.get("Category", 0)), "item": int(item.get("ItemID", 0)),
                      "amount": int(item.get("Num", 0)),
                      "probability": int(item.get("Rate", 0)) if lottery else 100}
+            if lottery and item.get("RareItemFlag"):
+                entry["rare"] = 1
+            if not lottery:
+                entry["subject"] = int(item.get("SubjectType", 0))
             if entry["item"] or entry["category"]:
                 entries.append(entry)
         out[key] = entries

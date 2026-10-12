@@ -5,8 +5,8 @@ import threading
 
 import flet as ft
 
-from gui.localization import SERVICE, summary as pokemon_summary, summary_text, translate
-from gui import theme as t
+from gui.localization import SERVICE, summary as pokemon_summary, summary_text, translate, import_note
+from gui import drop, theme as t
 from gui.views.games import tool_role
 from gui.views.sprites import MINI, SIZE, Sprite
 from gui.views.widgets import open_folder
@@ -48,13 +48,16 @@ class BankView:
         self.control = ft.Row([
             t.panel(ft.Column([
                 t.panel_header("宝可梦银行",
+                              t.icon_button("plus", self._pick, "导入宝可梦文件或游戏存档"),
                                t.icon_button("folder", lambda e: open_folder(str(self._folder())),
                                              "打开宝可梦银行文件夹"),
                                t.icon_button("refresh", lambda e: self.refresh(), "刷新")),
                 t.fade(self.boxes),
             ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
-            t.fade(ft.ListView([ft.Container(self.heading, padding=ft.Padding(4, 14, 4, 0)), self.grid],
-                               spacing=12, padding=ft.Padding(0, 0, 0, 24), expand=True)),
+            drop.target(ft.Container(t.fade(ft.ListView(
+                [ft.Container(self.heading, padding=ft.Padding(4, 14, 4, 0)), self.grid],
+                spacing=12, padding=ft.Padding(0, 0, 0, 24), expand=True)), expand=True, border_radius=16),
+                self._import, expand=True),
             t.panel(ft.Column([
                 t.panel_header("宝可梦"),
                 ft.Container(ft.Column([self.detail, self.note], spacing=8, expand=True),
@@ -113,7 +116,8 @@ class BankView:
         shown = [e for e in self.items if self.shown in (ALL, e.game)]
         where = "在银行中" if self.shown == ALL else f"来自{NAMES[self.shown]}"
         self.heading.value = (f"{where}：{len(shown)} 只宝可梦" if shown else
-                              "银行为空。各游戏交换接收的宝可梦都会保存在此处。")
+                              "银行为空。各游戏交换接收的宝可梦都会保存在此处。"
+                              + (" 将宝可梦文件或游戏存档拖到此处即可导入。" if drop.AVAILABLE else ""))
         self.grid.controls = [self._tile(e) for e in shown]
 
     def _tile(self, entry: bank.Entry) -> ft.Control:
@@ -319,12 +323,114 @@ class BankView:
             actions=[t.button("取消", lambda e: self.app.page.pop_dialog(), filled=False),
                      t.button("移除", done, color=t.RED)]))
 
+    # Importing
+
+    async def _pick(self, e) -> None:
+        files = await self.app.picker.pick_files(dialog_title='导入宝可梦', allow_multiple=True)
+        self._import([file.path for file in files or () if file.path])
+
+    def _import(self, paths: list[str]) -> None:
+        """Bank what each file holds, off the page's thread; the files are only read [bank.import_file]."""
+        if self.working or not paths:
+            return
+        self.working = True
+        trainers = {key: self.app.settings.trainer(key) for key in NAMES}
+
+        def work():
+            done, failed = [], []
+            for n, path in enumerate(paths, 1):
+                self.app.ui(lambda n=n, path=path: self._say(
+                    f"正在读取 {os.path.basename(path)}" + (f"（{n} / {len(paths)}）" if len(paths) > 1 else "")
+                    + "...", t.BLUE))
+                try:
+                    done.append(bank.import_file(path, trainers))
+                except (OSError, pokemon.BuilderError) as error:
+                    failed.append(f"{os.path.basename(path)}: {error}")
+
+            def finish():
+                self.working = False
+                self._say("", t.MUTED)
+                self.refresh()
+                ImportDialog(self.app, done, failed).show()
+            self.app.ui(finish)
+        threading.Thread(target=work, daemon=True).start()
+
     def _say(self, text: str, color: str) -> None:
         self.note.value, self.note.color = text, color
         try:
             self.note.update()
         except RuntimeError:
             pass
+
+
+class ImportDialog:
+    """One row per Pokemon found, grouped by file: its sprite, where it was, and whether it was banked."""
+
+    STATES = {"banked": ('已存入', "check", t.GREEN), "already": ('已在银行中', "copy", t.MUTED),
+              "refused": ('未导入', "warning-diamond", t.AMBER)}
+
+    def __init__(self, app, done: list[bank.Imported], failed: list[str]):
+        self.app = app
+        counts = {state: sum(r.count(state) for r in done) for state in self.STATES}
+        summary = [t.chip(f"{counts[s]} 只{label}", icon, color)
+                   for s, (label, icon, color) in self.STATES.items() if counts[s] and s != "banked"]
+        if failed:
+            summary.append(t.chip(f"{len(failed)} 个文件无法读取", "close", t.RED))
+        groups: list[ft.Control] = [self._file(result) for result in done]
+        groups += [self._unreadable(line) for line in failed]
+        self.dialog = t.dialog(
+            title=t.text(f"已存入 {counts['banked']} 只宝可梦" if counts["banked"] else '没有新宝可梦可存入', 18),
+            content=ft.Column([
+                *([ft.Row(summary, spacing=6, wrap=True, run_spacing=6)] if summary else []),
+                ft.Column(groups, spacing=18, scroll=ft.ScrollMode.AUTO, tight=True,
+                          horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                          height=None if sum(len(r.pokemon) for r in done) + len(failed) < 6 else 440),
+                t.text('PKHeX 会检查每只宝可梦，不修改原文件。', 12, t.FAINT),
+            ], spacing=16, tight=True, width=520),
+            actions=[t.button('关闭', lambda e: app.page.pop_dialog())])
+
+    def show(self) -> None:
+        self.app.page.show_dialog(self.dialog)
+
+    def _file(self, result: bank.Imported) -> ft.Control:
+        head = ft.Row([t.pixel_icon("save" if result.save else "file", size=18, color=t.MUTED),
+                       t.text(result.name, 13, weight=ft.FontWeight.W_600, expand=True,
+                              max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                       t.text(translate(result.save).replace(", ", " · "), 12, t.FAINT)],
+                      spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        rows = [self._pokemon(p) for p in result.pokemon] or [
+            ft.Container(t.text('此文件中没有宝可梦。', 12, t.MUTED), padding=12)]
+        return ft.Column([head, ft.Container(ft.Column(rows, spacing=2), bgcolor=t.CARD, border_radius=14,
+                                             padding=ft.Padding(6, 6, 12, 6))], spacing=8, tight=True,
+                         horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+
+    def _pokemon(self, found: bank.ImportedPokemon) -> ft.Control:
+        label, icon, color = self.STATES[found.state]
+        about = [t.text(translate(found.species) or '未知宝可梦', 13, t.TEXT if found.state != "refused" else t.SOFT,
+                        weight=ft.FontWeight.W_600)]
+        if found.where:
+            about.append(t.text(translate(found.where), 11, t.FAINT))
+        if found.detail:
+            about.append(t.text(import_note(found.detail), 11, t.AMBER if found.state == "refused" else t.MUTED,
+                                max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, tooltip=import_note(found.detail)))
+        status = [ft.Container(game_icon(found.game, 18), tooltip=f"保存为{NAMES[found.game]}的宝可梦")
+                  ] if found.game and found.state != "refused" else []
+        status.append(t.chip(label, icon, color))
+        return ft.Container(ft.Row([
+            ft.Container(Sprite(self.app, found.species_id, found.shiny, size=MINI).control,
+                         opacity=0.45 if found.state == "refused" else 1),
+            ft.Column(about, spacing=1, expand=True, tight=True),
+            ft.Row(status, spacing=6, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER), padding=ft.Padding(0, 4, 0, 4))
+
+    @staticmethod
+    def _unreadable(line: str) -> ft.Control:
+        name, _, why = line.partition(": ")
+        return ft.Column([
+            ft.Row([t.pixel_icon("file", size=18, color=t.MUTED), t.text(name, 13, weight=ft.FontWeight.W_600)],
+                   spacing=8),
+            ft.Container(t.badge(translate(why), t.RED, "close"), bgcolor=t.CARD, border_radius=14, padding=14),
+        ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
 
 NONE = "-"

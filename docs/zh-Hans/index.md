@@ -7,7 +7,7 @@ nav_order: 1
 
 pokeldn 实现了 Nintendo Switch 本地无线通信（LDN），通过 USB 串口连接的 ESP32 开发板作为无线收发设备，与真实 Switch 上运行的宝可梦游戏通信。这些文档介绍相关协议，并提供反编译源码引用、反汇编地址和硬件实测结果。
 
-安装方法、命令行参考和代码结构请参阅[仓库 README](https://github.com/Decryptu/pokeldn#readme)。
+先阅读[应用设置](gui.md)或[命令行用法](usage.md)。[代码组织](architecture.md)介绍共享模块和测试。
 
 ## 支持的游戏与功能
 
@@ -39,6 +39,9 @@ FRLG：火红／叶绿 · LGPE：Let's Go! 皮卡丘／伊布 · SwSh：剑／�
 | [传说 阿尔宙斯](pla.md) | Pia 头部版本 11、交换流程，以及主机构建的记录。 |
 | [朱和紫](sv.md) | Pia 头部版本 11、可靠数据流、主机执行的交换流程，以及主持和加入太晶团体战。 |
 | [传说 Z-A](za.md) | Pia 头部版本 16、游戏的二十种交换消息，以及主机和加入方的交换流程。 |
+| [命令行用法](usage.md) | 源码设置及各游戏命令。 |
+| [桌面应用](gui.md) | 设置、银行、手柄、更新与构建。 |
+| [代码组织](architecture.md) | 共享模块、宝可梦准备和验证。 |
 | [硬件与设置](hardware.md) | ESP32 无线收发设备、Switch 密钥，以及旧版 Linux Wi-Fi 适配器方案。 |
 
 ## 致谢

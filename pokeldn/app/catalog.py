@@ -8,11 +8,12 @@ from pokeldn.sv.raid import REWARD_ROWS
 
 @dataclass(frozen=True)
 class Field:
-    flag: str | tuple[str, ...]   # "" is positional; a tuple passes the same value to each flag
+    flag: str | tuple[str, ...]   # "" is positional; a tuple passes the same value to each flag, but
+                                  # raidpartners's tuple is its picks' flag then its progress's
     label: str
     kind: str = "text"            # text number choice switch pokemon file builder multi linkcode code
-                                  # (eight digits) raidseed rewards raidevent raidden, or a PKHeX name
-                                  # list: species move item ball
+                                  # (eight digits) raidseed rewards raidevent raidden raidpartners, or a
+                                  # PKHeX name list: species move item ball
     help: str = ""
     default: str | bool = ""
     choices: tuple[tuple[str, str], ...] = ()
@@ -62,6 +63,7 @@ class Game:
     short: str
     doc: str
     tools: tuple[Tool, ...]
+    icon: str = ""                # an image file; empty: the app's games/<key>.png
 
 
 VERSIONS = (("firered", '火红'), ("leafgreen", '叶绿'))
@@ -378,6 +380,8 @@ SV = Game("sv", '朱／紫', "SV", "sv.md", (
           Field("--raid-players", "加入的游戏机数量", "choice", default="1",
                 choices=(("1", "1 台"), ("2", "2 台"), ("3", "3 台")),
                 help="团体战会等待指定数量的游戏机加入且全部准备完毕后开始。"),
+          Field(("--raid-partner", "--raid-partner-progress"), "团体战 NPC 搭档", "raidpartners",
+                help="填补空位的训练家：1 台游戏机加入时有 2 名，2 台时有 1 名，3 台时没有。未选择的空位由游戏随机安排训练家。"),
           Field("--raid-catch-normal", "再次捕获活动首领", "switch", hidden=True,
                 requires="--raid-event",
                 help="将每个存档只能捕获一次的活动首领改为普通捕获，使用该存档尚未捕获过的记录编号，由活动卡片设置。"),

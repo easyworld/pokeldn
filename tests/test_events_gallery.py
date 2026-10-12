@@ -107,3 +107,27 @@ def test_an_event_folder_is_named_past_windows_260_characters(tmp_path):
         assert named.startswith("\\\\?\\") and named.endswith(ROUND.replace("/", os.sep))
     else:
         assert named == os.path.abspath(deep / ROUND)
+
+
+@pytest.mark.parametrize("limit", ["files", "table", "total"])
+def test_gallery_extraction_is_bounded_and_preserves_the_installed_copy(tmp_path, monkeypatch, limit):
+    built = archive(tmp_path / "abc.zip", {f"{EVENTS}/{EEVEE}/Files/raid_enemy_array": b"oversized"})
+    serve(monkeypatch, ("abc", "2026-09-06T21:05:05Z"), {"abc": built})
+    monkeypatch.setattr(gallery, {"files": "MAX_FILES", "table": "MAX_TABLE", "total": "MAX_UNPACKED"}[limit],
+                        0 if limit == "files" else 1)
+    root = tmp_path / "data" / gallery.FOLDER
+    (root / EEVEE / "Files").mkdir(parents=True)
+    old = root / EEVEE / "Files" / "raid_enemy_array"
+    old.write_bytes(b"original")
+    with pytest.raises(OSError, match="large|many files|oversized"):
+        gallery.download(root)
+    assert old.read_bytes() == b"original"
+    assert sorted(p.name for p in root.parent.iterdir()) == [gallery.FOLDER]
+
+
+@pytest.mark.parametrize("key", ["..\\outside", "C:/outside", "../outside"])
+def test_gallery_rejects_portable_path_traversal(tmp_path, key):
+    built = archive(tmp_path / "abc.zip", {f"{EVENTS}/{key}/Files/raid_enemy_array": b"test"})
+    with pytest.raises(OSError, match="unsafe path"):
+        gallery.extract(built, tmp_path / "gallery")
+    assert not (tmp_path / "outside").exists()

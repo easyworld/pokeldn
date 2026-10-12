@@ -291,3 +291,109 @@ def test_the_helper_never_runs_inside_the_folder_it_renames(tmp_path, monkeypatc
     assert update.wait_for(lambda: seen.exists() and seen.read_text().strip(), 10.0)
     helper_cwd = Path(seen.read_text().strip())
     assert target.resolve() not in (helper_cwd, *helper_cwd.parents)
+
+
+@pytest.mark.parametrize("system", SYSTEMS)
+@pytest.mark.parametrize("limit", ["bytes", "files", "file"])
+def test_update_archives_are_bounded_before_extraction(tmp_path, monkeypatch, system, limit):
+    built = archive(tmp_path / "release", system, "9.0.0")
+    monkeypatch.setattr(update, {"bytes": "MAX_UNPACKED", "files": "MAX_FILES", "file": "MAX_FILE"}[limit], 1)
+    output = tmp_path / "unpacked"
+    with pytest.raises(OSError, match="large|oversized|many files"):
+        update.unpack(built, output, system)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("name", ["../outside", "..\\outside", "C:/outside", "pokeldn/CON.exe"])
+def test_update_zip_paths_cannot_escape_on_any_platform(tmp_path, name):
+    built = tmp_path / "hostile.zip"
+    with zipfile.ZipFile(built, "w") as z:
+        z.writestr(name, b"test")
+    with pytest.raises(OSError, match="unsafe path"):
+        update.unpack(built, tmp_path / "unpacked", "win32")
+    assert not (tmp_path / "outside").exists()
+
+
+def test_update_tar_links_cannot_redirect_extraction_outside_the_folder(tmp_path):
+    import io
+    built = tmp_path / "hostile.tar.gz"
+    with tarfile.open(built, "w:gz") as tar:
+        link = tarfile.TarInfo("pokeldn/link")
+        link.type, link.linkname = tarfile.SYMTYPE, "../../outside"
+        tar.addfile(link)
+        child = tarfile.TarInfo("pokeldn/link/file")
+        child.size = 4
+        tar.addfile(child, io.BytesIO(b"test"))
+    with pytest.raises(OSError, match="unsafe path|through a link"):
+        update.unpack(built, tmp_path / "unpacked", "linux")
+    assert not (tmp_path / "outside").exists()
+
+
+def test_update_links_cannot_form_a_cycle_or_hide_a_child_write(tmp_path):
+    for child in (False, True):
+        built = tmp_path / "hostile.zip"
+        with zipfile.ZipFile(built, "w") as z:
+            for name, target in [("pokeldn.app/a", "b"), ("pokeldn.app/b", "a")]:
+                info = zipfile.ZipInfo(name)
+                info.external_attr = (0o120777 << 16)
+                z.writestr(info, target)
+            if child:
+                z.writestr("pokeldn.app/a/file", b"test")
+        with pytest.raises(OSError, match="link cycle|through a link"):
+            update.unpack(built, tmp_path / "unpacked", "darwin")
+
+
+def test_update_rejects_files_from_a_different_release_source_before_downloading(tmp_path, monkeypatch):
+    monkeypatch.setattr(update, "_open", lambda *a: pytest.fail("must not download"))
+    release = update.Release("9.0.0", "https://github.com/Decryptu/pokeldn/releases/tag/v9.0.0",
+                             "https://evil.example/pokeldn-windows-x64.zip", "https://evil.example/SHA256SUMS")
+    with pytest.raises(OSError, match="not from"):
+        update.prepare(release, work=tmp_path / "update", system="win32")
+    assert not (tmp_path / "update").exists()
+
+
+@pytest.mark.parametrize("url", ["file:///tmp/file", "http://example.com/file", "ftp://example.com/file"])
+def test_downloads_require_https_or_loopback_http(url):
+    with pytest.raises(OSError, match="HTTPS"):
+        update._open(url)
+
+
+def test_response_size_and_total_time_are_bounded(monkeypatch):
+    import io
+    with pytest.raises(OSError, match="too large"):
+        update.read_bytes(io.BytesIO(b"x" * 11), 10)
+    times = iter([0.0, 0.0, 2.0])
+    monkeypatch.setattr(update.time, "monotonic", lambda: next(times))
+    with pytest.raises(OSError, match="too long"):
+        update.read_bytes(io.BytesIO(b"small"), 100, timeout=1)
+
+
+def test_download_redirects_cannot_downgrade_to_external_http(files):
+    class RedirectHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "http://example.invalid/unsafe")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(OSError, match="unsafe address"):
+            update._open(f"http://127.0.0.1:{server.server_port}/redirect")
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_zip_directory_limits_apply_before_python_builds_the_file_index(tmp_path, monkeypatch):
+    from pokeldn.app import archives
+    built = tmp_path / "many.zip"
+    with zipfile.ZipFile(built, "w") as z:
+        for i in range(5):
+            z.writestr(str(i), b"")
+    monkeypatch.setattr(archives.zipfile, "ZipFile", lambda *a: pytest.fail("must reject before indexing"))
+    with pytest.raises(OSError, match="many files"):
+        archives.open_zip(built, 2)

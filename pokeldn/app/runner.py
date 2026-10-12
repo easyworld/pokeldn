@@ -35,6 +35,9 @@ def child(argv: list[str]) -> None:
     mode, target, *args = argv
     if mode == "--run":
         path = os.path.join(ROOT, target)
+        if os.path.isabs(target):     # a plugin's script: loading the plugins puts it under their guardrails
+            from pokeldn import plugins
+            plugins.load()
         sys.argv = [path, *args]
         sys.path.insert(0, os.path.dirname(path))
         runpy.run_path(path, run_name="__main__")
@@ -105,7 +108,7 @@ class Process:
 def base_env(settings, port: str, trace: str | None = None) -> dict:
     env = dict(os.environ, PYTHONUNBUFFERED="1", POKELDN_ESP32_BAUD=str(settings.baud),
                POKELDN_MANAGED_RUN="1")
-    env["POKELDN_RADIO"] = f"esp32:{port or 'auto'}"
+    env["POKELDN_RADIO"] = f"{settings.radio}:" if settings.radio else f"esp32:{port or 'auto'}"
     if trace:
         env["POKELDN_ESP32_TRACE"] = trace
     return env
