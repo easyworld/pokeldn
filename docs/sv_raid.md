@@ -323,7 +323,20 @@ field, `AddRewardSlots`. A row's third word was 1 on a Bottle Cap lottery row an
 An emulated Scarlet 4.0.0 guest sent one row under each subject 0 to 5 listed subjects 0, 2, 3 and 5
 on its reward screen and left out 1 and 4. With a meal's Raid Power: Ghost Lv. 1 active it left out
 subject 4 against a Steel Tera boss and listed it against a Ghost Tera boss; sent three subject-4
-rows there, it listed the first only.
+rows there, it listed the first only. Sent four subject-4 rows against the Ghost Tera boss, it listed
+the first two with the power at level 2 and the first three at level 3.
+
+An active meal power is held in memory as u32 kind, u32 type, u32 level and an f32 of seconds left,
+1800 when eaten and counting down in the field. The level 2 and 3 checks above, and the one below,
+wrote the level and type words of a Jambon-Beurre's Raid Power: Ghost Lv. 1 record.
+
+On a black-crystal point (seed `09F3E337`, Kingambit with Tera type Fairy) with a Raid Power: Fairy
+Lv. 3, the same guest listed 18 of the point's 19 rows: every subject-0 row, the subject-2 row, the
+three subject-4 rows and the subject-5 Fairy Tera Shard x12; it left out the subject-1 row. The one
+row carrying the rare-item flag, the subject-4 Bottle Cap, came first on the screen; the others kept
+the point's order. The point was `raid_point`'s with only the action profile replaced (HP coefficient
+100, the rest zero) so that a single guest could win; its stars, crystal, `raidTimeData` and rows
+were the seed's.
 
 Scarlet 4.0.0's Lua reward filter, `C07C34FC3B976E5A7.F316609DEA110601D`
 (lines 78707 to 78765 as its bytecode records them), keeps subject 0 for every player, 1 for the host, 2 for a guest
@@ -767,7 +780,8 @@ the host start; its Pokemon stayed in the battle.
   constructor `0x16b21f0`, which zeroes `+0x40`, destructor `0x2894604`) held the u32 pair
   `0x1527b, 7` at `+0x38` and 0x2713 at `+0x40` when the builders first read it at the join.
   Every raid hosted with it began its battle, on retail and emulated consoles.
-- End-to-end reward-screen checks for Raid Power Lv. 2 and 3 and six-star bonus rows.
+- Whether the battle timer a guest runs on a six-star point is the point's `gameLimit` 450; the
+  reward-screen check did not measure it.
 - What the RaidPoint's byte 0x3b4 holds.
 - Whether a retail console's reward screen follows the Lua filter for subjects 2 to 4; subjects 1
   and 5 are measured on a retail guest, the rest on an emulated one.

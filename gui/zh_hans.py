@@ -4,6 +4,9 @@ Species source: https://github.com/kwsch/PKHeX/tree/master/PKHeX.Core/Resources/
 """
 
 LABELS = {
+ 'PKHeX flags the missing HOME tracker': 'PKHeX 提示缺少 HOME 追踪码',
+ "Can't be deposited in HOME": '无法存入 HOME',
+
  'Mini mark': '小不点之证',
  'Jumbo mark': '大个子之证',
  'Most desired rewards': '所需奖励最多',

@@ -88,7 +88,7 @@ for line in sys.stdin:
     assert len({row["process"] for row in recorded}) == requests
     assert all(row["request"] == {"cmd": "check", "game": "pla", "fresh": True,
                                   "data": base64.b64encode(REFERENCE_RECORD).decode(),
-                                  "fields": {"ot_name": "HOST"}} for row in recorded)
+                                  "fields": {"ot_name": "HOST"}, "home_tracker": "empty"} for row in recorded)
 
 
 @pytest.fixture(scope="module")
@@ -141,6 +141,21 @@ def test_an_event_pokemon_offered_under_a_new_pid_keeps_its_own(service, capsys)
     assert "kept its own PID" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("mode", ["empty", "made"])
+def test_an_event_that_reached_the_game_through_home_gets_the_tracker_the_setting_asks_for(service, monkeypatch,
+                                                                                         mode):
+    """Melmetal reached Sword only through HOME, so PKHeX wants a HOME tracker on it [HomeTrackerUtil]. "made"
+    fills one; "empty" leaves it unset, and that one problem is accepted there and by the launcher's check."""
+    monkeypatch.setattr(service, "home_tracker", mode)
+    built = service.make("swsh", 809, TRAINER)
+    assert built["legal"] and built["home_tracker"] == mode and (built["tracker"] != "0") == (mode == "made")
+    offer = Path(pokemon.prepare_file("swsh", built["file"])).read_bytes()
+    assert service.check_bytes("swsh", offer)["legal"]
+    monkeypatch.setattr(service, "home_tracker", "made")
+    refused = service.check_bytes("swsh", base64.b64decode(built["data"]))
+    assert refused["legal"] == (mode == "made") and refused["home_tracker"] == ("empty" if mode == "empty" else "")
+
+
 @pytest.mark.parametrize("game, species, edit", [
     ("frlg", 132, {"shiny": True}),                      # a Gen 3 PID is chosen with the encounter, not patched in
     ("frlg", 132, {"shiny": True, "version": "LG"}),
@@ -156,7 +171,6 @@ def test_an_event_pokemon_offered_under_a_new_pid_keeps_its_own(service, capsys)
     ("bdsp", 292, {}),                                   # Shedinja is genderless though Nincada is not
     ("za", 865, {}),                                     # Galarian Farfetch'd evolves into a species with one form
     ("bdsp", 350, {}),                                   # Milotic evolves at Beauty 170, which needs Sheen
-    ("swsh", 809, {}),                                   # an event that reached the game through HOME has a tracker
     ("za", 801, {}),                                     # a gift that arrives already handled
 ])
 def test_a_shiny_level_or_evolved_request_is_built_legal(service, game, species, edit):
@@ -496,3 +510,16 @@ for line in sys.stdin:
         assert instance.prepare('pla', REFERENCE_RECORD) == REFERENCE_RECORD
     finally:
         instance.close()
+
+
+@pytest.mark.parametrize("mode", ["empty", "made"])
+def test_chinese_builder_keeps_home_tracker_policy_and_display_language(service, mode):
+    localized = pokemon.Service(display_language="zh-Hans")
+    localized.home_tracker = mode
+    try:
+        built = localized.make("swsh", 809, TRAINER)
+        assert built["species"] == "美录梅塔" and built["legal"]
+        assert built["home_tracker"] == mode
+        assert (built["tracker"] != "0") == (mode == "made")
+    finally:
+        localized.close()

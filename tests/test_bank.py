@@ -38,10 +38,13 @@ def receive(service, folder, game, species, options=None):
     return bank.deposit(game, str(path), service.check(game, str(path))), built
 
 
+@pytest.mark.parametrize("mode", ["empty", "made"])
 @pytest.mark.parametrize("source, target", [
     ("frlg", "swsh"), ("lgpe", "sv"), ("swsh", "bdsp"), ("bdsp", "pla"), ("pla", "sv"), ("sv", "za"),
 ])
-def test_a_moved_pokemon_keeps_who_it_is_and_its_launcher_takes_it(service, vault, source, target):
+def test_a_moved_pokemon_keeps_who_it_is_and_its_launcher_takes_it(service, vault, monkeypatch, source, target,
+                                                                    mode):
+    monkeypatch.setattr(service, "home_tracker", mode)
     entry, built = receive(service, vault, source, 25)
     item = bank.offer(entry, target, OWNER)
     offer = pokemon.prepare_file(target, item["file"], fresh=False)   # what the launcher sends
@@ -52,7 +55,10 @@ def test_a_moved_pokemon_keeps_who_it_is_and_its_launcher_takes_it(service, vaul
         pid ^= 0x80000000     # HOME flips it so Gen 6's shiny threshold of 16 keeps it non-shiny
     assert (moved["pid"], moved["encryption_constant"]) == (pid, built["encryption_constant"])
     assert (moved["ot"], moved["trainer_id"]) == (built["ot"], built["trainer_id"])
-    assert int(moved["tracker"]) == entry.tracker != 0
+    assert item["home_tracker"] == mode
+    assert int(moved["tracker"]) == (entry.tracker if mode == "made" else 0) and entry.tracker != 0
+    routes = service.destinations(entry.game, bank.data(entry), entry.tracker, OWNER)
+    assert routes[target] == {"ok": True, "reason": "", "home_tracker": mode}
 
 
 @pytest.mark.parametrize("source, target, why", [
@@ -151,24 +157,40 @@ def imported_from(entry):
     return json.loads(Path(entry.path).with_suffix(".json").read_text(encoding="utf-8"))["imported"]["where"]
 
 
-def test_a_save_is_imported_slot_by_slot_once_even_after_a_trade_takes_one_out(service, vault):
+def test_a_save_is_imported_slot_by_slot_once_even_after_a_trade_takes_one_out(service, vault, monkeypatch):
+    monkeypatch.setattr(service, "home_tracker", "made")
     save = vault / "main"          # a 3DS save has no extension; this one is Black 2's size
     save.write_bytes(gzip.decompress(base64.b64decode(FIXTURE["black2_save_gz"])))
     before = save.read_bytes()
     first = bank.import_file(str(save), TRAINERS)
     assert first.save == "Black 2, ROSA"
     assert [(p.where, p.species, p.state, p.detail) for p in first.pokemon] == [
-        ("Party, slot 1", "Patrat", "banked", "Left its Oran Berry behind"),
-        ("Box 1, slot 3", "Lillipup", "banked", ""),
+        ("Party, slot 1", "Patrat", "banked", "Left its Oran Berry behind · Can't be deposited in HOME"),
+        ("Box 1, slot 3", "Lillipup", "banked", "Can't be deposited in HOME"),
         ("Box 2, slot 1", "Patrat", "refused", "One of its moves is not legal.")]
     kept = {imported_from(e): e for e in bank.entries()}
+    assert {e.home_tracker for e in kept.values()} == {"made"}
     patrat = service.check_bytes(kept["Party, slot 1"].game, bank.data(kept["Party, slot 1"]))
     assert patrat["legal"] and patrat["species_id"] == 504 and patrat["held_item_id"] == 0
-    assert patrat["ot"] == "ROSA" and int(patrat["tracker"]) == kept["Party, slot 1"].tracker != 0
+    assert patrat["ot"] == "ROSA" and int(patrat["tracker"]) != 0
     bank.remove(kept["Party, slot 1"].id)       # as a completed trade takes it out
     again = bank.import_file(str(save), TRAINERS)
     assert [p.state for p in again.pokemon] == ["already", "already", "refused"]
     assert len(bank.entries()) == 1 and save.read_bytes() == before
+
+
+def test_an_empty_tracker_is_the_only_problem_the_empty_setting_accepts(service, vault):
+    """With no tracker PKHeX also refuses the party Patrat's Hidden Ability in Legends Z-A, its only game:
+    that second problem keeps it out."""
+    save = vault / "main"
+    save.write_bytes(gzip.decompress(base64.b64decode(FIXTURE["black2_save_gz"])))
+    assert [(p.state, p.detail) for p in bank.import_file(str(save), TRAINERS).pokemon] == [
+        ("refused", "Hidden Ability not available."),
+        ("banked", "PKHeX flags the missing HOME tracker"),
+        ("refused", "One of its moves is not legal.")]
+    [entry] = bank.entries()
+    info = service.check_bytes(entry.game, bank.data(entry))
+    assert info["legal"] and info["tracker"] == "0" and entry.home_tracker == "empty"
 
 
 @pytest.mark.parametrize("name, species, gone", [

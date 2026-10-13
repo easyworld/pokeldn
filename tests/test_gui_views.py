@@ -1464,3 +1464,20 @@ def test_an_event_missing_from_the_gallery_stays_chosen_and_shows_missing(monkey
         assert (picker.summary.value, picker.summary.color) == ("波荡水", t.BLUE)
     else:
         assert (picker.summary.value, picker.summary.color) == ("缺失：波荡水", t.RED)
+
+
+@pytest.mark.parametrize("mode", ["empty", "made"])
+def test_home_tracker_setting_updates_both_chinese_and_launcher_services(monkeypatch, mode):
+    from gui.views.settings import SettingsView
+    from gui.localization import SERVICE
+    from pokeldn import pokemon as builder
+
+    monkeypatch.setattr(SERVICE, "home_tracker", "made" if mode == "empty" else "empty")
+    monkeypatch.setattr(builder.SERVICE, "home_tracker", SERVICE.home_tracker)
+    saved = {}
+    view = object.__new__(SettingsView)
+    view.save = lambda key, value: saved.update({key: value})
+    view._home_tracker(mode)
+    assert saved == {"home_tracker": mode}
+    assert SERVICE.home_tracker == builder.SERVICE.home_tracker == mode
+    assert SERVICE.display_language == "zh-Hans"

@@ -88,7 +88,7 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 | 步骤 | 行为 |
 |---|---|
 | 完成交换 | 会话面板通过 PKHeX 读取每个接收文件并存入副本；原接收文件保留，相同字节的数据不会重复存入 |
-| 存入宝可梦 | `.json` 保存种类、摘要、PKHeX 检查结果、源文件、数据的 SHA-256 及随机 63 位 HOME 追踪器 |
+| 存入宝可梦 | `.json` 保存种类、摘要、PKHeX 检查结果、源文件、数据的 SHA-256、在“生成”设置下传送时使用的随机 63 位 HOME 追踪码，以及 `home_tracker`（`empty`、`made` 或空值） |
 | 页面列出目标游戏 | 辅助程序的 `destinations` 命令尝试传送到全部七个游戏，并报告各项拒绝原因 |
 | 选择目标游戏的交换功能 | 辅助程序的 `move` 命令转换记录，结果以 `"bank": id` 加入该功能的交换队列，应用随后打开此功能 |
 | 本次运行的第 N 次交换完成 | `[done] trade N complete` 日志移除队列中对应第 N 次交换的银行宝可梦；运行结束时移除其队列条目 |
@@ -96,7 +96,7 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 
 传送使用 PKHeX 自身的 HOME 转换（`EntityConverter.ConvertToType`，经由 `PKH`），随后进行目标游戏的合法性检查；不合法的结果会被拒绝，并显示 PKHeX 的原因。各招式的错误行合并为一项（如“有 2 个招式不合法”），同一问题只列一次。传送过程中：
 
-- 来自其他游戏的宝可梦取得银行分配的 HOME 追踪器。缺少追踪器时，PKHeX 将其标为无效（`HomeTrackerUtil.IsRequired`、`HOMETransferSettings.HOMETransferTrackerNotPresent`）。
+- 来自其他游戏的宝可梦按 [HOME 追踪码设置](#the-home-tracker-setting) 处理：留空，或使用银行分配的追踪码。
 - 应用的训练家成为最近持有人，与移入目标存档时相同（`IHandlerUpdate` 及 `PB8.UpdateHandler`）。如果当前持有人是原训练家时仍未通过检查，则把应用训练家设为最近持有人；《剑／盾》要求此设置。
 - 传送后若存在无效招式，采用 PKHeX 为目标游戏推荐的招式配置。
 - 保留 PID、加密常数、原始训练家及 ID。提供银行宝可梦的运行命令不包含 `--fresh-pid`。
@@ -111,6 +111,19 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 | 没有转换路径 | PKHeX.Core 26.8.26 尚不能将《传说 Z-A》的记录转出到其他游戏 |
 
 “编辑”可修改游戏本身允许玩家更改的项目：昵称（留空恢复种类名称）、等级（只能提高）、招式和携带道具。辅助程序的 `check` 命令应用字段并运行 PKHeX 合法性检查；若修改会使原本合法的宝可梦变得不合法，则拒绝并保留原记录。保存时重写记录及其 `.json`（摘要、检查结果和 SHA-256），随后重新检查可传送的游戏。已加入交换队列的宝可梦不能编辑。
+
+<a id="the-home-tracker-setting"></a>
+
+### HOME 追踪码设置
+
+宝可梦缺少所需的 HOME 追踪码时，PKHeX 会将其判定为不合法（`HomeTrackerUtil.IsRequired`、`LegalityCheckResultCode.TransferTrackerMissing`，严重级别 `HOMETransferTrackerNotPresent`）：例如从其他游戏传入的宝可梦，或只能通过 HOME 进入游戏的活动礼物。HOME 3.1.0 及之后会拒绝非 HOME 签发的追踪码（错误 10015）。“设置 → 高级设置 → HOME 追踪码”决定应用写入什么（`Settings.home_tracker`）；`pokeldn.pokemon.Service` 在每次辅助程序请求中发送 `home_tracker`，运行会通过 `POKELDN_HOME_TRACKER` 继承此设置。
+
+| 设置 | 银行传送、导入与生成器的礼物修复 | 合法性 | 显示的提示 |
+|---|---|---|---|
+| `empty`（默认） | 不写入追踪码 | 仅在缺少追踪码是 PKHeX 唯一检查问题时接受，其他问题仍被拒绝 | PKHeX 提示缺少 HOME 追踪码 |
+| `made` | 生成随机 63 位追踪码；银行中的宝可梦使用银行分配的追踪码 | 判定规则保持不变 | 无法存入 HOME |
+
+每条辅助程序回复包含 `home_tracker`（`empty`、`made` 或空值）；`destinations` 按游戏返回此字段。提示显示在生成或加载的提供记录、银行条目、目标游戏以及导入条目上。追踪码留空也会影响其他检查结果：将 `tests/data/bank_import.json` 中《黑２》的探探鼠传入《传说 Z-A》时，PKHeX 26.8.26 在没有追踪码的情况下拒绝其隐藏特性，有追踪码时则接受。
 
 <a id="importing"></a>
 
@@ -135,7 +148,8 @@ PKHeX 判定其原格式不合法时，使用 PKHeX 的理由拒绝；传送时�
 
 ### 尚未解决
 
-- 银行传送的宝可梦能否被 Pokémon HOME 接受。HOME 3.1.0 及之后拒绝非 HOME 签发的追踪器（错误 10015），银行生成的追踪器属于此类。
+- 使用自行生成追踪码传送的宝可梦能否被 Pokémon HOME 接受。HOME 3.1.0 及之后拒绝非 HOME 签发的追踪码（错误 10015），自行生成的追踪码属于此类。
+- HOME 能否接受已传送到其他游戏、但追踪码留空的宝可梦。
 - HOME 自身的《火红／叶绿》导入规则是否还有画面所列蛋、携带道具及秘传招式以外的限制。
 - HOME 为从 Switch 版《火红／叶绿》导入的宝可梦显示的来源图标，究竟由哪个记录字段保存。通过 Pokémon Bank 转移的卡带宝可梦没有该图标（依据玩家截图，本项目尚未测量）。PKHeX.Core 26.8.26 通过伙伴公园迁移链转换 `.pk3`，因此银行从《火红／叶绿》转出的记录可能与 HOME 写入的记录不同。
 

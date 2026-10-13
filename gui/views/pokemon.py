@@ -127,7 +127,7 @@ class PokemonPicker:
                                             self.value.get("nickname", ""), VERSIONS.get(self.version, ""),
                                             self.value.get("options"))
                 self.value.update(file=info["file"], summary=pokemon_summary(info), legal=info["legal"],
-                                  encounter=info["encounter"], moves=info["moves"])
+                                  encounter=info["encounter"], moves=info["moves"], home_tracker=info.get("home_tracker", ""))
                 self.on_change(dict(self.value))
                 done = self._show_result
             except Exception as exc:
@@ -172,7 +172,7 @@ class PokemonPicker:
             return
         self.value.update(file=info["file"], summary=pokemon_summary(info), legal=info["legal"],
                           encounter=info["encounter"], moves=info["moves"],
-                          report="" if info["legal"] else info["report"],
+                          report="" if info["legal"] else info["report"], home_tracker=info.get("home_tracker", ""),
                           species=info["species_id"], shiny=info["shiny"])
         if self.species.options:
             self.species.value = str(info["species_id"])
@@ -250,7 +250,7 @@ class PokemonPicker:
             submit(None)
 
     def _apply_set(self, found: dict, notes: list[str]) -> None:
-        for key in ("file", "summary", "legal", "encounter", "moves", "report"):
+        for key in ("file", "summary", "legal", "encounter", "moves", "report", "home_tracker"):
             self.value.pop(key, None)
         self.value.update(species=found["species_id"], level=str(found["level"]), shiny=found["shiny"],
                           nickname=found["nickname"])
@@ -290,6 +290,8 @@ class PokemonPicker:
         detail = " · ".join(x for x in (self.value.get("encounter", ""), ", ".join(self.value.get("moves", []))) if x)
         if detail:
             lines.append(t.text(detail, 12, t.MUTED))
+        if warning := builder.HOME_TRACKER_WARNINGS.get(self.value.get("home_tracker", "")):
+            lines.append(t.badge(translate(warning), t.AMBER, "warning-diamond"))
         if self.value.get("report"):
             lines.append(t.text(self.value["report"], 12, t.RED, selectable=True))
         self.result.content = ft.Column(lines, spacing=4)

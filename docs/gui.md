@@ -146,7 +146,7 @@ folder instead.
 | step | what happens |
 |---|---|
 | a trade completes | the session panel reads each received file with PKHeX and banks a copy; the Received file stays; bytes already in the bank are not banked twice |
-| a Pokemon is banked | its `.json` keeps the species, the summary, PKHeX's verdict, the source file, a SHA-256 of the bytes and a random 63-bit HOME tracker |
+| a Pokemon is banked | its `.json` keeps the species, the summary, PKHeX's verdict, the source file, a SHA-256 of the bytes, a random 63-bit HOME tracker for a move under "made", and `home_tracker`: `empty`, `made` or empty |
 | the page lists the destinations | the helper's `destinations` command tries a move to all seven games and reports each refusal |
 | a destination's trade tool is chosen | the helper's `move` command converts the record, the result joins that tool's offer queue with `"bank": id`, and the app opens the tool |
 | the run's trade N completes | the `[done] trade N complete` line removes the banked Pokemon queued as trade N; at the run's end its queue entry goes too |
@@ -157,8 +157,8 @@ PKHeX's legality check in the destination game; a move that is not legal there i
 PKHeX's reason, its per-move lines folded into one ("2 of its moves are not legal") and each problem
 listed once. On the way:
 
-- A Pokemon from another game takes the bank's HOME tracker. PKHeX marks one without a tracker
-  invalid (`HomeTrackerUtil.IsRequired`, `HOMETransferSettings.HOMETransferTrackerNotPresent`).
+- A Pokemon from another game gets the HOME tracker the [HOME tracker
+  setting](#the-home-tracker-setting) asks for: none, or the bank's.
 - The app's trainer becomes its handler, as a save it is moved into would (`IHandlerUpdate`, and
   `PB8.UpdateHandler`). When the check still finds it invalid with its own trainer as the current
   handler, the app's trainer is set as the handling trainer; Sword/Shield asks for it.
@@ -180,6 +180,25 @@ name), the level (upward only), the moves and the held item. The helper's `check
 fields and runs PKHeX's legality check; an edit that would make a legal Pokemon not legal is refused and
 the record is left as it was. A saved edit rewrites the record and its `.json` (summary, verdict,
 SHA-256) and the destinations are checked again. A Pokemon queued for a trade is not editable.
+
+### The HOME tracker setting
+
+PKHeX marks a Pokemon invalid when it lacks a HOME tracker it needs (`HomeTrackerUtil.IsRequired`,
+`LegalityCheckResultCode.TransferTrackerMissing`, severity `HOMETransferTrackerNotPresent`): one moved
+into another game, and an event gift that reached its game only through HOME. HOME 3.1.0 and later refuse
+a tracker HOME did not issue (error 10015). Settings, advanced settings, HOME tracker picks what the app
+puts there (`Settings.home_tracker`); `pokeldn.pokemon.Service` sends it as `home_tracker` with every
+helper request, and a run inherits it as `POKELDN_HOME_TRACKER`.
+
+| setting | bank move, import, and the builder's gift repair | legality | warning shown |
+|---|---|---|---|
+| `empty` (default) | the tracker stays unset | the missing tracker is accepted when it is PKHeX's only problem; every other problem is refused | PKHeX flags the missing HOME tracker |
+| `made` | a random 63-bit tracker, the bank's for a banked Pokemon | unchanged | Can't be deposited in HOME |
+
+Every helper reply carries `home_tracker` (`empty`, `made` or empty), and `destinations` gives it per
+game. The warning shows on a built or loaded offer, a bank entry, a bank destination and an import line.
+An unset tracker can change other verdicts: PKHeX 26.8.26 refuses the Hidden Ability of the Black 2 Patrat
+in `tests/data/bank_import.json` moved into Legends Z-A without a tracker, and accepts it with one.
 
 ### Importing
 
@@ -219,8 +238,9 @@ an illegal record is refused, and a second import banks nothing.
 
 ### Unresolved
 
-- Whether Pokemon HOME accepts a Pokemon the bank moved. HOME 3.1.0 and later refuse a tracker HOME
-  did not issue (error 10015), and the bank's trackers are of that kind.
+- Whether Pokemon HOME accepts a Pokemon the bank moved with a made tracker. HOME 3.1.0 and later
+  refuse a tracker HOME did not issue (error 10015), and a made tracker is of that kind.
+- Whether HOME accepts an empty tracker on a Pokemon moved into a different game.
 - Whether HOME's own FireRed/LeafGreen import rules go beyond the eggs, held items and HM moves its
   screen names.
 - Which record field carries the origin icon HOME shows on a Pokemon imported from the Switch

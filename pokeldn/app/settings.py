@@ -25,6 +25,9 @@ class Settings:
     board_trace: bool = False
     sprites: bool = True    # download Pokemon sprites from PokeAPI; the cache is read either way
     check_updates: bool = True   # ask GitHub for a newer release at launch
+    # "empty" or "made": what the bank and the builder put in a HOME tracker HOME never issued (docs/gui.md,
+    # The bank); pokeldn.pokemon.Service sends it with every request.
+    home_tracker: str = "empty"
     # Trainer used for generated encounters.
     ot: str = "POKELDN"
     tid: int = field(default_factory=lambda: random.randint(1, 65535))   # FireRed/LeafGreen, as shown

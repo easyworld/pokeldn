@@ -23,6 +23,11 @@ var games = new Dictionary<string, Game>
     ["za"] = new([ZA], PersonalTable.ZA, EntityContext.Gen9a, () => new PA9(), DecryptedParty),
 };
 
+// The app's HOME tracker setting (docs/gui.md, The bank): "empty" leaves a tracker HOME would have issued unset
+// and accepts PKHeX's one complaint about it; "made" fills it. HOME 3.1.0 refuses a tracker it did not issue.
+var emptyTracker = true;
+var madeTrackers = new HashSet<ulong>();
+
 while (Console.ReadLine() is { } line)
 {
     JsonObject reply;
@@ -32,6 +37,8 @@ while (Console.ReadLine() is { } line)
         // Interface language never changes the entity's trainer language or the Showdown parser.
         displayLanguage = (string?)request["display_language"] == "zh-Hans" ? "zh-Hans" : "en";
         strings = GameInfo.GetStrings(displayLanguage);
+        emptyTracker = (string?)request["home_tracker"] != "made";
+        madeTrackers.Clear();
         var game = games[(string)request["game"]!];
         reply = (string)request["cmd"]! switch
         {
@@ -347,7 +354,7 @@ JsonObject Make(Game game, JsonObject request)
                 wish.Apply(pk);
                 var la = Mend(pk, evolved, encounter, trainer, wish);
                 var unmet = wish.Unmet(pk, strings);
-                if (la.Valid && unmet is null)
+                if (Accepted(la) && unmet is null)
                     return Describe(game, pk, la);
                 if (unmet is null)
                     firstProblem ??= la.Report(displayLanguage);
@@ -374,13 +381,13 @@ JsonObject Make(Game game, JsonObject request)
 LegalityAnalysis Mend(PKM pk, bool evolved, IEncounterTemplate encounter, ITrainerInfo trainer, Wish wish)
 {
     var la = Refresh(pk, wish);
-    if (la.Valid)
+    if (Accepted(la))
         return la;
     var repairs = new List<Action>();
     // Event Pokemon that Sword/Shield received only through HOME (Zeraora, Melmetal) carry a HOME tracker.
     // This comes first: a refit would replace the event's fixed moves.
-    if (encounter is MysteryGift && pk is IHomeTrack { HasTracker: false } home)
-        repairs.Add(() => home.Tracker = (ulong)Random.Shared.NextInt64(1, long.MaxValue));
+    if (!emptyTracker && encounter is MysteryGift && pk is IHomeTrack { HasTracker: false } home)
+        repairs.Add(() => home.Tracker = MadeTracker((ulong)Random.Shared.NextInt64(1, long.MaxValue)));
     // Moves, relearn moves and move flags depend on the species and level just set.
     repairs.Add(() => Refit(pk, wish));
     if (evolved)
@@ -422,7 +429,7 @@ LegalityAnalysis Mend(PKM pk, bool evolved, IEncounterTemplate encounter, ITrain
             continue;
         }
         la = Refresh(pk, wish);
-        if (la.Valid)
+        if (Accepted(la))
             break;
     }
     return la;
@@ -437,6 +444,20 @@ static EvolutionMethod? HowEvolved(PKM pk)
             if (method.Species == pk.Species)
                 return method;
     return null;
+}
+
+// Valid, or invalid only for the HOME tracker the "empty" setting leaves unset [HomeTrackerUtil.IsRequired].
+bool Accepted(LegalityAnalysis la) => la.Valid || emptyTracker && OnlyTrackerMissing(la);
+
+static bool OnlyTrackerMissing(LegalityAnalysis la)
+    => la.Parsed && la.Results.Any(r => !r.Valid)
+       && la.Results.All(r => r.Valid || r.Result == LegalityCheckResultCode.TransferTrackerMissing)
+       && la.Info.Moves.All(m => m.Valid) && la.Info.Relearn.All(m => m.Valid);
+
+ulong MadeTracker(ulong tracker)
+{
+    madeTrackers.Add(tracker);
+    return tracker;
 }
 
 LegalityAnalysis Refresh(PKM pk, Wish? wish = null)
@@ -554,13 +575,13 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
     if ((bool?)request["fresh"] == true)
     {
         var (pid, ec) = (pk.PID, pk.EncryptionConstant);
-        var legal = new LegalityAnalysis(pk).Valid;
+        var legal = Accepted(new LegalityAnalysis(pk));
         var xor = (pk.PID >> 16) ^ (pk.PID & 0xFFFF);
         var high = (uint)Random.Shared.Next(0x10000);
         pk.PID = (high << 16) | (high ^ xor);
         pk.EncryptionConstant = (uint)Random.Shared.NextInt64(1, 1L << 32);
         // An event Pokemon's PID is part of the event: a new one makes it illegal.
-        if (legal && !new LegalityAnalysis(pk).Valid)
+        if (legal && !Accepted(new LegalityAnalysis(pk)))
         {
             (pk.PID, pk.EncryptionConstant) = (pid, ec);
             note = "kept its own PID: this event Pokemon is legal only with it";
@@ -581,7 +602,7 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
 }
 
 // A banked Pokemon taken to `game` through PKHeX's HOME conversion (docs/gui.md, The bank). A Pokemon from
-// another game carries the bank's HOME tracker, which PKHeX's legality check requires [HomeTrackerUtil].
+// another game carries the bank's HOME tracker under the "made" setting [HomeTrackerUtil].
 (PKM? Pokemon, LegalityAnalysis? Legality, string Refusal) Moved(Game from, Game to, byte[] data, ulong tracker,
                                                                    ITrainerInfo owner)
     => Converted(Parse(from, data), to, tracker, owner, from != to);
@@ -609,8 +630,8 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
                                                  : $"This form of {strings.specieslist[source.Species]} is not in that game.");
         pk = EntityConverter.ConvertToType(source, to.Blank().GetType(), out var result)
              ?? throw new InvalidDataException($"PKHeX has no transfer route ({result}).");
-        if (pk is IHomeTrack { HasTracker: false } home)
-            home.Tracker = tracker;
+        if (!emptyTracker && pk is IHomeTrack { HasTracker: false } home)
+            home.Tracker = MadeTracker(tracker);
         // The bank's owner receives it in the new game, as HOME hands it to the save it is moved into.
         if (pk is IHandlerUpdate handler)
             handler.UpdateHandler(owner);
@@ -621,7 +642,7 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
     }
     var la = new LegalityAnalysis(pk);
     // Sword/Shield's check wants a Pokemon from another game handled even by its own trainer.
-    if (!la.Valid && transfer && pk.CurrentHandler == 0)
+    if (!Accepted(la) && transfer && pk.CurrentHandler == 0)
     {
         pk.CurrentHandler = 1;
         pk.HandlingTrainerName = owner.OT;
@@ -630,19 +651,19 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
             language.HandlingTrainerLanguage = (byte)owner.Language;
         pk.RefreshChecksum();
         var handled = new LegalityAnalysis(pk);
-        if (handled.Valid)
+        if (Accepted(handled))
             la = handled;
         else
             pk.CurrentHandler = 0;
     }
     // A move the new game lacks: HOME's games replace the moves, so the bank takes PKHeX's suggestion.
-    if (!la.Valid && transfer && la.Info.Moves.Any(m => !m.Valid))
+    if (!Accepted(la) && transfer && la.Info.Moves.Any(m => !m.Valid))
     {
         Refit(pk, Wish.From(null));
         pk.RefreshChecksum();
         la = new LegalityAnalysis(pk);
     }
-    return la.Valid ? (pk, la, "") : (pk, la, Plain(la));
+    return Accepted(la) ? (pk, la, "") : (pk, la, Plain(la));
 }
 
 // A Pokemon file or a game save, each Pokemon in it as the bank would keep it (docs/gui.md, Importing). A
@@ -723,7 +744,7 @@ JsonObject Imported(JsonObject request, PKM source, string where)
         if (source.GetType() == game.Blank().GetType())
         {
             var la = new LegalityAnalysis(source);
-            return la.Valid ? (key, source, la, []) : throw new InvalidDataException(Plain(la));
+            return Accepted(la) ? (key, source, la, []) : throw new InvalidDataException(Plain(la));
         }
     // What HOME's way in takes off: the held item goes back to the bag, and Pal Park and Poke Transfer
     // refuse a Pokemon knowing an HM. The file is left as it is, so the item and moves stay in that game.
@@ -788,16 +809,19 @@ JsonObject Destinations(Game game, JsonObject request)
     var reply = new JsonObject();
     foreach (var (key, to) in games)
     {
-        string refusal;
+        string refusal, state = "";
         try
         {
-            refusal = Moved(game, to, data, tracker, Trainer(to, request).Item2).Refusal;
+            var (pk, la, why) = Moved(game, to, data, tracker, Trainer(to, request).Item2);
+            refusal = why;
+            if (pk is not null && la is not null)
+                state = TrackerState(pk, la);
         }
         catch (Exception e)
         {
             refusal = e.Message;
         }
-        reply[key] = new JsonObject { ["ok"] = refusal.Length == 0, ["reason"] = refusal };
+        reply[key] = new JsonObject { ["ok"] = refusal.Length == 0, ["reason"] = refusal, ["home_tracker"] = state };
     }
     return new JsonObject { ["games"] = reply };
 }
@@ -1189,11 +1213,18 @@ JsonObject Describe(Game game, PKM pk, LegalityAnalysis la)
         ["tracker"] = (pk is IHomeTrack home ? home.Tracker : 0).ToString(),
         ["encounter"] = la.EncounterOriginal.LongName,
         ["parsed"] = la.Parsed,
-        ["legal"] = la.Valid,
+        ["home_tracker"] = TrackerState(pk, la),
+        ["legal"] = Accepted(la),
         ["report"] = la.Report(displayLanguage),
-        ["problems"] = la.Valid ? "" : Plain(la),
+        ["problems"] = Accepted(la) ? "" : Plain(la),
     };
 }
+
+// "made" for a tracker this request filled, "empty" for one PKHeX wants and the record lacks.
+string TrackerState(PKM pk, LegalityAnalysis la)
+    => pk is IHomeTrack { HasTracker: true } home && madeTrackers.Contains(home.Tracker) ? "made"
+       : la.Results.Any(r => r.Result == LegalityCheckResultCode.TransferTrackerMissing) ? "empty"
+       : "";
 
 static byte[] EncryptedStored(PKM pk)
 {

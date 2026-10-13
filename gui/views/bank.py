@@ -67,7 +67,10 @@ class BankView:
 
     def enter(self, **_) -> None:
         self.visible = True
+        self.routes.clear()     # the HOME tracker setting may have changed what a move gives
         self.refresh(update=False)
+        if entry := self._entry():
+            threading.Thread(target=self._find_routes, args=(entry,), daemon=True).start()
 
     def leave(self) -> None:
         self.visible = False
@@ -176,6 +179,8 @@ class BankView:
             t.text(f"存入时间：{entry.when}", 12, t.FAINT),
             t.badge("合法", t.GREEN, "checkbox-on") if entry.legal else
             t.badge("PKHeX 检查未通过", t.AMBER, "warning-diamond"),
+            *([t.badge(translate(warning), t.AMBER, "warning-diamond")]
+              if (warning := pokemon.HOME_TRACKER_WARNINGS.get(entry.home_tracker)) else []),
         ], spacing=4, expand=True)
         controls = [ft.Row([Sprite(self.app, entry.species_id, entry.shiny, size=SIZE).control, about],
                            spacing=14, vertical_alignment=ft.CrossAxisAlignment.START)]
@@ -207,12 +212,13 @@ class BankView:
             route = routes.get(key, {"ok": False, "reason": ""})
             ok, chosen = route["ok"], key == self.target
             lines = translate(route["reason"]).split("\n")
+            warning = pokemon.HOME_TRACKER_WARNINGS.get(route.get("home_tracker", "")) if ok else None
             why = lines[0] + (f"（另有 {len(lines) - 1} 项原因）" if len(lines) > 1 else "") if not ok else (
-                "当前游戏" if key == entry.game else "按照 HOME 的规则传送")
+                "当前游戏" if key == entry.game else translate(warning) if warning else "按照 HOME 的规则传送")
             rows.append(ft.Container(ft.Row([
                 game_icon(key, 24),
                 ft.Column([t.text(NAMES[key], 13, t.TEXT if ok else t.FAINT, weight=ft.FontWeight.W_600),
-                           t.text(why, 11, t.MUTED if ok else t.FAINT, max_lines=1,
+                           t.text(why, 11, t.AMBER if warning else t.MUTED if ok else t.FAINT, max_lines=1,
                                   overflow=ft.TextOverflow.ELLIPSIS)], spacing=0, expand=True),
                 t.pixel_icon("chevron-right", color=t.BLUE) if chosen else ft.Container(),
             ], spacing=10), padding=ft.Padding(8, 6, 8, 6), border_radius=10,

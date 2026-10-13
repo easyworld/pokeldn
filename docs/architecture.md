@@ -59,7 +59,9 @@ A record that fails after a level or species change is repaired in steps, each o
 first legal result is kept:
 
 1. An event gift that reached the game only through HOME (Zeraora and Melmetal in Sword/Shield)
-   receives a HOME tracker. This precedes the refit, which would replace the event's fixed moves.
+   receives a HOME tracker when the HOME tracker setting is "made" ([The HOME tracker
+   setting](gui.md#the-home-tracker-setting)). This precedes the refit, which would replace the event's
+   fixed moves. Under "empty" the tracker stays unset and the missing tracker is the one problem accepted.
 2. Moves, relearn moves, TM and TR record flags, plus-move flags, mastery flags and Legends Arceus size
    are refitted. A suggested moveset holds TM and TR moves that are legal only with their record flags.
 3. An evolved record's ability is refreshed to the evolved species in the slot it was caught with.

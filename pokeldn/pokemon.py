@@ -51,10 +51,13 @@ class Service:
         self.lock = threading.Lock()
         self.proc = None
         self.species_cache: dict[str, list[dict]] = {}
+        # Settings.home_tracker; the app sets it, a run inherits it through the environment.
+        self.home_tracker = os.environ.get("POKELDN_HOME_TRACKER") or "empty"
 
     def _ask(self, request: dict) -> dict:
         if self.display_language != "en":
             request = {**request, "display_language": self.display_language}
+        request = {**request, "home_tracker": self.home_tracker}
         with self.lock:
             for attempt in range(2):
                 if self.proc is None or self.proc.poll() is not None:
@@ -183,13 +186,14 @@ class Service:
         return base64.b64decode(reply["data"])
 
     def move(self, source: str, game: str, data: bytes, tracker: int, trainer: dict) -> dict:
-        """The banked Pokemon as `game` takes it from `trainer`, legal there, or BuilderError with the reason."""
+        """The banked Pokemon as `game` takes it from `trainer`, legal there, or BuilderError with the reason.
+        `tracker` fills a HOME tracker only under home_tracker "made"."""
         return self._ask({"cmd": "move", "game": game, "source": source, "tracker": str(tracker),
                           "trainer": trainer,
                           "data": base64.b64encode(entity_bytes(source, data)).decode()})
 
     def destinations(self, source: str, data: bytes, tracker: int, trainer: dict) -> dict[str, dict]:
-        """Each game key -> {"ok", "reason"}: whether `move` would give a legal Pokemon there."""
+        """Each game key -> {"ok", "reason", "home_tracker"}: whether `move` would give a legal Pokemon there."""
         return self._ask({"cmd": "destinations", "game": source, "tracker": str(tracker), "trainer": trainer,
                           "data": base64.b64encode(entity_bytes(source, data)).decode()})["games"]
 
@@ -258,6 +262,10 @@ class Service:
 
 SERVICE = Service()
 atexit.register(SERVICE.close)
+
+
+# What a reply's "home_tracker" means for HOME (docs/gui.md, The bank).
+HOME_TRACKER_WARNINGS = {"empty": "PKHeX flags the missing HOME tracker", "made": "Can't be deposited in HOME"}
 
 
 def summary(info: dict) -> str:

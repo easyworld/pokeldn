@@ -27,9 +27,10 @@ class Entry:
     shiny: bool
     summary: str          # pokeldn.pokemon.summary
     legal: bool
-    tracker: int          # the HOME tracker a move to another game gives it, never 0
+    tracker: int          # the HOME tracker a move under the "made" setting gives it, never 0
     created: float
     origin: str           # the Received file it came from, "" when unknown
+    home_tracker: str     # "empty" or "made" when its record's tracker is one HOME did not issue, else ""
 
     @property
     def when(self) -> str:
@@ -79,7 +80,19 @@ def _entry(path: Path) -> Entry | None:
         tracker = 0
     return Entry(path.stem, str(path), game, int(meta.get("species_id") or 0), bool(meta.get("shiny")),
                  str(meta.get("summary", "")), meta.get("legal") is not False, tracker,
-                 float(meta.get("created") or 0), str(meta.get("origin", "")))
+                 float(meta.get("created") or 0), str(meta.get("origin", "")), _home_tracker(game, meta))
+
+
+# Before the setting, an import through HOME's conversion into a game with a tracker always made one.
+TRACKED = {"bdsp": "PB8", "swsh": "PK8", "pla": "PA8", "sv": "PK9", "za": "PA9"}
+
+
+def _home_tracker(game: str, meta: dict) -> str:
+    if "home_tracker" in meta:
+        return str(meta["home_tracker"])
+    imported = meta.get("imported")
+    converted = isinstance(imported, dict) and imported.get("from") not in (None, TRACKED.get(game))
+    return "made" if game in TRACKED and converted else ""
 
 
 def entries(folder=None) -> list[Entry]:
@@ -125,7 +138,7 @@ def _keep(game: str, content: bytes, info: dict, folder: Path, origin: str, bank
         "shiny": bool(info.get("shiny")), "summary": summary(info), "legal": bool(info.get("legal")),
         # HOME gives each Pokemon a tracker when it enters; a string, since JSON readers lose 64-bit precision.
         "tracker": str(int(info.get("tracker") or 0) or random.randrange(1, 1 << 63)), "created": time.time(),
-        "origin": origin, "sha256": digest, **extra,
+        "home_tracker": str(info.get("home_tracker", "")), "origin": origin, "sha256": digest, **extra,
     })
     return _entry(path)
 
@@ -162,7 +175,7 @@ def import_file(path: str, trainers: dict[str, dict], folder=None) -> Imported:
     """Bank each Pokemon in a Pokemon file or a game save PKHeX reads; the file is only read [docs/gui.md,
     Importing]. A record imported once is not imported again, even after it left the bank in a trade.
     `trainers` maps each game to who receives a Pokemon HOME moves there. OSError or BuilderError."""
-    from pokeldn.pokemon import SERVICE, BuilderError
+    from pokeldn.pokemon import HOME_TRACKER_WARNINGS, SERVICE, BuilderError
     folder = Path(folder or BANK)
     source = Path(path)
     if source.stat().st_size > IMPORT_LIMIT:
@@ -183,7 +196,9 @@ def import_file(path: str, trainers: dict[str, dict], folder=None) -> Imported:
                 record["game"], base64.b64decode(record["data"]), record, folder, str(source), banked,
                 imported={"file": source.name, "where": record["where"], "from": record["source"],
                           "notes": record["notes"]})
-            state, detail = ("already", "") if entry is None else ("banked", " · ".join(record["notes"]))
+            warning = HOME_TRACKER_WARNINGS.get(record["home_tracker"])
+            state, detail = ("already", "") if entry is None else (
+                "banked", " · ".join([*record["notes"], *([warning] if warning else [])]))
             if key not in seen:
                 seen.add(key)
                 folder.mkdir(parents=True, exist_ok=True)
@@ -230,7 +245,7 @@ def offer(entry: Entry, game: str, trainer: dict) -> dict:
     reply = SERVICE.move(entry.game, game, data(entry), entry.tracker, trainer)
     return {"file": SERVICE.keep(game, reply), "summary": summary(reply), "species": reply["species_id"],
             "shiny": reply["shiny"], "legal": reply["legal"], "encounter": reply["encounter"],
-            "moves": reply["moves"], "report": "", "bank": entry.id}
+            "moves": reply["moves"], "report": "", "home_tracker": reply["home_tracker"], "bank": entry.id}
 
 
 def queued(settings, entry_id: str) -> list[str]:

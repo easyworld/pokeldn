@@ -8,7 +8,8 @@ import flet as ft
 import serial
 
 from gui import board
-from pokeldn import plugins
+from gui.localization import SERVICE
+from pokeldn import plugins, pokemon
 from pokeldn.app import settings, update
 from pokeldn.app.paths import SESSION
 from gui.views.widgets import on_ui
@@ -40,6 +41,7 @@ class App:
         self.page = page
         SESSION.mkdir(parents=True, exist_ok=True)
         self.settings = settings.load()
+        pokemon.SERVICE.home_tracker = SERVICE.home_tracker = self.settings.home_tracker
         self.plugin_stopped = plugins.turn_off_the_one_that_stopped(self.settings)   # and watches this start
         self.picker = ft.FilePicker()
         self.clipboard = ft.Clipboard()

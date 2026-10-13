@@ -5,8 +5,9 @@ import threading
 import flet as ft
 
 from gui import theme as t
+from gui.localization import SERVICE
 from gui.app import keys_found
-from pokeldn import __version__
+from pokeldn import __version__, pokemon
 from pokeldn.app.paths import SESSION
 from pokeldn.app.sprites import CACHE
 from pokeldn.app.settings import LANGUAGES, switch_ids_valid
@@ -111,6 +112,10 @@ class SettingsView:
             t.card('串口波特率', speed, '电脑与开发板的通信速率。除非指南另有要求，请保留默认值。'),
             switch("board_trace", '记录开发板串口通信',
                    '在会话记录中加入开发板计数器和每条串口消息。仅在排查无线通信问题时按要求启用。'),
+            t.card("HOME 追踪码", t.dropdown([("empty", "留空（默认）"), ("made", "生成追踪码")],
+                                            s.home_tracker, on_select=lambda e: self._home_tracker(e.control.value)),
+                   "设置银行与宝可梦生成器如何处理跨游戏传送或神秘礼物宝可梦的 HOME 追踪码。"
+                   "留空时 PKHeX 会提示缺少追踪码；自行生成的追踪码会被 HOME 拒绝。"),
             t.card('宝可梦图像', ft.Row([t.button('清除缓存', self._clear_sprites, "refresh",
                                                         filled=False), self.sprite_state], spacing=10),
                    '像素图像来自 PokeAPI，首次下载后缓存在此电脑上。没有图像也能使用应用。',
@@ -152,6 +157,10 @@ class SettingsView:
             t.card(f'关于 pokeldn {__version__}', ft.Row([link(label, url) for label, url in LINKS], spacing=4),
                    'pokeldn 使用 AGPLv3 许可，宝可梦由 PKHeX.Core（GPLv3）检查。'),
         ]
+
+    def _home_tracker(self, value: str) -> None:
+        self.save("home_tracker", value)
+        pokemon.SERVICE.home_tracker = SERVICE.home_tracker = value
 
     def _toggle_advanced(self, e) -> None:
         self.show_advanced = not self.show_advanced
