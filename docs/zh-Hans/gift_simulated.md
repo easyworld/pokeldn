@@ -13,7 +13,7 @@ Let's Go! 皮卡丘／伊布、晶灿钻石／明亮珍珠、传说 阿尔宙斯
 | 朱／紫 | `sv-gift-host` | 交换（主机），`bin/sv_host.py`（[为游戏机主持](sv.md#hosting-for-a-console)） | `--trade-offer` |
 | 传说 Z-A | `za-gift-host` | 交换（主机），`bin/za_host.py` | `--trade-offer` |
 
-各工具使用对应游戏交换主机的入口、固定参数、连接密码（晶灿钻石／明亮珍珠使用房间密码）和“每次运行使用新 PID”，另加“按接收玩家生成”。它位于游戏交换工具之后（`catalog.simulated_gift`）。操作流程与主机相同，先选择活动宝可梦，再在游戏机上提供此存档捕获的宝可梦。
+各工具使用对应游戏交换主机的入口、固定参数及连接密码（晶灿钻石／明亮珍珠使用房间密码），可按顺序提供最多六只活动宝可梦，另加“按接收玩家生成”。它位于游戏交换工具之后（`catalog.simulated_gift`）。玩家每接收一份礼物都需提供一只宝可梦，最后一次交换后退出；主机在交换之间保持会话。
 
 <a id="the-gifts"></a>
 
@@ -90,7 +90,7 @@ HOME 分发时写入追踪码。Let's Go 没有 HOME 追踪码，其美录坦无
 
 ## 按接收玩家生成
 
-“按接收玩家生成”（`--for-receiver`，应用默认开启）在交换时按游戏机存档生成礼物，使宝可梦像该存档自行领取卡片一样归玩家所有。它适用于以接收玩家为初训家的礼物；卡片有自己的初训家时按原样提供，应用锁定并关闭该开关。必须有当前训练家才合法的礼物也如此：接收存档与宝可梦初训家相同时会清除当前训练家（[交换改写的内容](sv.md#what-a-trade-rewrites)），PKHeX 随后会拒绝 HOME 的新叶喵、呆火鳄、润水鸭、菊草叶、暖暖猪和小锯鳄（“Current handler cannot be the OT”）。`gift_event` 将此类卡片标为 `handled`，使用设置中的训练家，让游戏机玩家成为其当前训练家（[神秘礼物 - 模拟](gui.md#mystery-gift---simulated)）。应用通过 `--gift-event KEY` 传递每份提供记录的卡片（`command._args`）。
+“按接收玩家生成”（`--for-receiver`，应用默认开启）在交换时按游戏机存档生成礼物，使宝可梦像该存档自行领取卡片一样归玩家所有。它适用于以接收玩家为初训家的礼物；卡片有自己的初训家时按原样提供。当队列中所有礼物均按原样提供时，应用锁定并关闭该开关。必须有当前训练家才合法的礼物也按原样提供：接收存档与宝可梦初训家相同时会清除当前训练家（[交换改写的内容](sv.md#what-a-trade-rewrites)），PKHeX 随后会拒绝 HOME 的新叶喵、呆火鳄、润水鸭、菊草叶、暖暖猪和小锯鳄（“Current handler cannot be the OT”）。`gift_event` 将此类卡片标为 `handled`，使用设置中的训练家，让游戏机玩家成为其当前训练家（[神秘礼物 - 模拟](gui.md#mystery-gift---simulated)）。应用通过 `--gift-event KEY` 传递每份提供记录的卡片（`command._args`）。
 
 启动时，主机用不会被任何卡片指定的训练家请求 `gift_event`（`receiver_gift.PROBE`），只有以接收玩家为初训家的副本会保留此训练家（`your_ot`）。这也会在游戏机加入前启动服务。五个主机共享 `pokeldn.receiver_gift`，其 `ReceiverGift` 代替主机已支持的在线交换伙伴（[启动器中的集成](online.md#in-a-launcher)）。
 

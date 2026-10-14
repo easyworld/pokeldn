@@ -260,8 +260,8 @@ def test_a_run_shows_its_pop_ups_in_the_app_and_gets_the_answers(tmp_path):
         "print('before')\n"
         "popup.confirm('Trade?', 'A shiny.', 'Trade', 'Skip', on_agree=lambda: (print('agreed'), answered.set()))\n"
         "popup.acknowledge('Note', 'stays')\n"
-        "answered.wait(10)\n"
         "try:\n"
+        "    answered.wait(10)\n"
         "    while True: time.sleep(0.02)\n"
         "except KeyboardInterrupt:\n"
         "    print('stopped')\n", encoding="utf-8")

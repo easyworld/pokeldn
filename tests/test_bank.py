@@ -57,7 +57,7 @@ def test_a_moved_pokemon_keeps_who_it_is_and_its_launcher_takes_it(service, vaul
     assert (moved["ot"], moved["trainer_id"]) == (built["ot"], built["trainer_id"])
     assert item["home_tracker"] == mode
     assert int(moved["tracker"]) == (entry.tracker if mode == "made" else 0) and entry.tracker != 0
-    routes = service.destinations(entry.game, bank.data(entry), entry.tracker, OWNER)
+    routes = bank.destinations(entry, OWNER)
     assert routes[target] == {"ok": True, "reason": "", "home_tracker": mode}
 
 
@@ -73,7 +73,7 @@ def test_a_move_home_would_refuse_is_refused_with_its_reason(service, vault, sou
     if why == "held item":
         options = {"held_item": 139}        # an Oran Berry
     entry, _ = receive(service, vault, source, species, options)
-    routes = pokemon.SERVICE.destinations(entry.game, bank.data(entry), entry.tracker, OWNER)
+    routes = bank.destinations(entry, OWNER)
     assert not routes[target]["ok"] and why in routes[target]["reason"]
     assert routes[source]["ok"]
     with pytest.raises(pokemon.BuilderError, match=why):
@@ -143,7 +143,7 @@ def test_a_completed_trade_takes_the_pokemon_out_of_the_bank_and_its_queue(vault
         log=SimpleNamespace(add=lambda line: None), offering=SimpleNamespace(update=lambda: None),
         partner_state=None)
     panel.render_offering = panel.refresh = panel.set_status = lambda *a, **k: None
-    panel.banked = [e.get("bank", "") for e in panel.offered_entries()]
+    panel.bank_trades = bank.TradeSession(panel.offered_entries())
     assert bank.queued(settings, entry.id) == [tool.key]
     panel._line("[done] trade 1 complete")
     assert bank.find(entry.id) is not None
@@ -151,6 +151,16 @@ def test_a_completed_trade_takes_the_pokemon_out_of_the_bank_and_its_queue(vault
     assert bank.find(entry.id) is None
     panel._exited(0)
     assert values["--offer-file"] == [{"file": "built.pk8", "species": 1}]
+    pending = []
+    panel.app.ui = pending.append
+    panel._line("[done] trade 3 complete")
+    next_entry = bank.deposit("swsh", str(source),
+                              {"species": "Pikachu", "species_id": 25, "level": 5, "legal": True})
+    panel.bank_trades = bank.TradeSession([{"bank": next_entry.id}])
+    panel.traded = 0
+    for callback in pending:
+        callback()
+    assert panel.traded == 0 and bank.find(next_entry.id) is not None
 
 
 def imported_from(entry):
@@ -225,3 +235,70 @@ def test_a_file_pkhex_cannot_read_is_refused(service, vault):
     path.write_bytes(b"not a pokemon")
     with pytest.raises(pokemon.BuilderError, match="neither a Pokemon nor a game save"):
         bank.import_file(str(path), TRAINERS)
+
+
+def test_an_external_frontend_imports_converts_and_completes_without_the_gui(service, tmp_path):
+    from pokeldn.app.received import trades_done
+    folder = tmp_path / "external-bank"
+    source = tmp_path / "fletchling.pk6"
+    original = bytes.fromhex(FIXTURE["pk6"])
+    source.write_bytes(original)
+    result = bank.import_file(str(source), TRAINERS, folder=folder)
+    assert result.count("banked") == 1
+    [entry] = bank.entries(folder=folder)
+    assert bank.find(entry.id, folder=folder) == entry
+    assert bank.destinations(entry, OWNER)["swsh"]["ok"]
+    offer = bank.offer(entry, "swsh", OWNER)
+    sent = service.check("swsh", offer["file"])
+    assert sent["legal"] and sent["species_id"] == 661
+    queue = [{"file": "built.pk8"}, offer]
+    session = bank.TradeSession(queue, folder=folder)
+    queue.clear()                       # the frontend can change its queue after starting a run
+    assert session.completed == 0 and bank.find(entry.id, folder=folder)
+    assert trades_done("[app] Exited with code 0.") is None
+    session.advance(trades_done("[done] trade 1 complete"))
+    assert bank.find(entry.id, folder=folder)  # a built offer completed; the Bank offer is still pending
+    for count in (-1, True, 1.5):
+        with pytest.raises(ValueError):
+            session.advance(count)
+    session.advance(trades_done("[done] trade 2 complete"))
+    assert bank.entries(folder=folder) == []
+    for count in (2, 1, 3):
+        session.advance(count)          # duplicates, older messages and generated extra trades
+    assert session.completed == 3
+    assert bank.import_file(str(source), TRAINERS, folder=folder).count("already") == 1
+    assert source.read_bytes() == original and Path(offer["file"]).is_file()
+
+
+def test_a_completion_can_retry_after_one_record_cannot_be_removed(tmp_path, monkeypatch):
+    for name in ("first", "second", "unoffered"):
+        (tmp_path / f"{name}.pk8").write_bytes(b"record")
+        (tmp_path / f"{name}.json").write_text("{}")
+    session = bank.TradeSession([{"bank": "first"}, {"bank": "second"}], folder=tmp_path)
+    unlink = Path.unlink
+
+    def fail(path, *args, **kwargs):
+        if path.name == "second.pk8":
+            raise PermissionError("locked record")
+        return unlink(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", fail)
+        with pytest.raises(PermissionError, match="locked record"):
+            session.advance(2)
+    assert session.completed == 1
+    assert not (tmp_path / "first.pk8").exists() and (tmp_path / "second.pk8").exists()
+    session.advance(2)
+    assert session.completed == 2
+    assert {p.name for p in tmp_path.iterdir()} == {"unoffered.pk8", "unoffered.json"}
+
+
+def test_removal_uses_an_exact_id_and_preserves_unrelated_files(tmp_path):
+    for name in ("pokemon.pk8", "pokemon.json", "pokemon.txt", "other.pk8", "other.json"):
+        (tmp_path / name).write_bytes(b"record")
+    before = {p.name for p in tmp_path.iterdir()}
+    for entry_id in ("*", "../pokemon", "[po]*"):
+        bank.remove(entry_id, folder=tmp_path)
+        assert {p.name for p in tmp_path.iterdir()} == before
+    bank.remove("pokemon", folder=tmp_path)
+    assert {p.name for p in tmp_path.iterdir()} == {"pokemon.txt", "other.pk8", "other.json"}

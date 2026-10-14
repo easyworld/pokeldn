@@ -20,7 +20,7 @@ from pokeldn.app.catalog import Field, Game, Tool   # noqa: F401  (re-exported f
 
 # docs/plugins.md, Versions: a removal or a change of meaning raises the major, an addition the level.
 API_VERSION = 1                    # the major this pokeldn serves
-API_LEVEL = 3                      # 1.1 api.data and api.level, 1.2 pokeldn.popup, 1.3 the program surface
+API_LEVEL = 4                      # 1.4 the bank; docs/plugins.md, Versions
 API_OLDEST = 1                     # an older major is refused
 DEPRECATED: dict[int, str] = {}    # a served major due for removal -> the release that drops it
 ENTRY_POINT_GROUP = "pokeldn.plugins"

@@ -219,7 +219,7 @@ class Service:
 
     def gift_events(self, game: str, trainer: dict) -> list[dict]:
         """The game's Mystery Gift Pokemon in PKHeX's event database, newest first, as `trainer` would receive
-        each: key, card_id, title, date, species, form, level, shiny (never, random or always), tera, the card's
+        each: key, card_id, title, date, species, form, form_id, level, shiny (never, random or always), tera, the card's
         own ot and language where it fixes them, ball, held_item, moves, legal, refused (`gift_event`'s), and
         home_tracker: a gift HOME gave has the tracker the HOME tracker setting gives it (HOME_TRACKER_WARNINGS)."""
         key = f"{game}:gift_events:{self.home_tracker}:{sorted(trainer.items())}"

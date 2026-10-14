@@ -56,6 +56,14 @@ class Preset:
     state: dict
     args: tuple = ()
 
+    @property
+    def species_id(self):
+        return self.state["species"] if self.state["kind"] in ("pokemon", "egg") else 0
+
+    @property
+    def shiny(self):
+        return self.state["kind"] == "pokemon" and bool(self.state.get("shiny"))
+
 
 def blank(**changes):
     state = {"kind": "pokemon", "species": 25, "level": 25, "form": 0, "moves": [84, 45, 86, 98],

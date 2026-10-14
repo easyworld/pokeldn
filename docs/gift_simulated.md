@@ -18,11 +18,10 @@ console's own save ([Made for the receiving player](#made-for-the-receiving-play
 | Scarlet/Violet | `sv-gift-host` | Trade (Host), `bin/sv_host.py` ([Hosting for a console](sv.md#hosting-for-a-console)) | `--trade-offer` |
 | Legends Z-A | `za-gift-host` | Trade (Host), `bin/za_host.py` | `--trade-offer` |
 
-Each tool is its game's Trade (Host) with its one offer picked from the game's gifts: the same entry
-point and fixed arguments, the host's code (Brilliant Diamond/Shining Pearl's room password) and New
-PID each run, plus Made for the receiving player. It sits after the game's trades
-(`catalog.simulated_gift`). The steps are the host's, with the event Pokemon chosen first and a
-Pokemon the save caught offered back.
+Each tool is its game's Trade (Host) with up to six event Pokemon in trade order: the same entry point,
+fixed arguments and host code (Brilliant Diamond/Shining Pearl's room password), plus Made for the
+receiving player. It sits after the game's trades (`catalog.simulated_gift`). The player offers a
+Pokemon back for each gift and leaves after the last trade. The host keeps the session between trades.
 
 ## The gifts
 
@@ -142,8 +141,8 @@ The console receives a traded event Pokemon:
 Made for the receiving player (`--for-receiver`, on by default in the app) makes the gift during the
 trade for the console's own save, so the Pokemon is the player's as if their save had received the
 card. It applies to a gift that names its receiver (Your OT in the list); one with its own trainer
-goes as made, and the app holds the switch off for it. So does a gift legal only with a handler: a
-save that receives a Pokemon whose OT is its own clears the handler
+goes as made. The app holds the switch off while every queued gift goes as made. A gift legal only
+with a handler also goes as made: a save that receives a Pokemon whose OT is its own clears the handler
 ([What a trade rewrites](sv.md#what-a-trade-rewrites)), and PKHeX then refuses HOME's Sprigatito,
 Fuecoco, Quaxly, Chikorita, Tepig and Totodile ("Current handler cannot be the OT"). `gift_event`
 marks such a card `handled`, and it goes with the trainer from Settings, whose copy the console's

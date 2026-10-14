@@ -253,6 +253,35 @@ def test_the_gift_is_made_for_the_save_when_it_offers_a_pokemon_it_caught(builds
     assert stage.joiner_offers == [CAUGHT] and gift.popups == []
 
 
+def test_six_mixed_gifts_trade_in_order_and_a_withdrawn_offer_keeps_its_round(builds):
+    copies = {"mew": record(species=151), "pikachu": record(species=25), "charizard": record(species=6)}
+    fixed = given(964)
+    rounds = [("", fixed), ("mew", PREVIEW), ("pikachu", PREVIEW), ("mew", PREVIEW),
+              ("", fixed), ("charizard", PREVIEW)]
+    made = []
+
+    def make(key, trainer, version):
+        made.append((key, trainer, version))
+        return copies[key], key
+    stage, gift, _, _, send = sv_host(rounds, make=make)
+    sent = []
+    for n in range(6):
+        if n == 1:
+            send(trade.KIND_OFFER, CAUGHT)
+            send(trade.KIND_CANCEL, b"\x00", step=1)
+            builds()
+            assert ticked(stage) == [] and stage.trades == 1
+        send(trade.KIND_OFFER, CAUGHT)
+        builds()
+        sent.extend(our_offers(ticked(stage)))
+        traded(stage, send)
+        builds()
+    assert sent == [fixed, copies["mew"], copies["pikachu"], copies["mew"], fixed, copies["charizard"]]
+    assert stage.trades == 6 and stage.joiner_offers == [CAUGHT] * 7
+    assert made[:4] == [(key, SAVE, "SL") for key in ("mew", "pikachu", "mew", "charizard")]
+    assert gift.popups == []
+
+
 def test_a_copy_made_after_the_console_backed_out_waits_for_its_next_offer(builds):
     stage, gift, made, said, send = sv_host([("1501-25-0-2", PREVIEW)])
     send(trade.KIND_OFFER, CAUGHT)

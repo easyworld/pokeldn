@@ -78,7 +78,7 @@ FRESH_PID = Field("--fresh-pid", "每次运行使用新 PID", "switch", default=
 FOR_RECEIVER = Field("--for-receiver", "按接收玩家生成", "switch", default=True, hidden=True,
                      your_ot=True,
                      help="以接收玩家为初训家的礼物，会在交换时根据游戏机的存档重新生成；训练家信息来自游戏机提供的宝可梦或会话数据。关闭此项或无法识别存档时，使用设置中的原始训练家。")
-GIFT_OFFER_BACK = ("提供一只在此存档捕获的宝可梦并确认，接收活动宝可梦；送出的宝可梦保存在“已接收”文件夹。")
+GIFT_OFFER_BACK = ("提供一只在此存档捕获的宝可梦并确认，接收活动宝可梦；送出的宝可梦保存在“已接收”文件夹。继续交换以接收队列中的各份礼物，最后一次交换结束后退出。")
 CHANNEL_HELP = "pokeldn 创建的网络所使用的无线信道。"
 CODE_HELP = "与玩家在游戏机上输入的密码一致。"
 
@@ -441,14 +441,14 @@ ZA = Game("za", '传说 Z-A', "PLZA", "za.md", (
 ))
 
 def simulated_gift(game: Game, host: Tool, steps: tuple[str, ...]) -> Tool:
-    """The trade host offering one of the game's Mystery Gift Pokemon, picked from PKHeX's event table, in
-    place of a built one, and made for the receiving player where the card names them
+    """The trade host offering up to a party's worth of the game's Mystery Gift Pokemon, picked from PKHeX's
+    event table, in place of built ones and made for the receiving player where each card names them
     (docs/gift_simulated.md)."""
     def gift(f: Field) -> tuple[Field, ...]:
         if f.kind != "pokemon":
             return f,
-        return (replace(f, label="神秘礼物宝可梦", required=True, events=True, queue=1, more="", count="",
-                        help=f"PKHeX 活动数据库中适用于{game.name}的所有礼物宝可梦，通过交换接收新生成的合法副本。"),
+        return (replace(f, label='神秘礼物宝可梦', required=True, events=True, queue=QUEUE,
+                        help=f"PKHeX 活动数据库中适用于{game.name}的礼物宝可梦。最多添加 {QUEUE} 份，一场会话中按顺序交换各份新生成的合法副本。"),
                 FOR_RECEIVER)
     return Tool(host.key.replace("-host", "-gift-host"), "神秘礼物 - 模拟", host.script,
                 "通过交换接收官方神秘礼物宝可梦，按训练家信息新生成合法副本。", steps, tuple(g for f in host.fields for g in gift(f)), fixed=host.fixed,
@@ -497,7 +497,7 @@ GAMES = (
                 (SV_SEARCH, "在交换画面提出交换并确认。")),
     with_online(with_gift(ZA, ("选择活动宝可梦，然后启动主机。",
                                "X → 连接游玩 → 连接交换 → 附近的玩家，输入相同密码并搜索。",
-                               "在交换盒子中选择此存档捕获的宝可梦，然后交换。接收活动宝可梦；送出的宝可梦保存在“已接收”文件夹。", "交换结束后按 B 退出。")),
+                               "在交换盒子中选择此存档捕获的宝可梦，然后交换。接收活动宝可梦；送出的宝可梦保存在“已接收”文件夹。继续交换以接收队列中的各份礼物，最后一次交换结束后退出。", "交换结束后按 B 退出。")),
                 ("X → 连接游玩 → 连接交换 → 附近的玩家，输入相同密码并搜索。",
                  "在交换盒子中选择宝可梦，提出交换，然后确认。")),
 )

@@ -154,7 +154,7 @@ class BankView:
     def _find_routes(self, entry: bank.Entry) -> None:
         trainer = self.app.settings.trainer(entry.game)
         try:
-            routes = SERVICE.destinations(entry.game, bank.data(entry), entry.tracker, trainer)
+            routes = bank.destinations(entry, trainer, service=SERVICE)
         except (OSError, pokemon.BuilderError) as error:
             routes = {key: {"ok": key == entry.game, "reason": str(error)} for key in NAMES}
 

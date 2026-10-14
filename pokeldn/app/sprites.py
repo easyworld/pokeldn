@@ -4,6 +4,7 @@ The app never needs a sprite: every call returns bytes or None, never raises, an
 than TIMEOUT on a dead network. docs/gui.md (Pokemon sprites) describes the cache layout.
 """
 import os
+import re
 import ssl
 import struct
 import threading
@@ -188,13 +189,21 @@ class SpriteCache:
         self.offline_until = 0.0
         self.lock = threading.Lock()
         self.slots = threading.BoundedSemaphore(4)
-        self.memory: dict[tuple[int, bool], bytes | None] = {}
+        self.memory: dict[tuple[int | str, bool], bytes | None] = {}
 
-    def _path(self, species: int, shiny: bool) -> Path:
+    def _path(self, species: int | str, shiny: bool) -> Path:
         return self.folder / ("shiny" if shiny else "normal") / f"{species}.png"
 
-    def cached(self, species: int, shiny: bool = False) -> bytes | None:
+    @staticmethod
+    def _valid_key(species: int | str) -> bool:
+        return ((type(species) is int and species > 0) or
+                (isinstance(species, str) and
+                 re.fullmatch(r"[1-9][0-9]*-[a-z][a-z0-9-]*", species) is not None))
+
+    def cached(self, species: int | str, shiny: bool = False) -> bytes | None:
         """The sprite on disk, or None. Never touches the network; a damaged file is removed."""
+        if not self._valid_key(species):
+            return None
         key = (species, shiny)
         if self.memory.get(key):
             return self.memory[key]
@@ -213,15 +222,17 @@ class SpriteCache:
             pass
         return None
 
-    def known_missing(self, species: int, shiny: bool = False) -> bool:
+    def known_missing(self, species: int | str, shiny: bool = False) -> bool:
+        if not self._valid_key(species):
+            return False
         try:
             return time.time() - self._path(species, shiny).with_suffix(".none").stat().st_mtime < MISSING_TTL
         except OSError:
             return False
 
-    def get(self, species: int, shiny: bool = False) -> bytes | None:
+    def get(self, species: int | str, shiny: bool = False) -> bytes | None:
         """The cached sprite, else one download. Blocks for at most TIMEOUT: call it from a worker thread."""
-        if not isinstance(species, int) or species < 1:
+        if not self._valid_key(species):
             return None
         data = self.cached(species, shiny)
         if data is not None or not self.online or self.known_missing(species, shiny):
@@ -229,9 +240,13 @@ class SpriteCache:
         if time.monotonic() < self.offline_until:
             return None
         with self.slots:
+            if (data := self.cached(species, shiny)) is not None or self.known_missing(species, shiny):
+                return data
+            if time.monotonic() < self.offline_until or not self.online:
+                return None
             return self._download(species, shiny)
 
-    def _download(self, species: int, shiny: bool) -> bytes | None:
+    def _download(self, species: int | str, shiny: bool) -> bytes | None:
         from pokeldn.app import update
         path = self._path(species, shiny)
         url = f"{self.base}/{'shiny/' if shiny else ''}{species}.png"

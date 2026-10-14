@@ -83,7 +83,8 @@ def locked(field: Field, tool: Tool, values: dict) -> str:
     if any(v.get("handled") for v in chosen):
         return "This gift is legal only with a handler, which its own trainer's save clears: it goes with your trainer."
     owners = ", ".join(dict.fromkeys(v["ot"] for v in chosen if v.get("ot")))
-    return f"This gift has its card's own trainer{f', OT {owners},' if owners else ''} and goes as made."
+    who = "This gift has its card's own trainer" if len(chosen) == 1 else "These gifts have their cards' own trainers"
+    return f"{who}{f', OT {owners},' if owners else ''} and {'goes' if len(chosen) == 1 else 'go'} as made."
 
 
 def _args(field: Field, value, tool: Tool) -> list[str]:

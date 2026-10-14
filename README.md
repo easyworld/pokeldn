@@ -67,6 +67,7 @@ See [app setup](docs/gui.md), [first launch](docs/gui.md#first-launch),
 | Installing or writing plugins | [Plugins](docs/plugins.md) |
 | Boards, firmware and optional screens | [ESP32 radio](docs/hardware_esp32.md) |
 | Running and building the desktop app from source | [Desktop builds](docs/gui.md#run-from-source) |
+| Building the experimental Android USB host | [Android prototype](examples/android/README.md) |
 | Code layout, Pokémon legality and tests | [Code organization](docs/architecture.md) |
 | Wireless protocols and reverse engineering | [Documentation index](docs/index.md) |
 
@@ -90,7 +91,10 @@ Contributors to this repository (GitHub does not list contributors on a fork):
   NPC partners: their draw from the RaidPoint and the host's choice of them; Simulated Mystery Gifts
   made for the receiving save, pop-ups for programs, Pokemon HOME's gifts among Sword/Shield's
   official events, a Tera Raid boss's scripted actions, and Legends Arceus's trainer gender
-- [elsardine6k7](https://github.com/elsardine6k7): friendship in the Pokemon builder and Showdown sets
+- [elsardine6k7](https://github.com/elsardine6k7): friendship in the Pokemon builder, Showdown sets and
+  the Simulated Mystery Gift queue
+- [junkmailkeep](https://github.com/junkmailkeep): Mystery Gift sprites and form previews in the gift
+  and trade editors
 
 - [kinnay](https://github.com/kinnay): the [LDN library](https://github.com/kinnay/LDN) this builds on,
   and the [NintendoClients wiki](https://github.com/kinnay/NintendoClients/wiki)

@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application' version '8.13.0'
+    id 'com.chaquo.python' version '17.0.0'
+}
+
+android {
+    namespace 'org.pokeldn.usbprobe'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'org.pokeldn.usbprobe'
+        minSdk 26
+        targetSdk 36
+        versionCode 2
+        versionName '0.2-python'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    signingConfigs {
+        debug {
+            def existingKey = System.getenv('POKELDN_ANDROID_KEYSTORE')
+            if (existingKey) storeFile file(existingKey)
+        }
+    }
+    buildTypes {
+        release {
+            debuggable false
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src/java']
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version '3.13'
+        buildPython(System.getenv('POKELDN_ANDROID_BUILD_PYTHON') ?: 'python3.13')
+        extractPackages '*'
+        pip {
+            install 'trio==0.33.0'
+            install 'pyserial==3.5'
+            install './wheels/python_netlink-0.0.15-py3-none-any.whl'
+            install 'pycryptodome==3.21.0'
+            install 'zstandard==0.23.0'
+            install 'websockets==17.1'
+            install 'certifi==2026.7.22'
+            install 'pytest==8.4.2'
+        }
+        pyc { src = false }
+    }
+    sourceSets {
+        main { srcDirs = ['src/python', 'staged'] }
+    }
+}

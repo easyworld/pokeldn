@@ -355,7 +355,7 @@ class GamesView:
                 out.append(t.card(item.label, note, trailing=control))
             elif kind == "field" and item.kind == "switch":
                 out.append(t.card(item.label, None, item.help, trailing=self.input(item)))
-            elif kind == "field" and item.kind == "pokemon" and item.queue > 1:
+            elif kind == "field" and item.kind == "pokemon" and item.queue > 1 and not item.events:
                 # "Add a trade" sits under the card, outside it.
                 queue = self.offer_queue(item)
                 queue.card = t.card(item.label, queue.control, self.description(item))
@@ -438,9 +438,17 @@ class GamesView:
             return NamePicker(self.app, self.game.key, field.kind, value, picked,
                               optional=not field.default).control
         if field.kind == "pokemon" and field.events:
-            first = command.offers(value)
-            return EventGiftPicker(self.app, self.game.key, first[0] if first else {},
-                                   lambda v: self.set_value(field, v)).control
+            values = self.values
+
+            def picked(chosen):
+                if self.values is values:
+                    self.set_value(field, chosen)
+                else:
+                    values[field.key] = chosen
+                    self.app.settings.save()
+
+            return EventGiftPicker(self.app, self.game.key, value, picked,
+                                   limit=field.queue).control
         if field.kind == "pokemon" and field.queue > 1:
             return self.offer_queue(field).control
         if field.kind == "pokemon":
@@ -574,7 +582,7 @@ class GamesView:
             border=ft.Border(top=ft.BorderSide(1, t.DIVIDER)), padding=ft.Padding(0, 12, 0, 12))
 
 
-def pokemon_row(app, species: int, shiny: bool, summary: str, tip: str = "") -> ft.Control:
+def pokemon_row(app, species: int, shiny: bool, summary: str, tip: str = "", form: int = 0) -> ft.Control:
     """A small sprite, then pokeldn.pokemon.summary on two lines: species, level and shininess, then the rest."""
     parts = summary.split(" · ")
     head = 3 if len(parts) > 2 and parts[2] in ("shiny", "异色") else 2
@@ -582,7 +590,7 @@ def pokemon_row(app, species: int, shiny: bool, summary: str, tip: str = "") -> 
                     overflow=ft.TextOverflow.ELLIPSIS)]
     if parts[head:]:
         lines.append(t.text(" · ".join(parts[head:]), 12, t.MUTED, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS))
-    return ft.Container(ft.Row([Sprite(app, species, shiny, size=MINI).control,
+    return ft.Container(ft.Row([Sprite(app, species, shiny, size=MINI, form=form).control,
                                 ft.Column(lines, spacing=0, expand=True)],
                                spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                         tooltip=tip or None)
@@ -607,7 +615,7 @@ class SessionPanel:
         self.partner_state = None                     # pokeldn.app.online.Partner
         self.offered = None                # what the offering card shows, to rebuild it only on a change
         self.traded = 0                    # the run's completed trades, from its `[done] trade N` lines
-        self.banked: list[str] = []        # the bank id of each offer the run trades, "" for a built one
+        self.bank_trades = bank.TradeSession([])
         self.running_tool: Tool | None = None
         self.restart = False               # Start on another tool: stop this run, then start that one
         self.received = ft.Container(visible=False)
@@ -752,7 +760,8 @@ class SessionPanel:
 
     def render_offering(self) -> None:
         entries = self.offered_entries()
-        shown = [(int(e.get("species") or 0), bool(e.get("shiny")), e.get("summary", "")) for e in entries]
+        shown = [(int(e.get("species") or 0), bool(e.get("shiny")), e.get("summary", ""),
+                  int(e.get("form_id", e.get("options", {}).get("form", 0)))) for e in entries]
         if (shown, self.traded) == self.offered:
             return
         self.offered = (shown, self.traded)
@@ -761,13 +770,13 @@ class SessionPanel:
         if not shown:
             self.offering.content = None
         elif len(shown) == 1:
-            species, shiny, summary = shown[0]
-            self.offering.content = t.section('正在提供', pokemon_row(self.app, species, shiny, summary_text(summary)),
+            species, shiny, summary, form = shown[0]
+            self.offering.content = t.section('正在提供', pokemon_row(self.app, species, shiny, summary_text(summary), form=form),
                                               trailing=done)
         else:
             tiles = []
-            for n, (species, shiny, summary) in enumerate(shown, start=1):
-                sprite = Sprite(self.app, species, shiny, size=MINI)
+            for n, (species, shiny, summary, form) in enumerate(shown, start=1):
+                sprite = Sprite(self.app, species, shiny, size=MINI, form=form)
                 traded = n <= self.traded
                 sprite.frame.tooltip = f"交换 {n}{('（已完成）' if traded else '')}: {summary}"
                 tiles.append(ft.Stack([sprite.control, ft.Container(
@@ -918,7 +927,7 @@ class SessionPanel:
         self.transfer.content, self.transfer.visible = None, False
         self.partner.content, self.partner.visible, self.partner_state = None, False, None
         self.traded = 0
-        self.banked = [entry.get("bank", "") for entry in self.offered_entries()]
+        self.bank_trades = bank.TradeSession(self.offered_entries())
         self.stopping = False
         self.app.process_label = tool.name
         self.running_tool = tool
@@ -939,12 +948,15 @@ class SessionPanel:
             self.app.ui(lambda p=partner: self.show_partner(p) if self.partner_state is p else None)
         n = received.trades_done(line)
         if n is not None and n > self.traded:
+            bank_trades = self.bank_trades
             def mark():
-                # A banked Pokemon leaves the bank once its trade completes.
-                for gone in self.banked[self.traded:n]:
-                    if gone:
-                        bank.remove(gone)
-                self.traded = n
+                if self.bank_trades is not bank_trades:
+                    return
+                try:
+                    bank_trades.advance(n)
+                except OSError as error:
+                    self.log.add(f"[app] 银行交换完成处理失败：{translate(str(error))}")
+                self.traded = bank_trades.completed
                 self.render_offering()
                 self.offering.update()
             self.app.ui(mark)

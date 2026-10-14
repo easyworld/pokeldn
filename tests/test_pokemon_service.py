@@ -329,6 +329,7 @@ def test_every_scarlet_violet_mystery_gift_pokemon_is_made_for_a_trade(service, 
         assert (built["legal"], built["home_tracker"]) == (True, event["home_tracker"]), event["title"]
         assert (built["tracker"] != "0") == (built["home_tracker"] == "made"), event["title"]
         assert built["species_id"] == event["species_id"]
+        assert built["form_id"] == event["form_id"]
         offer = service.check_bytes("sv", Path(pokemon.prepare_file("sv", built["file"], fresh=True)).read_bytes())
         assert offer["legal"], event["title"]
 

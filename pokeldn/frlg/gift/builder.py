@@ -29,6 +29,27 @@ STEPS = (("pokemon", "Pokemon"), ("item", "Item"), ("egg", "Egg"), ("battle", "W
          ("message", "Message"))
 FULL = "Oh, there is no room!\nPlease make room and come back."
 
+# Internal ids 277..411, matched by species name to pret/pokefirered's
+# include/constants/pokedex.h. Ids 252..276 are the old Unown slots, not Hoenn Pokemon.
+NATIONAL_SPECIES = (
+    252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266,
+    267, 268, 269, 270, 271, 272, 273, 274, 275, 290, 291, 292, 276, 277, 285,
+    286, 327, 278, 279, 283, 284, 320, 321, 300, 301, 352, 343, 344, 299, 324,
+    302, 339, 340, 370, 341, 342, 349, 350, 318, 319, 328, 329, 330, 296, 297,
+    309, 310, 322, 323, 363, 364, 365, 331, 332, 361, 362, 337, 338, 298, 325,
+    326, 311, 312, 303, 307, 308, 333, 334, 360, 355, 356, 315, 287, 288, 289,
+    316, 317, 357, 293, 294, 295, 366, 367, 368, 359, 353, 354, 336, 335, 369,
+    304, 305, 306, 351, 313, 314, 345, 346, 347, 348, 280, 281, 282, 371, 372,
+    373, 374, 375, 376, 377, 378, 379, 382, 383, 384, 380, 381, 385, 386, 358,
+)
+
+
+def national_species(species):
+    """A builder's GBA species id -> National Dex number for its app preview."""
+    if 0 <= species <= 251:
+        return species
+    return NATIONAL_SPECIES[species - 277] if 277 <= species <= 411 else 0
+
 
 def species_names():
     """[(internal id, name)] the GBA cartridge knows, by name."""
@@ -49,6 +70,7 @@ class Preset:
     summary: str
     args: tuple
     when: str = ""                  # where the player uses it, shown before sending
+    species_id: int = 0             # National Pokedex number for the app sprite, not a GBA internal id
 
     @property
     def state(self):
@@ -58,18 +80,19 @@ class Preset:
         return state_of(GIFT_REGISTRY.entry(self.args[1]).definition)
 
 
-def _card(slug, label, summary):
-    return Preset(slug, label, "Wonder Cards", summary, ("--gift", slug))
+def _card(slug, label, summary, species_id=0):
+    return Preset(slug, label, "Wonder Cards", summary, ("--gift", slug), species_id=species_id)
 
 
 EVENTS = "Event Pokemon"
 ANNIVERSARY = "10th Anniversary Pokemon"
 
 
-def _event(name, summary, group=EVENTS):
+def _event(name, species_id, summary, group=EVENTS):
     """A fresh copy PKHeX makes at launch [docs/frlg_gift.md, Event Pokemon]."""
     key = "event-" + re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return Preset(key, name, group, summary, ("--gift", events.GIFT_EVENT_POKEMON, "--event-pokemon", name))
+    return Preset(key, name, group, summary, ("--gift", events.GIFT_EVENT_POKEMON, "--event-pokemon", name),
+                  species_id=species_id)
 
 
 POKEMON_TOOLS = "Change a Pokemon"
@@ -80,9 +103,9 @@ STOPS_BOOSTS = " Turns off any game boost that is on."
 DELIVERY_MAN = "After the card is saved, talk to the delivery man on 2F of any Pokemon Center."
 
 
-def _team(slug, label, group, summary):
+def _team(slug, label, group, summary, species_id=0):
     """A GB-Link Team card [team_cards.py]: the player talks to the delivery man to use it."""
-    return Preset(slug, label, group, summary, ("--gift", slug), when=DELIVERY_MAN)
+    return Preset(slug, label, group, summary, ("--gift", slug), when=DELIVERY_MAN, species_id=species_id)
 
 
 def _code(key, label, summary, *args):
@@ -305,7 +328,7 @@ class Boosts:
 PRESETS = (
     _card("beast-cutscene", "Legendary beast", "Two berries, a Master Ball and a battle with the beast "
           "that follows the starter."),
-    _card("celebi", "Celebi", "A level 50 Celebi from the delivery man."),
+    _card("celebi", "Celebi", "A level 50 Celebi from the delivery man.", 251),
     _card("master-ball", "Master Ball", "One Master Ball."),
     _card("altering-cave", "Altering Cave", "Changes which Pokemon live in Altering Cave."),
     _card("wish-egg", "Wish Egg", "One of six eggs that knows Wish, picked by the console."),
@@ -314,7 +337,7 @@ PRESETS = (
     _card("starter-egg", "Starter egg", "An egg of one of the nine first partners."),
     _card("rare-berries", "Rare berries", "An Enigma, a Lansat and a Starf Berry."),
     _card("national-dex", "National Pokedex", "Upgrades the Pokedex to the National Pokedex."),
-    _card("porygon-tm-gift", "Porygon TM gift", "A Porygon and a TM."),
+    _card("porygon-tm-gift", "Porygon TM gift", "A Porygon and a TM.", 137),
     _card("solrock-stamp", "Sun and Moon Rally: Solrock", "A rally stamp."),
     _card("lunatone-stamp", "Sun and Moon Rally: Lunatone", "A rally stamp."),
     _card("visiting-trainer", "Visiting trainer", "A trainer who waits in the Pokemon Center."),
@@ -371,21 +394,23 @@ PRESETS = (
           "The delivery man tells your Trainer ID and Secret ID."),
     _team("gender-swap", "New trainer name or look", MORE_GIFTS, "Rename yourself, or switch between boy and girl."),
     _team("rival-name", "Rename your rival", MORE_GIFTS, "Gives your rival a new name."),
-    _event("WISHMKR Jirachi", "The Colosseum Bonus Disc Jirachi, level 5."),
-    _event("CHANNEL Jirachi", "The Pokemon Channel Jirachi, level 5."),
-    _event("Aura Mew", "The Aura Mew, level 10."),
-    _event("MYSTRY Mew", "The MYSTRY Mew, level 10."),
-    _event("DOEL Deoxys", "The DOEL Deoxys, level 70."),
-    _event("SPACE C Deoxys", "The SPACE C Deoxys, level 70."),
-    _event("ROCKS Metang", "The ROCKS Metang, level 30, with the National Ribbon."),
-    *(_event(f"10 ANIV {name}", "Level 70, from the 10th anniversary.", ANNIVERSARY)
-      for name in ("Bulbasaur", "Charizard", "Blastoise", "Pikachu", "Alakazam", "Articuno", "Zapdos",
-                   "Moltres", "Dragonite", "Typhlosion", "Espeon", "Umbreon", "Raikou", "Entei", "Suicune",
-                   "Tyranitar", "Celebi", "Blaziken", "Absol", "Latias", "Latios")),
+    _event("WISHMKR Jirachi", 385, "The Colosseum Bonus Disc Jirachi, level 5."),
+    _event("CHANNEL Jirachi", 385, "The Pokemon Channel Jirachi, level 5."),
+    _event("Aura Mew", 151, "The Aura Mew, level 10."),
+    _event("MYSTRY Mew", 151, "The MYSTRY Mew, level 10."),
+    _event("DOEL Deoxys", 386, "The DOEL Deoxys, level 70."),
+    _event("SPACE C Deoxys", 386, "The SPACE C Deoxys, level 70."),
+    _event("ROCKS Metang", 375, "The ROCKS Metang, level 30, with the National Ribbon."),
+    *(_event(f"10 ANIV {name}", species, "Level 70, from the 10th anniversary.", ANNIVERSARY)
+      for species, name in ((1, "Bulbasaur"), (6, "Charizard"), (9, "Blastoise"), (25, "Pikachu"),
+                            (65, "Alakazam"), (144, "Articuno"), (145, "Zapdos"), (146, "Moltres"),
+                            (149, "Dragonite"), (157, "Typhlosion"), (196, "Espeon"), (197, "Umbreon"),
+                            (243, "Raikou"), (244, "Entei"), (245, "Suicune"), (248, "Tyranitar"),
+                            (251, "Celebi"), (257, "Blaziken"), (359, "Absol"), (380, "Latias"), (381, "Latios"))),
     _team("box-eggs", "Pokemon Box eggs", EVENTS, "A Swablu, Zigzagoon, Skitty or Pichu egg with a special move."),
-    _team("colosseum-pikachu", "Colosseum Pikachu", EVENTS, "The Japanese Colosseum bonus disc Pikachu. Its Japanese trainer name shows as dots."),
-    _team("ageto-celebi", "AGETO Celebi", EVENTS, "The Japanese Colosseum bonus disc Celebi. Its Japanese trainer name shows as dots."),
-    _team("mattle-ho-oh", "MATTLE Ho-Oh", EVENTS, "The Ho-Oh Colosseum gave for 100 Mt. Battle wins."),
+    _team("colosseum-pikachu", "Colosseum Pikachu", EVENTS, "The Japanese Colosseum bonus disc Pikachu. Its Japanese trainer name shows as dots.", 25),
+    _team("ageto-celebi", "AGETO Celebi", EVENTS, "The Japanese Colosseum bonus disc Celebi. Its Japanese trainer name shows as dots.", 251),
+    _team("mattle-ho-oh", "MATTLE Ho-Oh", EVENTS, "The Ho-Oh Colosseum gave for 100 Mt. Battle wins.", 250),
     Preset("news-pokeldn", "One berry in Cerulean City", "Wonder News",
            "A short news; the man in Cerulean City hands over a berry.", ("--news", "pokeldn")),
     Preset("news-berry", "Ten-line news", "Wonder News", "A long news that scrolls, with a berry.",

@@ -43,9 +43,9 @@ def translate(value: str) -> str:
     gift_language = re.fullmatch(r"card (\d+) gave it in (.+) alone, never to a save in (.+)", value)
     if gift_language:
         return f"卡片 {gift_language[1]} 仅以{translate(gift_language[2])}分发，无法提供给{translate(gift_language[3])}存档"
-    gift_owner = re.fullmatch(r"This gift has its card's own trainer(?:, OT (.+),)? and goes as made\.", value)
+    gift_owner = re.fullmatch(r"(This gift has its card's own trainer|These gifts have their cards' own trainers)(?:, OT (.+),)? and (?:goes|go) as made\.", value)
     if gift_owner:
-        return "此礼物具有活动卡片指定的初训家" + (f"（OT：{gift_owner[1]}）" if gift_owner[1] else "") + "，按原样提供。"
+        return ("此礼物具有活动卡片指定的初训家" if gift_owner[1].startswith("This") else "这些礼物具有各自活动卡片指定的初训家") + (f"（OT：{gift_owner[2]}）" if gift_owner[2] else "") + "，按原样提供。"
     fallback = re.fullmatch(r"Neither the Pokemon the console offered nor the session can say whose save this is: (.+)\. The gift goes with the trainer from Settings instead\. Offer a Pokemon caught in this save to receive one made for its own trainer\.", value)
     if fallback:
         return f"提供的宝可梦和会话均无法识别存档训练家：{translate(fallback[1])}。改用设置中的训练家生成礼物。提供一只此存档捕获的宝可梦，即可按存档初训家生成。"

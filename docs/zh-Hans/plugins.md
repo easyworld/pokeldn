@@ -306,6 +306,7 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 | 1.1 | `api.data`、`api.level`、`pokeldn.plugins.data_folder(id)` |
 | 1.2 | `pokeldn.popup` |
 | 1.3 | 程序接口：生成器、礼物文件、PKHeX 和开发板 |
+| 1.4 | 银行导入、记录、目的地、提供记录和交换完成处理 |
 
 <a id="the-api-version-1"></a>
 
@@ -317,7 +318,7 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 | `api.add_game(game, icon="")` | 添加游戏分组及工具 |
 | `api.add_radio(scheme, install, label="")` | 添加无线适配器 |
 | `api.folder` | 插件文件夹（`Path`），Python 包则为 None |
-| `api.version`、`api.level` | 当前 API 主版本和级别，`1` 和 `3` |
+| `api.version`、`api.level` | 当前 API 主版本和级别，`1` 和 `4` |
 | `api.data` | 更新时保留的目录，首次使用时创建（1.1） |
 | `pokeldn.plugins.data_folder(id)` | 从工具脚本访问同一目录（1.1） |
 | `Tool`、`Field`、`Game` | 应用目录类型，从 `pokeldn.plugins` 导入 |
@@ -330,7 +331,9 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 
 <a id="the-program-surface-13"></a>
 
-## 程序接口（1.3）
+<a id="the-program-surface-13-bank-added-in-14"></a>
+
+## 程序接口（1.3，银行功能于 1.4 加入）
 
 插件或基于 pokeldn 源码的独立程序（触摸屏前端、脚本）可使用与应用相同的代码生成礼物和宝可梦、管理开发板。API 主版本 1 内，这些名称保持含义不变；`tests/test_plugin_surface.py` 逐项验证解析。
 
@@ -352,5 +355,56 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 | `pokeldn.frlg.gift.builder.blank()`、`compile(state)`、`describe(state, name)` | 神奇卡片、神奇新闻及游戏机代码对应的同类接口 |
 | `gui.board.ports()`、`identify(port, blink=)`、`detect_chip(port)` | 串口及开发板运行内容：`.firmware`、`.firmware_version`、`.protocol`、`.current`（协议与当前 pokeldn 相同） |
 | `gui.board.download_firmware(say=)`、`image_for(kind, chip)`、`image_version(path)`、`flash(port, kind=)` | 按 SHA-256 核验发布镜像、为芯片选择镜像、读取版本及检查芯片后刷写 |
+| `pokeldn.app.bank.library()` | 默认银行目录，返回 `Path`；列出记录不会创建目录（1.4） |
+| `pokeldn.app.bank.Entry`、`Imported`、`ImportedPokemon` | 下文说明的银行结果类型（1.4） |
+| `pokeldn.app.bank.Imported.count(state)` | 指定状态的导入结果数量（1.4） |
+| `pokeldn.app.bank.entries(folder=)`、`find(entry_id, folder=)`、`data(entry)` | 按时间从新到旧列出记录、查找记录或返回 `None`、读取原生字节（1.4） |
+| `pokeldn.app.bank.import_file(path, trainers, folder=)` | 导入宝可梦文件或存档，不修改源文件，返回 `Imported`（1.4） |
+| `pokeldn.app.bank.deposit(game, source, info, folder=)` | 存入接收文件副本及 PKHeX 检查结果，返回 `Entry`；已存入相同字节时返回 `None`（1.4） |
+| `pokeldn.pokemon.SERVICE.check(game, path)` | 用 PKHeX 检查原生接收记录，返回供 `bank.deposit` 使用的 `info` 字典，包含合法性结论（1.4） |
+| `pokeldn.app.bank.destinations(entry, trainer)`、`offer(entry, game, trainer)` | 各游戏转换可用性，以及转换到指定游戏的提供记录（1.4） |
+| `pokeldn.app.bank.edit(entry, fields)`、`remove(entry_id, folder=)` | 修改昵称、提升等级、招式或携带道具，返回更新后的 `Entry`；明确删除记录及元数据（1.4） |
+| `pokeldn.app.bank.TradeSession(offers, folder=)` | 保存单次任务按顺序排列的提供字典快照，包含没有银行 ID 的记录（1.4） |
+| `pokeldn.app.bank.TradeSession.advance(count)` | 应用已确认的累计交换数，返回已处理最大计数 `.completed`；重复或更旧计数不改变记录（1.4） |
+| `pokeldn.app.received.trades_done(line)` | 解析启动器 `[done] trade N complete` 中的累计计数，或返回 `None`（1.4） |
 
 从应用或 `python -m pokeldn` 启动的任务各为独立进程：向该 PID 发送 SIGINT，15 秒后仍未退出再发 SIGTERM。不要按名称匹配启动器（`pkill -f`），否则会结束其他程序启动的任务。
+
+<a id="bank-integrations-14"></a>
+
+## 银行集成（1.4）
+
+其他 Python 前端使用与桌面银行相同的 `pokeldn.app.bank` 模块，自行管理提供队列和进程生命周期。应用设置、队列辅助函数及银行元数据文件仍属内部实现。转换使用现有 PKHeX 辅助程序，源码安装通过 `dotnet build -c Release services/pkhex` 构建。
+
+`Entry` 提供 `id`、`path`、`game`、`species_id`、`shiny`、`summary`、`legal`、`tracker`、`created`、`origin`、`home_tracker`。`game` 是游戏目录键值，`created` 是 Unix 秒数，`path` 指向原生记录。`home_tracker` 为 `empty`、`made` 或空字符串，见 [HOME 追踪码设置](gui.md#the-home-tracker-setting)。
+
+`Imported` 提供 `name`、`save`、`pokemon` 和 `count(state)`。每个 `ImportedPokemon` 提供 `where`、`species`、`species_id`、`shiny`、`state`、`game`、`detail`，状态为 `banked`、`already` 或 `refused`。拒绝按记录判断，一只宝可梦失败不会阻止同一存档其他记录导入。`trainers` 将游戏键值映射到与生成器相同的训练家字典：`ot`、`tid`、`sid`、`language`、`gender`。导入会记住已导入记录，包括后来交换离开的记录。
+
+`destinations` 返回按游戏键值索引的字典，各项包含 `ok`、`reason`、`home_tracker`。`offer` 返回 `file`、`summary`、`species`、`shiny`、`legal`、`encounter`、`moves`、`report`、`home_tracker`、`bank`。`file` 为准备好的原生记录路径，`bank` 为来源条目 ID。准备提供不会移除银行原记录；保留提供文件直到任务结束，通过启动器 `--offer-file` 传入。银行记录不使用 `--fresh-pid`，以保留身份。桌面命令构建器自动处理；`python -m pokeldn TOOL` 只组装默认值，不接收银行提供字典，因此其他前端直接运行目录工具对应的脚本。
+
+```python
+from pokeldn.app import bank, received
+
+trainer = {"ot": "ASH", "tid": 1111, "sid": 2222, "language": 2, "gender": 0}
+games = ("frlg", "lgpe", "swsh", "bdsp", "pla", "sv", "za")
+result = bank.import_file("main", {game: trainer for game in games}, folder="tradebox-bank")
+entry = next(iter(bank.entries(folder="tradebox-bank")), None)
+if entry is None:
+    raise ValueError("No Pokemon available in the Bank.")
+routes = bank.destinations(entry, trainer)
+if not routes["swsh"]["ok"]:
+    raise ValueError(routes["swsh"]["reason"])
+offer = bank.offer(entry, "swsh", trainer)
+session = bank.TradeSession([offer], folder="tradebox-bank")
+
+def on_launcher_line(line):
+    count = received.trades_done(line)
+    if count is not None:
+        session.advance(count)
+```
+
+每次任务按精确提供顺序创建一个 `TradeSession`，也包含没有 `bank` 键值的生成记录。只传入已确认的完成计数，不使用进程退出码或队列数量。失败或停止时，未完成记录留在银行。累计计数可跳过中间消息；超出快照数量的继续交换仅计数，不移除额外记录。`advance` 以 `ValueError` 拒绝负数及非整数。每次成功移除后更新进度，遇到 `OSError` 可用相同计数重试。
+
+文件访问错误抛出 `OSError`；PKHeX 失败及拒绝转换或修改时抛出 `pokeldn.pokemon.BuilderError`。`deposit` 使用 `pokeldn.pokemon.SERVICE.check` 的检查结果，不额外检查合法性；用户提供的存档和宝可梦文件通过 `import_file` 导入。带 `folder` 的方法接受路径，默认使用 `library()`。`data`、`edit`、`destinations`、`offer` 使用 `Entry` 内的路径。导入 pokeldn 前设置 `POKELDN_DATA`，也可隔离辅助程序输出及前端其他应用文件。
+
+银行操作同步执行，PKHeX 工作应放在前端 UI 线程之外。同一银行目录同时只允许一个写入者，不支持不同应用并发导入、修改和交换。桌面应用运行时，TradeBox 应使用独立目录。其他前端自行移除队列中已完成的提供记录，`TradeSession` 仅修改银行。

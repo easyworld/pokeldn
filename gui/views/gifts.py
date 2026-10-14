@@ -10,14 +10,15 @@ import flet as ft
 
 from gui import drop, theme as t
 from gui.localization import SERVICE, translate, gift_description, event_text, event_label
-from gui.views.pokemon import NamePicker
+from gui.views.pokemon import NamePicker, pokemon_header
 from gui.views.saves import SavePanel
-from gui.views.widgets import PathField
+from gui.views.sprites import MINI, SIZE, Sprite
+from gui.views.widgets import PathField, PixelActivity
 from pokeldn import gifts, pokemon
 from pokeldn.app import command, gift_builder, gift_files, saves
 from pokeldn.frlg.gift import builder as frlg
 from pokeldn.frlg.rom import custom_code
-from pokeldn.swsh import gift_builder as swsh
+from pokeldn.swsh import gift_builder as swsh, wc8
 
 def species_frlg():
     """Use the cartridge's internal IDs with PKHeX Chinese names."""
@@ -67,6 +68,8 @@ class GiftBuilder:
         self.effects = ft.Column(spacing=4)
         self.status = t.text("", 12, t.MUTED)
         self.save_button = t.secondary_button('保存礼物文件', self._save, "download")
+        self.previews = []
+        self.forms = None
 
     # State
 
@@ -81,11 +84,17 @@ class GiftBuilder:
 
     def edit(self, key, value, rebuild=False, target=None) -> None:
         (self.state if target is None else target)[key] = value
+        if not rebuild and key in ("species", "icon", "form", "shiny"):
+            for sprite, values in self.previews:
+                species, shiny, form = values()
+                sprite.show(species, shiny, form=form)
         self.commit(rebuild)
 
     # Cards
 
     def cards(self) -> list[ft.Control]:
+        self.previews = []
+        self.forms = None
         mode = self.value["mode"]
         modes = t.segmented(gift_builder.modes(self.game), mode, self._mode, wrap=True)
         body = {"preset": self.presets, "event": self.events, "build": self.editor, "file": self.file,
@@ -127,7 +136,9 @@ class GiftBuilder:
             for preset in items:
                 if not hasattr(preset, "members"):
                     tiles.append(self._tile(preset.label, preset.summary, preset is selected,
-                                            lambda e, k=preset.key: self._pick(k)))
+                                            lambda e, k=preset.key: self._pick(k),
+                                            species_id=preset.species_id, shiny=getattr(preset, "shiny", False),
+                                            form=preset.state.get("form", 0) if self.game == "swsh" else 0))
                     continue
                 on = preset.settings(self.value["options"].get(preset.key))["on"] if preset is selected else []
                 tiles += [self._tile(b.label, b.summary, b.key in on, lambda e, p=preset, k=b.key: self._toggle(p, k),
@@ -141,7 +152,8 @@ class GiftBuilder:
             sections.append(t.section(translate(group), ft.Column(body, spacing=10)))
         return ft.Column(sections, spacing=14)
 
-    def _tile(self, label, summary, active, on_click, settings=False, warning="") -> ft.Control:
+    def _tile(self, label, summary, active, on_click, settings=False, warning="", species_id=0,
+              shiny=False, form=0) -> ft.Control:
         """The preset's name and full description, including any steps needed to use it. A `warning`
         tile has an amber outline, chosen or not, and says why."""
         head = [t.text(translate(label), 13, weight=ft.FontWeight.W_600, expand=True)]
@@ -154,6 +166,7 @@ class GiftBuilder:
                                  t.text(translate(warning), 12, t.AMBER, expand=True)], spacing=6))
         return ft.Container(ft.Row([
             t.pixel_icon("checkbox-on" if active else "checkbox", color=t.BLUE if active else t.FAINT),
+            *([Sprite(self.app, species_id, shiny, size=MINI, form=form).control] if species_id else []),
             ft.Column(lines, spacing=1, expand=True),
         ], spacing=10), padding=ft.Padding(10, 8, 10, 8), border_radius=10,
             tooltip=event_text(summary), border=ft.Border.all(1, t.AMBER if warning else t.BLUE if active else t.BORDER),
@@ -232,11 +245,7 @@ class GiftBuilder:
             words = search.value.casefold().split()
             shown = [c for c in cards if (not group["value"] or c["group"] == group["value"])
                      and all(w in f"{c['label']} {c['group']} {c['summary']} {labels[c['key']]} {event_text(c['summary'])}".casefold() for w in words)]
-            tiles.controls = t.grid_rows([self._tile(labels[c["key"]], c["summary"], c["key"] == self.value["event"],
-                                                     lambda e, k=c["key"]: self._event(k),
-                                                     warning=pokemon.HOME_TRACKER_WARNINGS["empty"]
-                                                     if official.from_home(c["record"]) else "")
-                                          for c in shown])
+            tiles.controls = t.grid_rows([self._event_tile(c) for c in shown])
             count.value = f"{len(shown)} / {len(cards)} 张卡片"
             if update:
                 tiles.update()
@@ -256,6 +265,16 @@ class GiftBuilder:
         intro = t.text("来自 projectpokemon EventsGallery 的真实活动卡片；Pokémon HOME 分组收录社区整理的 HOME 礼物卡片。每张卡片都通过游戏自身的卡片检查。", 12, t.MUTED)
         listing = ft.Container(ft.Column([tiles], scroll=ft.ScrollMode.AUTO), height=440)
         return ft.Column([intro, search, groups, count, listing], spacing=10)
+
+    def _event_tile(self, card) -> ft.Control:
+        raw = card["record"]
+        mon = wc8.read(raw) if raw[wc8.GIFT_KIND_AT] == wc8.GIFT_KIND_POKEMON else {}
+        return self._tile(event_label(self.game, card), card["summary"], card["key"] == self.value["event"],
+                          lambda e: self._event(card["key"]),
+                          warning=pokemon.HOME_TRACKER_WARNINGS["empty"]
+                          if self.module.OFFICIAL.from_home(raw) else "",
+                          species_id=mon.get("species", 0), shiny=mon.get("shiny_type") in (2, 3),
+                          form=mon.get("form", 0))
 
     def _event(self, key) -> None:
         self.value["event"] = key
@@ -291,6 +310,7 @@ class GiftBuilder:
     # Build your own
 
     def editor(self) -> ft.Control:
+        self.previews = []
         kind = self.state.get("kind")
         kinds = t.segmented([(k, translate(label), icon) for k, label, icon in self.module.KINDS], kind, lambda k: self.edit("kind", k, rebuild=True))
         form = getattr(self, f"{self.game}_{kind}")()
@@ -309,12 +329,37 @@ class GiftBuilder:
                       on_change=lambda e: self.edit(key, _number(e.control.value), target=target))
         return t.labeled_control(translate(label), box)
 
-    def name_field(self, label, kind, key, target=None, optional=True) -> ft.Control:
+    def name_field(self, label, kind, key, target=None, optional=True, preview=False) -> ft.Control:
         target = self.state if target is None else target
         names = species_frlg if self.game == "frlg" and kind == "species" else None
+
+        def changed(value):
+            if self.game == "swsh" and kind == "species":
+                target["form"] = 0
+                self.edit(key, _number(value), target=target)
+                self._load_forms()
+            else:
+                self.edit(key, _number(value), target=target)
+
         picker = NamePicker(self.app, self.game, kind, str(target.get(key) or ""),
-                            lambda v: self.edit(key, _number(v), target=target), optional=optional, names=names)
-        return t.labeled_control(translate(label), picker.control, expand=True)
+                            changed, optional=optional, names=names)
+        field = t.labeled_control(translate(label), picker.control, expand=True)
+        if kind != "species" or not preview:
+            return field
+        return ft.Row([field, self.pokemon_preview(target, key)], spacing=10, expand=True,
+                      vertical_alignment=ft.CrossAxisAlignment.END)
+
+    def pokemon_preview(self, target, key="species", size=MINI) -> ft.Control:
+        def values():
+            species = _number(target.get(key))
+            if self.game == "frlg":
+                return frlg.national_species(species), False, 0
+            return species, target.get("kind") == "pokemon" and bool(target.get("shiny")), _number(target.get("form"))
+
+        species, shiny, form = values()
+        sprite = Sprite(self.app, species, shiny, size=size, form=form)
+        self.previews.append((sprite, values))
+        return sprite.control
 
     def switch_row(self, label, key, help_, target=None) -> ft.Control:
         target = self.state if target is None else target
@@ -353,7 +398,7 @@ class GiftBuilder:
             t.labeled_control('卡片文字', ft.Column([line(n) for n in range(4)], spacing=6,
                                                             horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
                               horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
-            ft.Row([self.name_field('图标', "species", "icon", card, optional=False),
+            ft.Row([self.name_field('图标', "species", "icon", card, optional=False, preview=True),
                     self.number_field('卡片 ID', "flag_id", card)], spacing=10),
             self.switch_row('允许重复领取', "repeatable", '否则每个存档只能领取一次。', card),
             self.switch_row('允许玩家分享', "shareable", '神秘礼物 → 神奇卡片 → 发送。', card),
@@ -388,6 +433,8 @@ class GiftBuilder:
         else:
             fields = [self.text_field('消息', "text", step, multiline=True, min_lines=2, max_lines=4,
                                       hint='{PLAYER} 代表玩家姓名。每个文本框可容纳两行。')]
+        if kind in ("pokemon", "battle", "egg"):
+            fields = [pokemon_header(self.pokemon_preview(step, size=SIZE), fields, spacing=10)]
         tools = ft.Row([t.icon_button("chevron-up", lambda e: self._move_step(n, -1), '前移', disabled=n == 0),
                         t.icon_button("chevron-down", lambda e: self._move_step(n, 1), '后移',
                                       disabled=n == len(self.state["steps"]) - 1),
@@ -495,22 +542,74 @@ class GiftBuilder:
     # Sword / Shield
 
     def swsh_pokemon(self, egg=False) -> ft.Control:
-        rows = [ft.Row([self.name_field('种类', "species", "species", optional=False),
-                        *([] if egg else [self.number_field('等级', "level", width=72)])], spacing=10)]
+        self.forms = ft.Container()
+        fields = [self.name_field('种类', "species", "species", optional=False)]
+        if not egg:
+            fields += [self.number_field('等级', "level", width=90),
+                       t.labeled_control('异色', ft.Container(
+                           t.switch(bool(self.state.get("shiny")),
+                                    lambda e: self.edit("shiny", e.control.value)),
+                           width=64, height=t.CONTROL_HEIGHT, alignment=ft.Alignment.CENTER))]
+        header = [ft.Row(fields, spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)]
+        if not egg:
+            header.append(ft.Row([self.text_field('昵称', "nickname", limit=12),
+                                  self.text_field("OT", "ot", limit=12)], spacing=10))
+        rows = [pokemon_header(self.pokemon_preview(self.state, size=SIZE), header, spacing=10), self.forms]
+        self._load_forms()
         if not egg:
             rows += [ft.Row([self.name_field('携带道具', "bag", "item"), self.name_field('精灵球', "ball", "ball")],
                             spacing=10),
-                     ft.Row([self.text_field("昵称", "nickname", limit=12),
-                             self.text_field("OT", "ot", limit=12)], spacing=10),
-                     t.labeled_control("性格", t.dropdown(
-                         [("random", "随机")] + [(str(n), translate(name)) for n, name in enumerate(pokemon.NATURES)],
+                     t.labeled_control('性格', t.dropdown(
+                         [("random", '随机')] + [(str(n), translate(name)) for n, name in enumerate(pokemon.NATURES)],
                          "random" if self.state.get("nature") is None else str(self.state["nature"]),
                          on_select=lambda e: self.edit("nature", None if e.control.value == "random"
                                                        else int(e.control.value)))),
-                     self.switch_row("异色", "shiny", "收到的宝可梦为异色。"),
-                     self.switch_row("超极巨化", "gigantamax", "可进行超极巨化，适用于有超极巨化形态或能进化为该形态的种类。")]
-        rows += [self.moves(self.state), self.number_field("卡片 ID", "card_id")]
+                     self.switch_row('超极巨化', "gigantamax", '可进行超极巨化，适用于有超极巨化形态或能进化为该形态的种类。')]
+        rows += [self.moves(self.state), self.number_field('卡片 ID', "card_id")]
         return ft.Column(rows, spacing=10)
+
+    def _load_forms(self) -> None:
+        """Read game form choices off the UI thread; discard replies for an old editor or species."""
+        box, state = self.forms, self.state
+        species = _number(state.get("species"))
+        request = box.data = object()
+        if not species:
+            box.content = None
+            return
+        box.content = ft.Row([PixelActivity('正在加载形态'),
+                              t.text('正在读取此种类的可用选项…', 12, t.MUTED)], spacing=8)
+        try:
+            box.update()
+        except RuntimeError:
+            pass
+
+        def work():
+            try:
+                forms = SERVICE.options(self.game, species, self.app.settings.trainer(self.game))["forms"]
+                error = ""
+            except Exception as exc:
+                forms, error = [], str(exc) or type(exc).__name__
+
+            def show():
+                if (self.forms is not box or box.data is not request or self.state is not state
+                        or _number(state.get("species")) != species):
+                    return
+                if error:
+                    box.content = t.text(translate(error), 12, t.RED, selectable=True)
+                else:
+                    if forms and _number(state.get("form")) not in {f["id"] for f in forms}:
+                        self.edit("form", forms[0]["id"])
+                    box.content = (t.labeled_control('形态', t.dropdown(
+                        [(str(f["id"]), f["name"] or '普通') for f in forms],
+                        str(_number(state.get("form"))),
+                        on_select=lambda e: self.edit("form", int(e.control.value))))
+                        if len(forms) > 1 else None)
+                try:
+                    box.update()
+                except RuntimeError:
+                    pass
+            self.app.ui(show)
+        threading.Thread(target=work, daemon=True).start()
 
     def swsh_egg(self) -> ft.Control:
         return self.swsh_pokemon(egg=True)

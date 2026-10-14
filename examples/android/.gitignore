@@ -1,0 +1,9 @@
+/.gradle/
+/build/
+/staged/
+/tooling/
+/wheels/
+/local.properties
+*.apk
+*.keystore
+*.pstats

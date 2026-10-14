@@ -32,6 +32,27 @@ conversion.
   needs `sudo usermod -aG dialout $USER` (`uucp` on Arch); log out and back in after changing groups.
   See [Linux serial ports](#linux-serial-ports) for missing ports and brltty conflicts.
 
+## Android setup requirements
+
+The Android GUI requires a guided USB setup flow. The [developer prototype](../examples/android/README.md)
+contains the current native USB frontend. On the tested OnePlus CPH2621, enabling
+the phone's OTG connection setting powered and enumerated the connected ESP32C6 without
+replugging the cable. The current Android prototype has a USB permission prompt; the full
+guided flow remains to be implemented.
+
+| detected state | required guidance |
+|---|---|
+| No compatible USB device | Check the data-capable cable and connection; show relevant USB host or OTG setting instructions for the phone, including OnePlus's OTG connection toggle. Device absence alone cannot identify which check failed. |
+| Device present, USB permission missing or denied | Explain the Android USB access prompt and provide an explicit retry. |
+| Permission granted, board handshake fails | Check the board connection and supported radio firmware; show the actual error. |
+| Board answers the handshake | Show the detected board and firmware, then allow the game workflow to continue. |
+| Board disconnects or the user returns from Settings | Refresh detection and permission state, update the guidance and resume setup when the board is ready. |
+
+Settings guidance uses verified manufacturer-specific paths or searchable setting names, with
+a Settings shortcut where Android supports it. The flow presents the relevant next action and
+keeps setup progress visible. Developer tooling such as ADB and wireless debugging remains
+separate from user setup.
+
 ## Your trainer
 
 Settings, Your trainer is the original trainer of every Pokemon the app builds: a name, a gender, a
@@ -342,45 +363,14 @@ them. An app that finds a service running other code
 
 ## Pokemon sprites
 
-The sprites are the 96x96 PNGs behind `sprites.front_default` and `sprites.front_shiny` of
-`https://pokeapi.co/api/v2/pokemon/{id}`, read from `raw.githubusercontent.com/PokeAPI/sprites`
-(`sprites/pokemon/{id}.png`, `sprites/pokemon/shiny/{id}.png`). The JSON (300 KB per species) is not
-fetched; the sprite path is fixed by the id. All 1,025 National Dex numbers have both sprites; 1026
-returns 404. When a shiny sprite is missing, the normal one is shown.
+Pokemon images come from [PokeAPI](https://github.com/PokeAPI/sprites) and are downloaded on demand.
+Downloaded images are cached in `sprites/` in the app's data folder and remain available offline.
 
-| where | size |
-|---|---|
-| the trade picker, beside Species, shiny when Shiny is on | 96 px, the whole canvas |
-| the card of a Species field (Sword/Shield Mystery Gift), shiny when the tool's Shiny switch is on | 46 px tile |
-| Session panel, Offering: each queued offer in trade order, its summary as a tooltip | 46 px tile |
-| Session panel, Received: each Pokemon file the run saved, read by PKHeX, with its summary | 46 px tile |
+Settings, Pokemon sprites disables downloads; cached images still appear. The same settings section
+has a button to clear the sprite cache.
 
-A 96 px sprite is the whole canvas at 1:1, nearest-neighbour. A 46 px tile crops the canvas around the
-visible pixels (`pokeldn.app.sprites.bounds`) and scales them, smoothed, until the longer side is
-40 px, so every tile shows its Pokemon at one size. Visible boxes run from 28 px (Togepi) to the full
-96 px width (Lugia); a fixed 1:1 or 1:2 choice drew a 50 px sprite at 50 px and a 56 px one at 28.
-
-The Received list matches files by the run's `{stamp}`, which every tool's output path carries; a
-launcher adds `-N` for trade N (`pokeldn.pokemon.trade_path`) or writes into a folder or prefix so
-named. A file still growing is read again on the next second. What the list holds is what the
-launcher wrote: some launchers write the console's offer when the console picks it, before the trade
-completes.
-
-The cache is `sprites/` in the app's data folder, one file per sprite under `normal/` and `shiny/`.
-A sprite downloads on first use and is read from disk afterwards, with no network access. Rules:
-
-| situation | behaviour |
-|---|---|
-| no network, nothing cached | the pixelarticons `circle-question` icon; no error; the next attempt waits 60 s |
-| HTTP 404 | a `{id}.none` marker; not asked again for 7 days |
-| reply that is not a PNG, or over 200 KB | not cached |
-| PNG with a colour profile, text or other extra chunks | saved and shown without them: only IHDR, PLTE, tRNS, IDAT and IEND are kept (26 of the 2,050 sprites, most of them Gen 9) |
-| damaged cached file | deleted, downloaded again |
-| data folder not writable | the sprite shows for the session and is not saved |
-| Settings, Pokemon sprites off | the cache is read, nothing is downloaded |
-
-Settings has the switch and a button that empties the cache. `POKELDN_SPRITE_BASE` replaces the sprite
-host, for tests (`tests/test_sprites.py`).
+An unavailable species or form shows a placeholder. If a shiny image is unavailable, the normal
+image of the same form is shown. Missing images do not prevent building or trading Pokemon.
 
 ## Raid events
 
@@ -453,17 +443,21 @@ given; a hover shows the moves. Twenty-four show at a time, Show more adds as ma
 narrows them by any word a tile shows, the ball, a move or the card number. Ten tiles or fewer show
 whole; more scroll in a box of their own (`event_gifts.FIT`).
 
-A click makes a fresh copy for the trainer in Settings and keeps it with the built Pokemon. It becomes
-the trade's offer, shown under the list with its legality, moves and OT. A copy keeps the trainer it
-was made with: pick the gift again after changing the trainer. A gift that names its receiver but
+A click makes a fresh copy for the trainer in Settings and appends it to the queue above the list,
+with its legality, moves and OT. Up to six gifts trade in order in one hosted session. The same
+event can be picked several times; each pick makes its own copy. Remove a queued gift with its
+close button before Start. A full queue holds further picks off until a gift is removed.
+A copy keeps the trainer it was made with: remove it and pick the gift again after changing the trainer.
+A gift that names its receiver but
 never reached saves in the trainer's language, such as Let's Go's Chinese Meltan and Melmetal for any
 other, has an illegal tile that says why, and a click on it says so and keeps the offer
 ([Saves a card reached](gift_simulated.md#saves-a-card-reached)). With Made for the receiving player
 (Advanced tab) on, the default, the trade makes a gift that names its receiver again for the console's own save
 ([Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)). A gift with its
-card's own trainer goes as made: picking it turns the switch off, disabled and faded, and the note
-under it names that trainer (`command.locked`). The launch then passes no `--for-receiver`. Picking a
-gift that names its receiver gives the switch back as it was set.
+card's own trainer goes as made. While every queued gift goes as made, the switch is off, disabled
+and faded, and the note under it says why (`command.locked`). The launch then passes no
+`--for-receiver`. A queue containing a gift that can name its receiver gives the switch back as it
+was set; the host applies it to each eligible card.
 
 A gift HOME gave, on any game but Let's Go, has the tracker the HOME tracker setting gives it
 ([The HOME tracker setting](#the-home-tracker-setting)). Its tile is outlined in amber and, as the

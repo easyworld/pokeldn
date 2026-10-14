@@ -1123,6 +1123,7 @@ JsonObject GiftEventList(Game game, JsonObject request)
             ["date"] = date?.ToString("yyyy-MM-dd") ?? "",
             ["species"] = strings.specieslist[gift.Species], ["species_id"] = gift.Species,
             ["form"] = gift.Form == 0 ? "" : ShowdownParsing.GetStringFromForm(gift.Form, strings, gift.Species, game.Context),
+            ["form_id"] = gift.Form,
             ["level"] = pk.CurrentLevel,
             // Never, may be (rolled like a wild one) or always.
             ["shiny"] = gift.Shiny switch

@@ -1,6 +1,7 @@
 """The Mystery Gift - Simulated card: every Pokemon gift the game gave, from PKHeX's event database
-(pokeldn.pokemon.Service.gift_events), searched by anything a tile shows. The one picked is made fresh
-and legal for the app's trainer, and the trade offers it like a built Pokemon (docs/gift_simulated.md)."""
+(pokeldn.pokemon.Service.gift_events), searched by anything a tile shows. Up to the field's queue limit are
+picked in order, each made fresh and legal for the app's trainer, then offered by the trade host
+(docs/gift_simulated.md)."""
 
 import threading
 from datetime import date
@@ -12,6 +13,7 @@ from gui.localization import SERVICE, translate, summary_text
 from gui.views.sprites import MINI, Sprite
 from gui.views.widgets import PixelActivity
 from pokeldn import pokemon as builder
+from pokeldn.app.command import offers
 
 PAGE = 24   # tiles shown at once, and how many Show more adds: each tile loads a sprite
 BOX = 440   # the height of the list's scroll box, for more tiles than FIT
@@ -66,11 +68,12 @@ def haystack(event: dict) -> str:
 
 
 class EventGiftPicker:
-    """`value` is what the trade field holds: a built Pokemon's entry with the event's key and title."""
+    """An ordered queue of built Pokemon entries, each with its event's key and title."""
 
-    def __init__(self, app, game: str, value: dict | None, on_change):
+    def __init__(self, app, game: str, value: dict | list[dict] | None, on_change, limit: int = 1):
         self.app, self.game, self.on_change = app, game, on_change
-        self.value = dict(value or {})
+        self.limit = max(1, int(limit))
+        self.values = [dict(v) for v in offers(value)[:self.limit] if v.get("file")]
         self.events: list[dict] | None = None
         self.shown = PAGE
         self.busy = False
@@ -78,14 +81,15 @@ class EventGiftPicker:
                               on_change=self._searched)
         self.count = t.text("", 12, t.MUTED)
         self.tiles = ft.Column(spacing=6, tight=True)
-        self.more = t.secondary_button("显示更多", self._more, "chevron-down", visible=False)
+        self.more = t.secondary_button('显示更多', self._more, "chevron-down", visible=False)
+        self.status = ft.Container()
         self.result = ft.Container()
         self.scroller = ft.Column([self.tiles, ft.Row([self.more], alignment=ft.MainAxisAlignment.CENTER)],
                                   spacing=10)
         self.box = ft.Container(self.scroller)
-        self.control = ft.Column([ft.Row([self.search]), self.count, self.box, self.result], spacing=10)
-        self.tiles.controls = [ft.Row([PixelActivity("正在读取活动"),
-                                       t.text("正在读取 PKHeX 活动数据库…", 12, t.MUTED)], spacing=8)]
+        self.control = ft.Column([self.result, self.status, ft.Row([self.search]), self.count, self.box], spacing=10)
+        self.tiles.controls = [ft.Row([PixelActivity('正在读取活动'),
+                                       t.text('正在读取 PKHeX 活动数据库…', 12, t.MUTED)], spacing=8)]
         self._show_result()
         threading.Thread(target=self._load, daemon=True).start()
 
@@ -122,13 +126,16 @@ class EventGiftPicker:
     def _tile(self, event: dict) -> ft.Control:
         """An illegal copy's tile has a red outline, chosen or not, and says why; one with a HOME tracker
         warning, an amber one."""
-        chosen = event["key"] == self.value.get("event")
+        chosen = sum(event["key"] == value.get("event") for value in self.values)
+        disabled = self.busy or (self.limit > 1 and len(self.values) >= self.limit)
         shiny = event["shiny"] == "always"
         why, warned = problem(event), warning(event)
         head = [t.text(event["title"], 13, weight=ft.FontWeight.W_600, max_lines=1,
                        overflow=ft.TextOverflow.ELLIPSIS, expand=True)]
         if shiny:
-            head.append(t.pixel_icon("sparkles", size=12, color=t.AMBER, tooltip="异色"))
+            head.append(t.pixel_icon("sparkles", size=12, color=t.AMBER, tooltip='异色'))
+        if chosen and self.limit > 1:
+            head.append(t.text(f"已加入队列 {chosen} 份", 11, t.BLUE))
         lines = [ft.Row(head, spacing=6),
                  t.text(facts(event), 12, t.SOFT, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                  t.text(origin(event), 12, t.MUTED, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)]
@@ -138,12 +145,13 @@ class EventGiftPicker:
                                      t.text(note, 12, color, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
                                             expand=True)], spacing=6))
         return ft.Container(ft.Row([
-            Sprite(self.app, event["species_id"], shiny, size=MINI).control,
+            Sprite(self.app, event["species_id"], shiny, size=MINI, form=event.get("form_id", 0)).control,
             ft.Column(lines, spacing=0, expand=True),
         ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=ft.Padding(10, 8, 10, 8), border_radius=10, tooltip="、".join(translate(m) for m in event.get("moves", ())) or None,
             border=ft.Border.all(1, t.RED if why else t.AMBER if warned else t.BLUE if chosen else t.BORDER),
-            bgcolor=t.SELECTED if chosen else None, on_click=lambda e, key=event["key"]: self._pick(key))
+            bgcolor=t.SELECTED if chosen else None, disabled=disabled, opacity=0.5 if disabled else 1.0,
+            on_click=lambda e, key=event["key"]: self._pick(key))
 
     async def _searched(self, _e) -> None:
         self.shown = PAGE
@@ -162,24 +170,32 @@ class EventGiftPicker:
         except RuntimeError:    # the card was redrawn away
             pass
 
-    # The one picked
+    # The gifts picked
 
     def _pick(self, key: str) -> None:
-        """Makes a fresh copy: a new PID and IVs where the card rolls them, under the app's trainer as it is now."""
+        """Makes a fresh copy and adds it to the queue. A one-slot picker keeps the old single-value shape."""
         if self.busy:
             return
+        if self.limit > 1 and len(self.values) >= self.limit:
+            self.status.content = t.text(f"队列已满：每场会话最多交换 {self.limit} 份礼物。",
+                                         12, t.AMBER)
+            self._refresh()
+            return
         self.busy = True
-        self.result.content = ft.Row([PixelActivity("正在生成宝可梦"),
-                                      t.text("正在生成新的副本…", 12, t.MUTED)], spacing=8)
+        trainer = self.app.settings.trainer(self.game)
+        self.status.content = ft.Row([PixelActivity('正在生成宝可梦'),
+                                      t.text('正在生成新的副本…', 12, t.MUTED)], spacing=8)
+        self._render()
         self._refresh()
 
         def work():
             try:
-                info = SERVICE.gift_event(self.game, key, self.app.settings.trainer(self.game))
+                info = SERVICE.gift_event(self.game, key, trainer)
                 if info["refused"]:
                     raise ValueError(f"设置中的训练家无法接收此礼物：{translate(info['refused'])}。")
                 value, error = {"file": info["file"], "event": key, "title": info["title"],
                                 "species": info["species_id"], "shiny": info["shiny"],
+                                "form_id": info.get("form_id", 0),
                                 "summary": builder.summary(info), "legal": info["legal"],
                                 "home_tracker": info.get("home_tracker", ""),
                                 "encounter": info["encounter"], "moves": info["moves"], "ot": info["ot"],
@@ -190,32 +206,70 @@ class EventGiftPicker:
             def done():
                 self.busy = False
                 if value is None:
-                    self.result.content = t.text(translate(error), 12, t.RED, selectable=True)
+                    self.status.content = t.text(translate(error), 12, t.RED, selectable=True)
                 else:
-                    self.value = value
-                    self.on_change(dict(value))
-                    self._render()
+                    self.status.content = None
+                    if self.limit == 1:
+                        self.values = [value]
+                        self.on_change(dict(value))
+                    else:
+                        self.values.append(value)
+                        self.on_change([dict(v) for v in self.values])
                     self._show_result()
+                self._render()
                 self._refresh()
             self.app.ui(done)
         threading.Thread(target=work, daemon=True).start()
 
-    def _show_result(self) -> None:
-        if not self.value.get("file"):
-            self.result.content = None
+    def _remove(self, index: int) -> None:
+        """Removes one queued gift without rebuilding the others."""
+        if not 0 <= index < len(self.values):
             return
-        legal = self.value.get("legal", False)
-        detail = " · ".join(p for p in ("、".join(translate(m) for m in self.value.get("moves", ())), f"OT {self.value.get('ot', '')}") if p)
-        lines = [ft.Row([t.text(self.value.get("title", ""), 13, weight=ft.FontWeight.W_600, expand=True),
-                         t.badge("合法" if legal else "不合法", t.GREEN if legal else t.RED,
+        self.values.pop(index)
+        if not self.busy:
+            self.status.content = None
+        self.on_change([dict(v) for v in self.values] if self.limit > 1 else
+                       (dict(self.values[0]) if self.values else {}))
+        self._render()
+        self._show_result()
+        self._refresh()
+
+    def _result_card(self, value: dict, number: int | None = None) -> ft.Control:
+        legal = value.get("legal", False)
+        title = value.get("title", "")
+        if number is not None:
+            title = f"{number}. {title}"
+        detail = " · ".join(p for p in ("、".join(translate(m) for m in value.get("moves", ())), f"OT {value.get('ot', '')}") if p)
+        lines = [ft.Row([t.text(title, 13, weight=ft.FontWeight.W_600, expand=True),
+                         t.badge('合法' if legal else '不合法', t.GREEN if legal else t.RED,
                                  "check" if legal else "warning-diamond")], spacing=8),
-                 t.text(summary_text(self.value.get("summary", "")), 12, t.SOFT),
+                 t.text(summary_text(value.get("summary", "")), 12, t.SOFT),
                  t.text(detail, 12, t.MUTED)]
-        if warned := builder.HOME_TRACKER_WARNINGS.get(self.value.get("home_tracker", "")):
+        if warned := builder.HOME_TRACKER_WARNINGS.get(value.get("home_tracker", "")):
             lines.append(ft.Row([t.badge(translate(warned), t.AMBER, "warning-diamond")]))
-        self.result.content = ft.Container(ft.Row([
-            Sprite(self.app, int(self.value.get("species") or 0), bool(self.value.get("shiny")), size=MINI).control,
+        trailing = ([t.icon_button("close", lambda e, n=number - 1: self._remove(n), '移除此礼物')]
+                    if number is not None else [])
+        return ft.Container(ft.Row([
+            Sprite(self.app, int(value.get("species") or 0), bool(value.get("shiny")), size=MINI,
+                   form=value.get("form_id", 0)).control,
             ft.Column(lines, spacing=2, expand=True),
+            *trailing,
         ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             padding=ft.Padding(10, 8, 10, 8), border_radius=10, bgcolor=ft.Colors.with_opacity(0.04, "#FFFFFF"),
             border=None if legal else ft.Border.all(1, t.RED))
+
+    def _show_result(self) -> None:
+        if not self.values:
+            self.result.content = (t.text(f"选择最多 {self.limit} 份礼物，将按此顺序交换。", 12, t.MUTED)
+                                   if self.limit > 1 else None)
+            return
+        if self.limit == 1:
+            self.result.content = self._result_card(self.values[0])
+            return
+        full = len(self.values) >= self.limit
+        note = (f"已加入队列 {len(self.values)} / {self.limit} 份礼物，按此顺序交换"
+                + (" · 队列已满" if full else ""))
+        self.result.content = ft.Column([
+            t.text(note, 12, t.MUTED),
+            *[self._result_card(value, n) for n, value in enumerate(self.values, start=1)],
+        ], spacing=6)

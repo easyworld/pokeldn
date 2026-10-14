@@ -1,37 +1,40 @@
-import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import flet as ft
 
 from gui import theme as t
 from gui.views.widgets import PixelActivity
 from pokeldn.app.sprites import CACHE, bounds
+from pokeldn.app.sprite_forms import sprite_key
 
 SIZE = 96   # the sprites are 96x96 pixels: shown at 1:1, or at a whole multiple, never in between
 ICON = 48   # pixelarticons are drawn on a 24 px grid: 48 is a whole multiple
 MINI = 46   # a small tile: every Pokemon's visible pixels scaled to fill it, less PAD on each side
 EDGE = 1    # the frame's border sits outside the sprite: a 96 px frame would squeeze it to 94
 PAD = 3     # sprites run from 28 px (Togepi) to 96: a fixed scale left half of them twice the size of the rest
+WORKERS = ThreadPoolExecutor(4, thread_name_prefix="sprite")
 
 
 class Sprite:
     """One Pokemon's pixel-art sprite. Shows a placeholder when there is none, offline or never downloaded."""
 
-    def __init__(self, app, species: int = 0, shiny: bool = False, size: int = SIZE):
+    def __init__(self, app, species: int = 0, shiny: bool = False, size: int = SIZE, form: int = 0):
         self.app, self.size = app, size
         self.token = 0
         self.frame = ft.Container(width=size + 2 * EDGE, height=size + 2 * EDGE, alignment=ft.Alignment.CENTER,
                                   bgcolor=t.BG, border=ft.Border.all(EDGE, t.DIVIDER), border_radius=12 if size >= SIZE else 10,
                                   clip_behavior=ft.ClipBehavior.ANTI_ALIAS)
         self.control = self.frame
-        self.show(species, shiny, update=False)
+        self.show(species, shiny, update=False, form=form)
 
-    def show(self, species: int, shiny: bool = False, update: bool = True) -> None:
+    def show(self, species: int, shiny: bool = False, update: bool = True, form: int = 0) -> None:
         """Cached sprites appear at once; the rest load on a worker thread, and a stale answer is dropped."""
         self.token += 1
         token = self.token
         CACHE.online = bool(self.app.settings.sprites)
+        species = sprite_key(species, form)
         if not species:
-            self._set(self._placeholder(), update)
+            self._set(self._placeholder('此形态没有可用图像。' if form else ""), update)
             return
         data = CACHE.cached(species, shiny)
         if data:
@@ -44,11 +47,17 @@ class Sprite:
             if not shown:
                 self._set(self._placeholder('此种类没有图像。'), update)
             return
+        if not CACHE.online:
+            if not shown:
+                self._set(self._placeholder(self._why()), update)
+            return
         if not shown:
             self._set(PixelActivity('正在加载图像'), update)
-        threading.Thread(target=self._load, args=(token, species, shiny, bool(shown)), daemon=True).start()
+        WORKERS.submit(self._load, token, species, shiny, bool(shown))
 
-    def _load(self, token: int, species: int, shiny: bool, shown: bool) -> None:
+    def _load(self, token: int, species: int | str, shiny: bool, shown: bool) -> None:
+        if token != self.token:
+            return
         data = CACHE.get(species, shiny) or (CACHE.get(species) if shiny and not shown else None)
 
         def done():

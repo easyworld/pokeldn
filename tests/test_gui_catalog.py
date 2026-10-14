@@ -217,6 +217,20 @@ def test_the_simulated_mystery_gift_trades_its_event_pokemon_as_the_trade_host_d
     assert missing_offer(gift, {}) == "Choose the Mystery Gift Pokemon first."
 
 
+@pytest.mark.parametrize("game, attribute", [("lgpe", "offer"), ("bdsp", "offer"),
+                                             ("pla", "trade_box_record"), ("sv", "trade_offer"),
+                                             ("za", "trade_offer")])
+def test_the_simulated_gift_queue_reaches_each_hosts_parser_in_trade_order(game, attribute):
+    gift = next(t for g in GAMES for t in g.tools if t.key == f"{game}-gift-host")
+    chosen = [{"file": f"gift-{n}.bin", "event": f"event-{n}", "your_ot": True}
+              for n in range(1, 8)]
+    args = parser_of(gift.script).parse_args(build(gift, {gift.fields[0].key: chosen}, {}, Settings(),
+                                                  stamp="fixed"))
+    offers = [args.offer, *args.next_offer] if game == "lgpe" else getattr(args, attribute)
+    assert offers == [f"gift-{n}.bin" for n in range(1, 7)]
+    assert args.gift_event == [f"event-{n}" for n in range(1, 7)] and args.for_receiver
+
+
 def test_a_gift_with_its_own_trainer_holds_made_for_the_receiving_player_off():
     """A card that fixes its trainer goes as made: Made for the receiving player is held off and says why. A
     gift that names its receiver, or one picked before the app kept which it is, leaves it as set."""
@@ -229,7 +243,9 @@ def test_a_gift_with_its_own_trainer_holds_made_for_the_receiving_player_off():
         "This gift has its card's own trainer, OT Gavin, and goes as made.")
     args = build(gift, {"--trade-offer": palafin}, {}, Settings(), stamp="fixed")
     assert "--for-receiver" not in args and args[args.index("--gift-event") + 1] == "0503-964-0-10"
-    for chosen in (pikachu, {k: v for k, v in palafin.items() if k != "your_ot"}, {}):
+    assert locked(receiver, gift, {"--trade-offer": [palafin, palafin]}) == (
+        "These gifts have their cards' own trainers, OT Gavin, and go as made.")
+    for chosen in (pikachu, [palafin, pikachu], {k: v for k, v in palafin.items() if k != "your_ot"}, {}):
         assert locked(receiver, gift, {"--trade-offer": chosen}) == ""
         assert "--for-receiver" in build(gift, {"--trade-offer": chosen}, {}, Settings(), stamp="fixed")
     assert locked(next(f for f in gift.fields if f.key == "--fresh-pid"), gift, {"--trade-offer": palafin}) == ""
@@ -239,14 +255,14 @@ def test_a_gift_with_its_own_trainer_holds_made_for_the_receiving_player_off():
                                          ("za", "--trade-offer")])
 def test_the_other_switch_games_simulate_their_mystery_gifts_through_their_trade_host(game, offer):
     """Let's Go, Brilliant Diamond/Shining Pearl, Legends Arceus and Legends Z-A take no Mystery Gift over local
-    wireless: their Mystery Gift - Simulated is the trade host offering one event Pokemon, after their trades,
+    wireless: their Mystery Gift - Simulated is the trade host offering up to six event Pokemon in order,
     made for the receiving player as Scarlet/Violet's (docs/gift_simulated.md)."""
     tools = next(g for g in GAMES if g.key == game).tools
     gift, host = next(t for t in tools if t.key == f"{game}-gift-host"), tools[0]
     assert host.key == f"{game}-host" and tools[-1] is gift and gift.name == "神秘礼物 - 模拟"
     assert (gift.script, gift.fixed, gift.doc) == (host.script, host.fixed, "gift_simulated.md")
     field, receiver = gift.fields[:2]
-    assert (field.key, field.events, field.required, field.queue) == (offer, True, True, 1)
+    assert (field.key, field.events, field.required, field.queue) == (offer, True, True, 6)
     assert (receiver.key, receiver.kind, receiver.default) == ("--for-receiver", "switch", True)
     assert [f.key for f in gift.fields[2:]] == [f.key for f in host.fields if f.kind != "pokemon"]
     args = build(gift, {offer: {"file": "/tmp/gift.bin", "event": "9028-808-0"}}, {}, Settings(), stamp="fixed")

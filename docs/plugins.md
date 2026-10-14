@@ -319,6 +319,7 @@ or a downgrade.
 | 1.1 | `api.data`, `api.level`, `pokeldn.plugins.data_folder(id)` |
 | 1.2 | `pokeldn.popup` |
 | 1.3 | the program surface: builders, gift files, PKHeX and the board |
+| 1.4 | Bank imports, records, destinations, offers and trade completion |
 
 ## The API, version 1
 
@@ -328,7 +329,7 @@ or a downgrade.
 | `api.add_game(game, icon="")` | adds a game section with its tools |
 | `api.add_radio(scheme, install, label="")` | adds a radio |
 | `api.folder` | the plugin's folder (a `Path`), or None for a Python package |
-| `api.version`, `api.level` | the major and level the app runs, `1` and `3` |
+| `api.version`, `api.level` | the major and level the app runs, `1` and `4` |
 | `api.data` | a folder kept across updates, created on first use (1.1) |
 | `pokeldn.plugins.data_folder(id)` | the same folder from a tool's script (1.1) |
 | `Tool`, `Field`, `Game` | the app's catalog types, imported from `pokeldn.plugins` |
@@ -340,7 +341,7 @@ or a downgrade.
 This table and the next one are the supported surface. Anything else a plugin imports from pokeldn
 can change in any release.
 
-## The program surface (1.3)
+## The program surface (1.3, Bank added in 1.4)
 
 A plugin, or a separate program built on a pokeldn checkout (a touchscreen front end, a script), can
 build gifts and Pokemon and manage the board with the same code the app uses. These names keep their
@@ -364,7 +365,88 @@ meaning within API major 1; `tests/test_plugin_surface.py` resolves every one.
 | `pokeldn.frlg.gift.builder.blank()`, `compile(state)`, `describe(state, name)` | the same for a Wonder Card, Wonder News or console code |
 | `gui.board.ports()`, `identify(port, blink=)`, `detect_chip(port)` | the serial ports, and what a board runs: `.firmware`, `.firmware_version`, `.protocol`, `.current` (its protocol is this pokeldn's) |
 | `gui.board.download_firmware(say=)`, `image_for(kind, chip)`, `image_version(path)`, `flash(port, kind=)` | the release's images checked against their SHA-256, the image a chip takes, its version, and flashing it after checking the chip |
+| `pokeldn.app.bank.library()` | the default Bank folder as a `Path`; listing never creates it (1.4) |
+| `pokeldn.app.bank.Entry`, `Imported`, `ImportedPokemon` | the Bank result types described below (1.4) |
+| `pokeldn.app.bank.Imported.count(state)` | the number of import results in that state (1.4) |
+| `pokeldn.app.bank.entries(folder=)`, `find(entry_id, folder=)`, `data(entry)` | records newest first, a record or `None`, and its native bytes (1.4) |
+| `pokeldn.app.bank.import_file(path, trainers, folder=)` | import a Pokemon file or save, leaving the source untouched; -> `Imported` (1.4) |
+| `pokeldn.app.bank.deposit(game, source, info, folder=)` | bank a copy of a received file and its PKHeX inspection result; -> `Entry`, or `None` for bytes already banked (1.4) |
+| `pokeldn.pokemon.SERVICE.check(game, path)` | inspect a received native record with PKHeX; -> the `info` dictionary for `bank.deposit`, including its legality verdict (1.4) |
+| `pokeldn.app.bank.destinations(entry, trainer)`, `offer(entry, game, trainer)` | conversion availability per game, and a converted offer for one game (1.4) |
+| `pokeldn.app.bank.edit(entry, fields)`, `remove(entry_id, folder=)` | edit nickname, upward level, moves or held item; -> the updated `Entry`; explicitly delete a record and its metadata (1.4) |
+| `pokeldn.app.bank.TradeSession(offers, folder=)` | snapshot ordered offer dictionaries for one run, including offers without a Bank ID (1.4) |
+| `pokeldn.app.bank.TradeSession.advance(count)` | apply a cumulative confirmed-trade count; -> `.completed`, the greatest count processed; repeated or older counts leave records alone (1.4) |
+| `pokeldn.app.received.trades_done(line)` | the cumulative count in a launcher's `[done] trade N complete` line, or `None` (1.4) |
 
 A launcher run, from the app or from `python -m pokeldn`, is one process: stop it with SIGINT to its
 own PID, then SIGTERM after 15 s. Never match launchers by name (`pkill -f`): that also ends a run
 another program started.
+
+## Bank integrations (1.4)
+
+An external Python frontend uses `pokeldn.app.bank`, the same module the desktop Bank uses. It owns
+its offer queue and process lifecycle. The app's settings, queue helpers and Bank metadata files
+remain internal. Conversion uses the existing PKHeX helper; source installations build it with
+`dotnet build -c Release services/pkhex`.
+
+`Entry` exposes `id`, `path`, `game`, `species_id`, `shiny`, `summary`, `legal`, `tracker`, `created`,
+`origin` and `home_tracker`. `game` is a catalog key; `created` is Unix time in seconds; `path` is
+the native record. `home_tracker` is `empty`, `made` or an empty string, as described in
+[The HOME tracker setting](gui.md#the-home-tracker-setting).
+
+`Imported` exposes `name`, `save` and `pokemon`, plus `count(state)`. Each `ImportedPokemon` has
+`where`, `species`, `species_id`, `shiny`, `state`, `game` and `detail`. The state is `banked`,
+`already` or `refused`. Refusals are per record: one refused Pokemon does not prevent other records
+in a save from being imported. `trainers` maps game keys to trainer dictionaries with `ot`, `tid`,
+`sid`, `language` and `gender`, as the Pokemon builder takes. Imports remember records already
+imported, including those subsequently traded away.
+
+`destinations` returns a dictionary keyed by game, each value containing `ok`, `reason` and
+`home_tracker`. `offer` returns a dictionary with `file`, `summary`, `species`, `shiny`, `legal`,
+`encounter`, `moves`, `report`, `home_tracker` and `bank`. `file` names the prepared native record;
+`bank` is the source entry ID. Preparing an offer leaves the original Bank record in place.
+Keep the offer file until its run has ended, and pass it to the launcher's `--offer-file` argument.
+Run a banked offer without `--fresh-pid` so its identity is preserved. The desktop command builder
+handles this automatically; `python -m pokeldn TOOL` assembles defaults and does not receive the
+Bank offer dictionary, so a frontend launching Bank trades uses the catalog tool's script directly.
+
+```python
+from pokeldn.app import bank, received
+
+trainer = {"ot": "ASH", "tid": 1111, "sid": 2222, "language": 2, "gender": 0}
+games = ("frlg", "lgpe", "swsh", "bdsp", "pla", "sv", "za")
+result = bank.import_file("main", {game: trainer for game in games}, folder="tradebox-bank")
+entry = next(iter(bank.entries(folder="tradebox-bank")), None)
+if entry is None:
+    raise ValueError("No Pokemon available in the Bank.")
+routes = bank.destinations(entry, trainer)
+if not routes["swsh"]["ok"]:
+    raise ValueError(routes["swsh"]["reason"])
+offer = bank.offer(entry, "swsh", trainer)
+session = bank.TradeSession([offer], folder="tradebox-bank")
+
+def on_launcher_line(line):
+    count = received.trades_done(line)
+    if count is not None:
+        session.advance(count)
+```
+
+Create one `TradeSession` per run with the exact offer order, including built offers without a
+`bank` key. Feed it confirmed completion counts, never a process exit code or a queued-trade count.
+An unsuccessful or stopped run leaves uncompleted records in the Bank. A cumulative count can skip
+intermediate messages; generated trades beyond the snapshotted offers are counted without removing
+additional records. `advance` rejects a negative or non-integer count with `ValueError`. Its progress
+advances after each successful removal, so an `OSError` can be retried with the same count.
+
+File access errors raise `OSError`; PKHeX failures and refused conversions or edits raise
+`pokeldn.pokemon.BuilderError`. `deposit` takes inspection data from `pokeldn.pokemon.SERVICE.check`
+and performs no additional
+legality check; user-supplied saves and Pokemon files enter through `import_file`.
+Methods with `folder` accept a path or use `library()` by default. `data`, `edit`, `destinations` and
+`offer` use the path carried by `Entry`. Set `POKELDN_DATA` before importing pokeldn to isolate the
+helper's output and the frontend's other application files too.
+
+Bank operations are synchronous. Run PKHeX work outside a frontend's UI thread. One writer owns a
+Bank folder at a time; simultaneous imports, edits and trades from separate apps are unsupported.
+Use a separate folder for TradeBox when the desktop app is active. External queues discard a
+completed offer themselves; `TradeSession` changes the Bank only.

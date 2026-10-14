@@ -826,9 +826,24 @@ Other boards, with their trades:
 | XIAO ESP32C3 | access point | Sword | trade through the packaged macOS app, legal PK8 |
 | XIAO ESP32C6 (ceramic antenna) | station | FireRed | trade, clean console departure |
 | XIAO ESP32C6 (ceramic antenna) | access point | Sword, Scarlet | trade, valid PK8 records, clean console departure |
+| XIAO ESP32C6 (Android prototype, USB-C) | access point | FireRed | trade, legal received PK3, clean console departure; Android runtime and scheduling measurements below |
 | XIAO ESP32S3 (macOS) | station | FireRed | trade, mutual cancel, clean link close; 5099 of 5099 ETH_TX, no bad wire frame, no USB resync |
 | XIAO ESP32S3 (macOS) | access point | FireRed, Sword | trade, 344-byte PK8, clean console departure; zero lost ETH_TX; the board answers HELLO afterwards |
 | ESP32-S3 (Windows, reported in [PR 2](https://github.com/Decryptu/pokeldn/pull/2)) | station | FireRed | trade |
+
+The [Android developer prototype](../examples/android/README.md) on a OnePlus CPH2621 with Android 16
+powers the XIAO ESP32C6 through USB-C and runs
+the existing Python host with a native USB CDC stream. FireRed trades completed with legal
+received PK3s, save barriers and room departure. The initial host ran about 10 parent slots/s,
+with slow movement and a long animation wait. Running LDN and the game protocol on one Trio
+thread increased the loop rate; restricting the Python threads to one performance core then
+restored smooth room movement. A repeat trade completed normally, with 51.1 unique parent
+UNI slots/s measured across both a 70-second room window and a 30-second animation window.
+The received Pikachu passed PKHeX validation and the console left cleanly.
+In an isolated 300-packet send test on this phone, unrestricted
+warm runs reached 99 and 113 packets/s; core 6 reached 265 and 281 packets/s, and restoring the
+original CPU masks returned the lower rate. This measurement does not establish an affinity
+requirement for other Android devices.
 
 A FireRed console joining the board's access point lists the network (it accepts the zero-length
 hidden SSID, the rate order, capability `0x0431` and the WMM element), authenticates open and sends

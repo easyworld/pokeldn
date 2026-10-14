@@ -177,6 +177,44 @@ def test_clear_empties_the_cache(host, tmp_path):
     assert cache.clear() == 2 and cache.cached(25) is None
 
 
+@pytest.mark.parametrize("species,form,key", [
+    (146, 0, 146), (146, 1, 10171), (52, 1, 10107), (52, 2, 10161),
+    (25, 1, 10094), (25, 6, 10099), (25, 7, 10148), (25, 9, 10160),
+    (423, 1, "423-east"), (854, 1, "854-antique"), (25, 99, None),
+])
+def test_game_forms_resolve_to_their_own_sprite(species, form, key):
+    from pokeldn.app.sprite_forms import sprite_key
+    assert sprite_key(species, form) == key
+
+
+def test_form_sprites_keep_separate_normal_and_shiny_cache_entries(host, tmp_path):
+    host.routes = {f"/pokemon/{name}.png": (200, png(n)) for n, name in enumerate(
+        ("423", "423-east", "shiny/423-east"), start=1)}
+    cache = sprites.SpriteCache(tmp_path, host.url)
+    assert cache.get(423) == png(1)
+    assert cache.get("423-east") == png(2)
+    assert cache.get("423-east", True) == png(3)
+    offline = sprites.SpriteCache(tmp_path, host.url, online=False)
+    assert offline.get(423) == png(1)
+    assert offline.get("423-east") == png(2)
+    assert offline.get("423-east", True) == png(3)
+    assert len(host.requests) == 3
+
+
+@pytest.mark.parametrize("key", ["../25", "25/other", "25-../../secret", "25-east.png"])
+def test_form_sprite_names_cannot_escape_the_cache(host, tmp_path, key):
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"keep this file")
+    cache = sprites.SpriteCache(tmp_path / "cache", host.url)
+    (cache.folder / "normal").mkdir(parents=True)
+    for bad in (key, "../../outside"):
+        assert cache.cached(bad) is None
+        assert cache.get(bad) is None
+        assert not cache.known_missing(bad)
+    assert outside.read_bytes() == b"keep this file"
+    assert not host.requests
+
+
 def _figure(bits: int):
     """96x96 values: 0 outside the box (13, 20)-(71, 89), noise inside, its four edges touched."""
     import random
