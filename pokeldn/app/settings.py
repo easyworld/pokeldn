@@ -35,7 +35,9 @@ class Settings:
     switch_tid: int | None = None   # the Switch titles' six-digit ID, as shown; None: the one tid/sid make
     switch_sid: int | None = None
     language: int = 2
-    gender: int = 0     # 0 male, 1 female; Legends Z-A checks it before taking a Pokemon back as its trainer's
+    # 0 male, 1 female. Legends Z-A checks it before taking a Pokemon back as its trainer's, and Legends
+    # Arceus's data exchange record carries it.
+    gender: int = 0
     board_names: dict = field(default_factory=dict)   # MAC -> name the user gave the board
     tool_values: dict = field(default_factory=dict)   # tool key -> {"values": {...}, "extra": {...}}
 

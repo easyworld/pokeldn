@@ -415,6 +415,8 @@ def build_parser():
                     help="the name in our data exchange record; the console shows it")
     ap.add_argument("--player-id", default="504b4c44",
                     help="hex, four bytes: the player id in our data exchange record")
+    ap.add_argument("--gender", type=int, choices=(0, 1), default=0,
+                    help="0 male, 1 female: the gender in our data exchange record; its look follows")
     ap.add_argument("--join-player-id", default=pia6.DEFAULT_PLAYER_ID.hex(),
                     help="hex, sixteen bytes: the player id in the session join request")
     ap.add_argument("--fresh-pid", action="store_true",
@@ -480,7 +482,7 @@ def main(argv=None):
     except (AttributeError, ValueError):
         pass
     exchange = data_exchange.build_record(player_id=bytes.fromhex(args.player_id),
-                                          name=args.player_name)
+                                          name=args.player_name, gender=args.gender)
     offer = pokemon_service.validate("pla", build_offer(args, exchange))
     args.next_offers = [pokemon_service.validate("pla", pla_pokemon.encrypt(pla_pokemon.load(
         Path(os.path.expanduser(path)).read_bytes()))) for path in args.offer[1:]]

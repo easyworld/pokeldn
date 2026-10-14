@@ -10,7 +10,12 @@ from pathlib import Path
 from pokeldn.swsh import gift_file, wc8
 
 DATA = Path(__file__).parent / "data" / "events.json"
-GROUPS = ("Pokemon", "Items", "Battle Points", "Clothing")
+HOME = "Pokemon HOME"
+GROUPS = ("Pokemon", HOME, "Items", "Battle Points", "Clothing")
+# Card ids from 9000 are the community's cards for the gifts Pokemon HOME gave (PKHeX's WC8.IsHOMEGift).
+HOME_CARDS = 9000
+HOME_WHY = ("Pokemon HOME gave this gift with its own tracker. The console makes the Pokemon from this card "
+            "without one, whatever the HOME tracker setting, and Pokemon HOME currently accepts it.")
 ENGLISH = 1                 # the record's name slots run Japanese, English, French, ...
 VERSIONS = {1: "Sword only", 2: "Shield only"}
 
@@ -32,6 +37,11 @@ def gift(key):
     except KeyError:
         raise ValueError("Pick an event card.") from None
     return gift_file.from_record(event["record"], name=event["label"])
+
+
+def from_home(raw):
+    """A community card of a gift Pokemon HOME gave [docs/swsh_gift.md, Official event cards]."""
+    return struct.unpack_from("<H", raw, 0x08)[0] >= HOME_CARDS
 
 
 def item_pairs(raw):

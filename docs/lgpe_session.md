@@ -470,14 +470,20 @@ object (`0x349dfc`), released after the commit (`0x886c70`) and replaced by the 
 (`0x3445e0`). A seat holds about four live channels.
 
 Kind 1, body 0x168, the identity: the save's MyStatus block copied to `obj+0x450` (`0x3493f4`),
-sent from state 6 by both stations before either has received anything. UTF-16LE names at body
-offsets:
+sent from state 6 by both stations before either has received anything. Its trainer is PKHeX's
+`MyStatus7b`, and its names are UTF-16LE:
 
 ```
-+0x34  2  0x0002
++0x00  4  trainer id, then secret id
++0x04  1  version: 42 Pikachu, 43 Eevee
++0x05  1  gender
++0x35  1  language
 +0x38 26  trainer name, up to the Pokemon name; --trainer-name on both launchers
 +0x52 16  Pokemon name
 ```
+
+A gift made for the receiving player reads the console's trainer here (`pb7.first_trainer`,
+[Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)).
 
 `pokeldn.lgpe.reference` ships one, recorded from an emulated save whose trainer is `POKELDN`.
 `bin/lgpe_join.py` sends it by default, the trainer id pair replaced by `--our-trainer`.

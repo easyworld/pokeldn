@@ -396,7 +396,7 @@ class BoardView:
         try:
             # Kept: the child stops when its Process object, and with it the stdin pipe, goes.
             self.pad_child = start_service(lambda code: refused.append(
-                sys.platform == "darwin" and code in (-6, 134))) or self.pad_child
+                sys.platform == "darwin" and code in (-6, 134)), self.app.popups) or self.pad_child
             client = service.Client()
             try:
                 client.call("connect")
@@ -457,7 +457,7 @@ class BoardView:
         refused = []
         try:
             self.pad_child = start_service(lambda code: refused.append(
-                sys.platform == "darwin" and code in (-6, 134))) or self.pad_child
+                sys.platform == "darwin" and code in (-6, 134)), self.app.popups) or self.pad_child
             client = service.Client()
             try:
                 client.call("connect")
@@ -497,7 +497,8 @@ class BoardView:
         env = dict(os.environ, NO_COLOR="1", PYTHONUNBUFFERED="1")
         env.pop("POKELDN_RADIO", None)
         self.app.process_label = "flash"
-        self.app.process = runner.Process(args, str(SESSION), env, self._flash_line, self._flashed)
+        self.app.process = runner.Process(args, str(SESSION), env, self._flash_line, self._flashed,
+                                          popups=self.app.popups, label="Board installer")
 
     def _flash_line(self, line: str) -> None:
         self.log.add(line)

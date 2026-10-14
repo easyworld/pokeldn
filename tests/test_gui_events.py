@@ -35,7 +35,7 @@ def test_all_official_swsh_cards_localize_summaries_and_non_pokemon_labels():
         assert not re.search(r"[A-Za-z]{3,}", event_text(card["summary"])), card["key"]
         label = event_label("swsh", card)
         assert re.search(r"[\u4e00-\u9fff]", label), card["key"]
-        if card["group"] != "Pokemon":
+        if card["group"] not in ("Pokemon", events.HOME):
             assert not re.search(r"[A-Za-z]{3,}", label), card["key"]
     assert event_text("Wolfe Coalossal (Gmax)") == "Wolfe 巨炭山（超极巨化）"
     assert event_text("Ash Pikachu (Partner Cap)") == "Ash 皮卡丘 （就决定是你了之帽子）"

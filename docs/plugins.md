@@ -19,7 +19,7 @@ two files; `examples/plugins/test_kit` uses every part of the API.
 2. Drop the `.pokeplugin` file on the page, or press **Add a plugin** and choose it.
 3. Read what the plugin is and the risks, tick the acknowledgement, and press **Install**.
 
-The plugin's tools appear on the Games page at once, marked with a plug and "From the plugin ...".
+The plugin's tools appear on the Games page at once, marked with a plug and "Plugin: ...".
 Each plugin's card has a switch to turn it off and on, and a menu to open its tools, update it from a
 newer file, show its folder, visit its page and remove it. Every install and update shows the risk
 screen again. A plugin copied into the plugins folder by hand shows "Added by hand" and asks for the
@@ -127,6 +127,28 @@ if __name__ == "__main__":
 | exits with code 0 | ends the session as done |
 | exits with another code or raises | shows the session as failed, with the traceback in the output |
 | receives `KeyboardInterrupt` | the player pressed Stop; leave cleanly within 15 s or the process is ended |
+| opens a pop-up (`pokeldn.popup`, 1.2) | shows it over whatever page the app shows, and sends the player's answer back |
+
+A pop-up never waits for the player: `acknowledge` and `confirm` return its id at once, and the answer
+comes later as a callback, which may fire at any time, on another thread. A script keeps its own state
+and reacts to the answer whenever it comes, instead of stopping until it does:
+
+```python
+import queue
+from pokeldn import popup
+
+answers = queue.Queue()
+popup.set_dispatcher(answers.put)       # callbacks wait for the loop below instead of running on their own thread
+asked = popup.confirm("Trade the shiny?", "Your partner offers a shiny Gholdengo.", "Trade", "Skip",
+                      on_agree=lambda: print("trading"), on_disagree=lambda: print("skipping"),
+                      tone="warning")
+while not finished():                   # the script's own work goes on meanwhile
+    try:
+        answers.get(timeout=0.5)()
+    except queue.Empty:
+        pass
+popup.cancel(asked)                     # no use for the answer any more: the pop-up closes, no callback fires
+```
 
 Give shared modules a name no other package uses (`mylib_common`, not `utils`): the plugin's folder
 is added to Python's search path.
@@ -168,8 +190,8 @@ asks.
 `help=` puts a line under the input, `default=` fills it, and `hidden=True` moves it to the
 Advanced tab. The fields the built-in tools use, and the
 rest of `Field`, are in `pokeldn/app/catalog.py`. A tool's `fixed` arguments may carry `{ot}`,
-`{tid}`, `{sid}` and `{language}` (the trainer in Settings), `{received}` (the Received folder) and
-`{stamp}` (the run's start time).
+`{tid}`, `{sid}`, `{language}` and `{gender}` (the trainer in Settings), `{received}` (the Received
+folder) and `{stamp}` (the run's start time).
 
 ### A game of its own
 
@@ -295,6 +317,8 @@ or a downgrade.
 |---|---|
 | 1.0 | `add_tool`, `add_game`, `add_radio`, `folder`, `version` |
 | 1.1 | `api.data`, `api.level`, `pokeldn.plugins.data_folder(id)` |
+| 1.2 | `pokeldn.popup` |
+| 1.3 | the program surface: builders, gift files, PKHeX and the board |
 
 ## The API, version 1
 
@@ -304,11 +328,43 @@ or a downgrade.
 | `api.add_game(game, icon="")` | adds a game section with its tools |
 | `api.add_radio(scheme, install, label="")` | adds a radio |
 | `api.folder` | the plugin's folder (a `Path`), or None for a Python package |
-| `api.version`, `api.level` | the major and level the app runs, `1` and `1` |
+| `api.version`, `api.level` | the major and level the app runs, `1` and `3` |
 | `api.data` | a folder kept across updates, created on first use (1.1) |
 | `pokeldn.plugins.data_folder(id)` | the same folder from a tool's script (1.1) |
 | `Tool`, `Field`, `Game` | the app's catalog types, imported from `pokeldn.plugins` |
 | `pokeldn.ldn.show_done()` | prints the line that ticks a trade off |
+| `pokeldn.popup.acknowledge(title, text="", *, id, label="OK", on_ack, tone)` | a pop-up with one button; -> its id (1.2, [Pop-ups](gui.md#pop-ups)) |
+| `pokeldn.popup.confirm(title, text, agree, disagree, *, id, on_agree, on_disagree, on_dismiss, tone)` | a pop-up with the agree and disagree buttons the caller names, Esc or a click outside dismissing it; -> its id (1.2) |
+| `pokeldn.popup.cancel(id)`, `available()`, `set_dispatcher(dispatch)` | closes a pop-up, dropping its callbacks; whether an app shows them; where callbacks run (1.2) |
 
-This table is the supported surface. Anything else a plugin imports from pokeldn can change in any
-release.
+This table and the next one are the supported surface. Anything else a plugin imports from pokeldn
+can change in any release.
+
+## The program surface (1.3)
+
+A plugin, or a separate program built on a pokeldn checkout (a touchscreen front end, a script), can
+build gifts and Pokemon and manage the board with the same code the app uses. These names keep their
+meaning within API major 1; `tests/test_plugin_surface.py` resolves every one.
+
+| name | what it is |
+|---|---|
+| `python -m pokeldn --list`, `python -m pokeldn TOOL -- ARGS` | every tool's key, and a run of one with the trainer in Settings and the arguments after `--` |
+| `pokeldn.app.catalog.GAMES` | the built-in games, each `Game`'s `.tools` holding its `Tool`s: the script under `bin/` and its fields; a flag the app passes keeps its name |
+| `pokeldn.pokemon.SERVICE.species(game)`, `.names(game, kind)` | the species, and the `moves`, `items`, `bag`, `held` or `balls` a game has, as `{"id", "name"}` lists |
+| `pokeldn.pokemon.SERVICE.options(game, species, trainer)` | the forms, natures, abilities, items and balls an offer of that species can carry |
+| `pokeldn.pokemon.SERVICE.make(game, species, trainer, level, shiny, nickname, version, options)` | a legal Pokemon for that game; `options` takes nature, ability, gender, held item, ball, friendship, moves, IVs and EVs; -> its values and `"file"`, the path written |
+| `pokeldn.pokemon.SERVICE.paste(game, text, trainer)` | the Showdown sets in `text`, each as `make`'s values with its `errors` |
+| `pokeldn.pokemon.BuilderError` | raised with a sentence for the player when PKHeX refuses or is missing |
+| `pokeldn.pokemon.NATURES` | the 25 nature names by the index every record stores |
+| `pokeldn.gifts.load(path, game=)`, `pokeldn.gifts.save(path, gift)` | read and write a `.pokegift`, `.wc3` or `.wc8` ([Mystery Gift files](gifts.md)) |
+| `pokeldn.swsh.gift_builder.KINDS`, `PRESETS`, `PRESET`, `OUTFITS` | the Sword/Shield builder's gift kinds `(key, label, icon)`, presets (`.key`, `.label`, `.group`, `.summary`, `.state`) and outfits |
+| `pokeldn.swsh.gift_builder.blank(**changes)`, `record(state)`, `compile(state)`, `describe(state, name)` | a form state, its sealed 720-byte record, its gift for `gifts.save`, and its lines for the player; a bad state raises `ValueError` naming the field. A Pokemon's state takes `nature` (0 to 24; absent, the game rolls one) |
+| `pokeldn.swsh.events.load()`, `by_key()`, `gift(key)` | the official Sword/Shield event cards and the gift for one |
+| `pokeldn.frlg.gift.builder.KINDS`, `PRESETS`, `PRESET`, `GIVERS`, `CARTRIDGES` | the FireRed/LeafGreen builder's kinds, presets, the people who hand a card over and the cartridges a console code can target |
+| `pokeldn.frlg.gift.builder.blank()`, `compile(state)`, `describe(state, name)` | the same for a Wonder Card, Wonder News or console code |
+| `gui.board.ports()`, `identify(port, blink=)`, `detect_chip(port)` | the serial ports, and what a board runs: `.firmware`, `.firmware_version`, `.protocol`, `.current` (its protocol is this pokeldn's) |
+| `gui.board.download_firmware(say=)`, `image_for(kind, chip)`, `image_version(path)`, `flash(port, kind=)` | the release's images checked against their SHA-256, the image a chip takes, its version, and flashing it after checking the chip |
+
+A launcher run, from the app or from `python -m pokeldn`, is one process: stop it with SIGINT to its
+own PID, then SIGTERM after 15 s. Never match launchers by name (`pkill -f`): that also ends a run
+another program started.

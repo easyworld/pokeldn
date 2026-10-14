@@ -136,7 +136,7 @@ def run(monkeypatch, capsys, drop_host=None, drop_joiner=None):
     monkeypatch.setattr(pla_host, "IpHostTransport", Loopback)
     monkeypatch.setattr(pla_host, "time", types.SimpleNamespace(time=clock, monotonic=clock))
     monkeypatch.setattr(sys, "argv", [
-        "pla_host.py", "--ip-host", "--our-ip", HOST_IP, "--seconds", str(SECONDS),
+        "pla_host.py", "--ip-host", "--our-ip", HOST_IP, "--seconds", str(SECONDS), "--print-packets",
         "--session-update", "--sustain", "--clock", "--data-exchange", "--game-channel",
         "--trade-box", "--trade-box-ours", "--data-exchange-name", "HOST",
         "--data-exchange-id", "11223344"])

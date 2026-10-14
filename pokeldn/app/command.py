@@ -68,6 +68,24 @@ def offers(value) -> list[dict]:
     return [value] if isinstance(value, dict) else []
 
 
+GIFT_EVENT = "--gift-event"     # pokeldn.receiver_gift
+
+
+def locked(field: Field, tool: Tool, values: dict) -> str:
+    """Why a switch is held off and cannot be turned on, or "": Made for the receiving player while every
+    Mystery Gift Pokemon chosen has its card's own trainer, which no save replaces, or is legal only with a
+    handler, which its own trainer's save clears (docs/gift_simulated.md)."""
+    if not field.your_ot:
+        return ""
+    chosen = [v for f in tool.fields if f.events for v in offers(value_of(f, values)) if v.get("file")]
+    if not chosen or any(v.get("your_ot") is not False for v in chosen):
+        return ""
+    if any(v.get("handled") for v in chosen):
+        return "This gift is legal only with a handler, which its own trainer's save clears: it goes with your trainer."
+    owners = ", ".join(dict.fromkeys(v["ot"] for v in chosen if v.get("ot")))
+    return f"This gift has its card's own trainer{f', OT {owners},' if owners else ''} and goes as made."
+
+
 def _args(field: Field, value, tool: Tool) -> list[str]:
     if field.kind == "builder":
         return gift_builder.args(tool, value)
@@ -76,12 +94,16 @@ def _args(field: Field, value, tool: Tool) -> list[str]:
         on = bool(value) != field.invert
         return [flags[0], field.template] if (on and field.template) else list(flags) if on else []
     if field.kind == "pokemon":
-        files = [f for v in offers(value)[:field.queue] if (f := v.get("file", ""))]
+        chosen = [v for v in offers(value)[:field.queue] if v.get("file", "")]
+        files = [v["file"] for v in chosen]
         if not files:
             return list(field.unset)
         out = files if not field.flag else [a for n, f in enumerate(files)
                                              for a in ((field.more if n and field.more else flags[0]), f)]
-        return out + ([field.count, str(len(files))] if field.count else [])
+        # Each Mystery Gift Pokemon's card, in the same order, for a copy made for the receiving player.
+        gifts = ([a for v in chosen for a in (GIFT_EVENT, v.get("event", ""))]
+                 if field.events and GIFT_EVENT in accepted(tool.script) else [])
+        return out + gifts + ([field.count, str(len(files))] if field.count else [])
     if field.kind == "rewards":
         return [part for row in (value or ())
                 for part in (flags[0], f"{row.get('item_id', '')}:{row.get('quantity', '')}")]
@@ -108,7 +130,7 @@ def build(tool: Tool, values: dict, extra: dict, settings, stamp: str | None = N
     tokens = {"{received}": os.path.expanduser(settings.received), "{stamp}": stamp,
               "{src_var}": f"0x{random.getrandbits(32):08x}",
               "{ot}": settings.name(game), "{tid}": str(tid), "{sid}": str(sid),
-              "{language}": str(settings.language)}
+              "{language}": str(settings.language), "{gender}": str(settings.gender)}
     # A banked Pokemon keeps its PID and encryption constant: they are who it is [docs/gui.md, The bank].
     banked = any(entry.get("bank") for field in tool.fields if field.kind == "pokemon"
                  for entry in offers(value_of(field, values)))
@@ -121,7 +143,7 @@ def build(tool: Tool, values: dict, extra: dict, settings, stamp: str | None = N
         if banked and field.key == "--fresh-pid":
             continue
         if applies(field, tool, values):
-            items = _args(field, value_of(field, values), tool)
+            items = _args(field, False if locked(field, tool, values) else value_of(field, values), tool)
             if field.kind == "builder":     # a backup's file is named after the run
                 items = [item.replace("{stamp}", stamp) for item in items]
             args += items
@@ -238,7 +260,8 @@ def missing_offer(tool: Tool, values: dict) -> str:
             if not path and not field.required and len(entries) == 1:
                 continue
             if not path or not os.path.isfile(path):
-                return f"Build the Pokemon to offer{which} first."
+                return ("Choose the Mystery Gift Pokemon first." if field.events
+                        else f"Build the Pokemon to offer{which} first.")
             if entry.get("legal") is False:
                 return f"The Pokemon{which} is not legal."
     return ""

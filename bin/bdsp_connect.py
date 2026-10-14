@@ -354,10 +354,12 @@ async def main_async(args):
                             continue
                         body = (rl.parse_ack_payload(d["payload"]) if d["is_ack"]
                                 and len(d["payload"]) >= 2 else None)
-                        print(f"\n[rx] t={now:6.2f} *** RELIABLE seq {d['sequence_id']} "
-                              f"stream {d['stream_id']} pending {d['lowest_pending']} "
-                              f"[{'|'.join(d['flag_names'])}] {d['payload_size']} B ***")
-                        print(f"[rx]     {d['payload'].hex(' ')}\n")
+                        if args.print_packets:
+                            print(f"\n[rx] t={now:6.2f} *** RELIABLE seq {d['sequence_id']} "
+                                  f"stream {d['stream_id']} pending {d['lowest_pending']} "
+                                  f"[{'|'.join(d['flag_names'])}] {d['payload_size']} B ***")
+                        if args.print_packets:
+                            print(f"[rx]     {d['payload'].hex(' ')}\n")
                         if d["flags"] & rl.FLAG_APPLICATION_DATA:
                             st["rel_max_seq"] = max(st["rel_max_seq"], d["sequence_id"])
                             st["rel_streams"].add(d["stream_id"])
@@ -1522,6 +1524,8 @@ async def main_async(args):
 def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--print-packets", action="store_true",
+                    help="print every packet in and out; the --capture file keeps them either way")
     ap.add_argument("--comm-id", default=None)
     ap.add_argument("--keys", default="~/.switch/prod.keys")
     ap.add_argument("--phy", default="auto")

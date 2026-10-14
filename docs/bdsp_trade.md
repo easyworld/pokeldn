@@ -255,8 +255,17 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing)):
 
     0x00  26  tranerName, UTF-16LE, NUL-terminated
     0x1a   4  tranerId, the full 32-bit id, secret id in its high half
-    0x1e   1  cassetVersion, the Pokemon's version (49)
-    0x1f   1  langId, the Pokemon's language (3)
+    0x1e   1  cassetVersion, the save's version (49)
+    0x1f   1  langId, the save's language (3)
+
+The console sends it as the trade opens, before any Pokemon, so it names the save's trainer; a gift
+made for the receiving player reads it (`room.traner_trainer`,
+[Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)). It carries no
+gender, and no other message of the session names it: the join's avatar follows the save's sex only
+once the player has used the Union Room's optional appearance counter; until then the save gets a
+random avatar of either sex when it first connects ([The model](bdsp_protocol.md#the-model)). The
+Pokemon the console offers names it: the OT's when the save is its original trainer, the handler's
+otherwise ([What the console does to a received Pokemon](#what-the-console-does-to-a-received-pokemon)).
 
 The trade screen names the partner from this record; the greeting uses the Pia player name
 ([the protocol page](bdsp_protocol.md#the-name-in-the-greeting)): the 0x24 branch of
@@ -288,6 +297,23 @@ Received by another trainer, eleven bytes change and `ot_name` is not touched:
 
 0xC6 (PKHeX's `HandlingTrainerID`, "unused?") stays zero. PKHeX's `IsUntraded` (`Data[0xA8] == 0`)
 turns false.
+
+`TradeStateModel$$ReplacePoke` [1.3.0 main 0x1c29120] makes the change. It builds an `OwnerInfo`
+`{trainerId, sex, langID, name}` from the save's `DPData.MYSTATUS` (`PlayerWork$$get_playerStatus`,
+constructor [0x24a1b30]): the id, `sex ^ 1`, `region_code` and the name. The status's `sex` is true
+for a boy, as `_GET_MY_SEX` reads it. It passes the `OwnerInfo` to `CoreParam$$UpdateOwnerInfo`
+[0x2495920], which compares the Pokemon's OT gender, 32-bit id and OT name with it:
+
+- all three match: the handler flag is cleared, and nothing else is written;
+- otherwise: the flag is set, and the handler's name, gender (0xC2) and language come from the save.
+  The handler's memories are zeroed and its friendship set to the species' base friendship.
+
+0xC2 is written on every receipt by another trainer; the measurement above found it already holding
+the receiver's gender. No handler id or version is recorded. The GTS
+(`GMSSceneDataModel$$OnReceivePokeData`), in-game trades (`LocalKoukan$$CreateTradePokeParam`),
+Mystery Gift (`MysteryGiftWork$$CreatePokemonParam`) and `RenkeiData$$Get_1`/`Get_2` build the same
+`OwnerInfo` from the save. `UpdateOwnerInfo` is the game's only writer of the handler's gender. The
+game holds no Pokemon HOME code: a Pokemon arriving from HOME is written by HOME.
 
 ### Duplicate detection
 

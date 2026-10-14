@@ -325,6 +325,8 @@ class GameStreams:
 def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--print-packets", action="store_true",
+                    help="print every packet in and out; the --capture file keeps them either way")
     ap.add_argument("--phy", default="auto")
     ap.add_argument("--ifname", default="ldnclient")
     ap.add_argument("--keys", default="~/.switch/prod.keys")
@@ -484,10 +486,11 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
         sent += 1
         record(rec="tx", data=out.hex(), to=to, proto=proto, t=time.time(),
                dt=round(time.monotonic() - t0, 4))
-        print(f"[za] -> proto 0x{proto:02x} "
-              + "+".join(str(len(p)) for _, p, _ in items)
-              + f" bytes, dst={dst_var:#06x} src={src_var:#06x} flags={flags:#04x}"
-              + (f", {note}" if note else ""))
+        if args.print_packets:
+            print(f"[za] -> proto 0x{proto:02x} "
+                  + "+".join(str(len(p)) for _, p, _ in items)
+                  + f" bytes, dst={dst_var:#06x} src={src_var:#06x} flags={flags:#04x}"
+                  + (f", {note}" if note else ""))
 
     def send(proto, payload, **kwargs):
         return send_messages([(proto, payload, kwargs.pop("msgflags", None))], **kwargs)
@@ -622,8 +625,9 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
                                 payload=m.payload.hex()) for m in messages]
         for m in messages:
             counts[m.proto] = counts.get(m.proto, 0) + 1
-        print(f"[za] datagram {seen} at {now - t0:.2f}s, src={header.src:#06x} "
-              f"dst={header.dst:#06x}: " + "; ".join(describe_msg(m) for m in messages))
+        if args.print_packets:
+            print(f"[za] datagram {seen} at {now - t0:.2f}s, src={header.src:#06x} "
+                  f"dst={header.dst:#06x}: " + "; ".join(describe_msg(m) for m in messages))
         record(**row)
         if conn is None:
             continue

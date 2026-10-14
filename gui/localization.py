@@ -40,7 +40,23 @@ def translate(value: str) -> str:
                            ("PKHeX finds it not legal (", "PKHeX 判定其不合法（")):
         if value.startswith(prefix) and value.endswith(")"):
             return target + translate(value[len(prefix):-1]) + "）"
+    gift_language = re.fullmatch(r"card (\d+) gave it in (.+) alone, never to a save in (.+)", value)
+    if gift_language:
+        return f"卡片 {gift_language[1]} 仅以{translate(gift_language[2])}分发，无法提供给{translate(gift_language[3])}存档"
+    gift_owner = re.fullmatch(r"This gift has its card's own trainer(?:, OT (.+),)? and goes as made\.", value)
+    if gift_owner:
+        return "此礼物具有活动卡片指定的初训家" + (f"（OT：{gift_owner[1]}）" if gift_owner[1] else "") + "，按原样提供。"
+    fallback = re.fullmatch(r"Neither the Pokemon the console offered nor the session can say whose save this is: (.+)\. The gift goes with the trainer from Settings instead\. Offer a Pokemon caught in this save to receive one made for its own trainer\.", value)
+    if fallback:
+        return f"提供的宝可梦和会话均无法识别存档训练家：{translate(fallback[1])}。改用设置中的训练家生成礼物。提供一只此存档捕获的宝可梦，即可按存档初训家生成。"
+    fallback = re.fullmatch(r"The gift could not be made for (.+), ID (\d+), on (.+): (.+)\. It goes with the trainer from Settings instead\.", value)
+    if fallback:
+        return f"无法为{translate(fallback[3])}的训练家 {fallback[1]}（ID {fallback[2]}）生成礼物：{translate(fallback[4])}。改用设置中的训练家。"
     patterns = (
+        ("This gift has its card's own trainer(?:, OT (.+),)? and goes as made\\.", '此礼物具有活动卡片指定的初训家（OT：\\1），按原样提供。'),
+        ('card (\\d+) gave it in (.+) alone, never to a save in (.+)', '卡片 \\1 仅面向\\2发放，无法提供给\\3存档'),
+        ('card (\\d+) gave it to (.+) alone, never to (.+)', '卡片 \\1 仅面向\\2发放，无法提供给\\3'),
+
         ('Party, slot (\\d+)', '同行队伍，第 \\1 个位置'),
         ('Box (\\d+), slot (\\d+)', '盒子 \\1，第 \\2 个位置'),
         ('(.+), slot (\\d+)', '\\1，第 \\2 个位置'),

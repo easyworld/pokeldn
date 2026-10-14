@@ -9,8 +9,10 @@ GUI 和 CLI 共用工具预设及宝可梦准备逻辑。各游戏模块保留�
 | 位置 | 职责 |
 | --- | --- |
 | `pokeldn/app/` | 功能目录、参数组装、解析器检查、设置、路径和子进程 |
+| `pokeldn/popup.py` | 程序在应用内显示的[弹窗](gui.md#pop-ups)，由 `pokeldn/app/popups.py` 决定显示内容 |
 | `pokeldn/pokemon.py` | PKHeX 服务、导入、最终交换提议验证和接收文件 |
 | `pokeldn/gifts.py` | 通用[神秘礼物文件](gifts.md)封装、读取、写入和原生格式转换 |
+| `pokeldn/receiver_gift.py` | 按游戏机存档生成交换主机提供的神秘礼物宝可梦（[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)） |
 | `services/pkhex/` | 固定版本的 PKHeX.Core 依赖；合法遭遇生成和游戏兼容性检查 |
 | `pokeldn/ldn/` | 无线传输、IP、Pia、可靠性和信道表 |
 | `pokeldn/online/` | [在线交换](online.md)：中继、匹配和交换伙伴的加密通道 |

@@ -208,6 +208,22 @@ def test_a_seven_star_raidpoint_carries_its_crystal_catch_and_rewards():
     assert (boss["species"], boss["level"], boss["nature"], boss["gender"], boss["scale"]) == (6, 100, 15, 0, 128)
 
 
+def test_a_raid_s_scripted_actions_are_its_shield_then_its_extra_actions():
+    found = raid_event.generate(MIGHTY, 0x52E6B438, "scarlet", "6star")
+    action = raid_encounter.Action
+    # The shield at 65% HP or 55% time left, then the six extra actions in table order.
+    assert found.actions == [action("shield", 0, (("hp", 65), ("time", 55))),
+                             action("move", 315, (("time", 99),)), action("boss_reset", 0, (("time", 98),)),
+                             action("player_reset", 0, (("hp", 70),)), action("move", 851, (("hp", 50),)),
+                             action("move", 241, (("hp", 40),)), action("move", 517, (("hp", 20),))]
+    # No shield; a move action without a move, one at 0% left and a "none" action are left out, and a
+    # drain's stray move is dropped (records 5023, 3064, 6070 and 5081 hold one each).
+    extra = [3, 2, 75, 0, 3, 2, 0, 580, 0, 2, 20, 116, 4, 2, 40, 604, 2, 1, 60, 0, 0, 0, 0, 0]
+    assert raid_encounter.scripted_actions(row(boss_desc=[500] + [0] * 9 + extra + [0] * 3)) == [
+        action("drain", 0, (("hp", 40),)), action("player_reset", 0, (("time", 60),))]
+    assert raid_encounter.scripted_actions(row()) == []
+
+
 def test_a_catch_once_boss_can_be_served_as_a_normal_catch():
     found = raid_event.generate(MIGHTY, 0x52E6B438, "scarlet", "6star")
     assert raid_event.catch_rule(found) == "caught once per save"

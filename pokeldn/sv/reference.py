@@ -9,6 +9,8 @@ RECORDS = os.path.join(DATA, "records")
 # (seconds after the host's key-0x80 open, fragment); both ends send this schedule.
 OPEN_SCHEDULE = ((0.15, "start"), (0.17, "end"), (0.30, "start"), (0.32, "end"))
 NAME_OFFSET, NAME_SIZE = 0x13, 26   # in record 1, the first chunk of the block
+# Record 1's trainer, before the name (docs/sv.md, The records).
+TRAINER_ID, TRAINER_VERSION, TRAINER_GENDER, TRAINER_LANGUAGE = 0x0B, 0x0F, 0x10, 0x11
 
 
 def open_fragment(tag):
@@ -40,6 +42,19 @@ def player_name(payload):
 
     field = streams.decompress(payload)[NAME_OFFSET:NAME_OFFSET + NAME_SIZE]
     return field.decode("utf-16-le").split("\0", 1)[0]
+
+
+def identity_trainer(record):
+    """-> the trainer record 1 of a station's identity block names, decompressed, as pokeldn.receiver_gift
+    takes it: id pair, version, gender, language and name; None for any other record."""
+    if record[:2] != b"\x01\x00" or len(record) < NAME_OFFSET + NAME_SIZE:
+        return None
+    field = record[NAME_OFFSET:NAME_OFFSET + NAME_SIZE]
+    return {"ot": field.decode("utf-16-le").split("\0", 1)[0],
+            "tid": int.from_bytes(record[TRAINER_ID:TRAINER_ID + 2], "little"),
+            "sid": int.from_bytes(record[TRAINER_ID + 2:TRAINER_ID + 4], "little"),
+            "version": record[TRAINER_VERSION], "gender": record[TRAINER_GENDER],
+            "language": record[TRAINER_LANGUAGE]}
 
 
 def fill_identity(args):

@@ -12,7 +12,8 @@ the console's offline Link Trade search, `bin/sv_join.py` joins the console's ne
 A retail Violet joins a host advertising Scarlet's local communication id, and its own search
 network advertises Scarlet's id too (`0x0100a3d008c5c000`, application version 21, scene 4).
 
-Both launchers also run a local Tera Raid in either role ([Tera Raids](sv_raid.md)).
+Both launchers also run a local Tera Raid in either role ([Tera Raids](sv_raid.md)), and the host
+trades an official gift Pokemon to a console ([Simulated Mystery Gifts](gift_simulated.md)).
 
 Addresses are offsets into the decompressed `main` of update 4.0.0 (`tools/switch/nso_read.py`):
 text `0x0..0x343fc90`, rodata from `0x3440000`, data from `0x4383000`.
@@ -197,10 +198,30 @@ A station's block is 0xF388 (62,344) bytes: 45 chunks of 1384 and one of 64, ids
 byte `floor(k * 1384 * 100 / 62344)` (2, 4, 6, 8, 0x0b, ..., 0x37 at 25, 0x52 at 37, 0x64 at 46). The
 first chunk carries the partner shown on screen:
 
-    +0x0b  5   unread
+    +0x0b  4   trainer id, then secret id
+    +0x0f  1   version: 50 Scarlet, 51 Violet
+    +0x10  1   gender
+    +0x11  1   language
+    +0x12  1   ball-throw style, 1 the original
     +0x13  26  the player name, UTF-16 little-endian, NUL-padded; --trainer-name on both launchers
     +0x2d  22  the account identifier, ASCII, `u-` and twenty characters
-    +0x53  1   5
+    +0x53  8   story progress, little-endian: 1 the main story cleared, 4 The Indigo Disk cleared
+
+The block is built on the stack at `0xa52f88`..`0xa530a0`: the trainer from the save, then the
+throw style from another save block (`0xa53054`), then the account identifier (`0x1a61a00`), and last
+the progress word, the return of a script function the game keeps at `0x473a040` (called at
+`0xa5309c`). Native `f20A702BD` (`0x877560`) installs it; in the 3.0.1 script dump
+`BattleNetworkNetReceiver` passes a function that starts from 0, sets 1 when
+`FSYS_SCENARIO_GAME_CLEAR` is set and ors in 4 when `FSYS_SCENARIO_GAME_CLEAR_SU2` is. The retail
+Scarlet sent 5, the retail Violet 0 with an all-zero account identifier, and the reference sends 1.
+
+The game's script reads a station's player through native getters registered in this order:
+`PlayerId`, `RomCode`, `Sex`, `LanguageId`, the throw style, `NameStrBuf` (`RegisterPlayerData` and
+the battle setup in the 3.0.1 script dump; the throw style is the slot the save's own `ballThrowId`
+fills). On two retail saves, a Scarlet and a Violet, the id pair, version, language and name matched
+the Pokemon each save had caught, and still named the save while it offered one it had received. A
+gift made for the receiving player reads them (`reference.identity_trainer`,
+[Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)).
 
 Chunks 2 to 24 are high-entropy; 25 to 46 are zero. A station sends its whole set at once, usually
 ids 1, 25, 26 to 36 and 46 in the first packet, 2, 37 and 38 to 45 in the second, then 3 to 24 one
@@ -774,7 +795,8 @@ inflations concatenated:
 
 The blob is 850 little-endian three-byte values, mostly 1, the rest bitmasks (`0x0fffff`,
 `0x0002ff`, `0x00003f`, 0), per-station: the values differ between stations (38 entries between a retail console and a pair
-host; entry 36: `0x040000` against `0x0fffff`). What the index counts is unknown. A pair host's four
+host; entry 36: `0x040000` against `0x0fffff`). What the index counts is unknown. It carries none of
+the trainer's fields: neither id pair nor name appears in a retail console's. A pair host's four
 fragments, replayed, are accepted by a retail console.
 
 ### The record a trade message carries
@@ -906,6 +928,11 @@ A composed record traded onto a retail console and offered back differs in 27 by
 
 Everything else is kept as sent. An empty name comes back as the species name, as in the Sword
 Mystery Gift record (`docs/swsh_gift.md`).
+
+A record whose original trainer is the receiving save's keeps handler 0 and no handler name, as in
+Legends Z-A ([What the trade writes into a received record](za.md#what-the-trade-writes-into-a-received-record)).
+A Mystery Gift Pokemon made for a retail Violet's trainer, from a Pokemon that save caught
+([Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)), came back from it so.
 
 ### Joining a searching console: a trade, and what decides the seat
 

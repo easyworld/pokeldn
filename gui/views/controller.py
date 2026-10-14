@@ -34,9 +34,10 @@ BLUETOOTH_REFUSED = ('macOS 未允许此程序使用蓝牙。打包应用会请�
                      '运行时，请在“系统设置 → 隐私与安全性”中允许终端使用蓝牙。')
 
 
-def start_service(on_exit=lambda code: None) -> Process | None:
+def start_service(on_exit=lambda code: None, popups=None) -> Process | None:
     """The child that holds the Bluetooth link, started unless one with this code already answers; None
-    if it did. A service outlives an app that crashed, so one running other code is told to quit."""
+    if it did. A service outlives an app that crashed, so one running other code is told to quit. Its pop-ups
+    show through `popups`, the app's (pokeldn.app.popups)."""
     if service.running():
         client = service.Client()
         try:
@@ -55,7 +56,8 @@ def start_service(on_exit=lambda code: None) -> Process | None:
     os.makedirs(SESSION, exist_ok=True)
     # POKELDN_MANAGED_RUN: the child stops when the app's end of its stdin closes (pokeldn.app.runner).
     child = Process(["--module", "pokeldn.pad.service"], str(SESSION),
-                    dict(os.environ, POKELDN_MANAGED_RUN="1"), lambda line: None, on_exit, bluetooth=True)
+                    dict(os.environ, POKELDN_MANAGED_RUN="1"), lambda line: None, on_exit, bluetooth=True,
+                    popups=popups, label="Controller service")
     for _ in range(100):
         if service.running() or not child.running:
             break
@@ -153,7 +155,7 @@ class ControllerView:
         try:
             for attempt in range(3):   # a service from a closed app may still hold the port while it exits
                 try:
-                    self.child = start_service(self._child_exit) or self.child
+                    self.child = start_service(self._child_exit, self.app.popups) or self.child
                     if self.client is None:
                         self.client = service.Client()
                     break

@@ -303,8 +303,9 @@ def test_a_scarlet_host_confirms_only_after_the_partner_console_does():
     assert sv.KIND_CANCEL not in [sv.parse(p)[1] for _, _, p in stage.tick()]
 
 
-def za_seat(partner):
-    """A Z-A host with a partner, and a scripted console seated on it up to its box."""
+def za_seat(partner, offers=()):
+    """A Z-A host with a partner, and a scripted console seated on it up to its box. `offers` are the host's own,
+    as bin/za_host.py gives them to each seat."""
     from pokeldn.ldn import pia_connect
     from pokeldn.za import host as za_host
     from tests import test_za_host as ref
@@ -312,7 +313,7 @@ def za_seat(partner):
         ssid=ref.SSID, our_ip=ref.HOST_IP, our_mac=ref.HOST_MAC, guest_ip=ref.JOINER_IP,
         code="00000000", identity=bytes.fromhex("1400") + bytes(104),
         identity_tail=bytes.fromhex("1403b9018269fb308f"), selection=bytes.fromhex("0100") + bytes(1209),
-        offer=[], host_var=ref.HOST_VAR, clock=lambda: 0.0, log=lambda *a: None, partner=partner)
+        offer=list(offers), host_var=ref.HOST_VAR, clock=lambda: 0.0, log=lambda *a: None, partner=partner)
     console = ref.ScriptedJoiner(host)
     t = console.run(0.1, 0.0)
     console.send(pia_connect.PROTO_NET, bytes.fromhex("0112000000000002"), dst=0, now=t)

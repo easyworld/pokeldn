@@ -206,6 +206,22 @@ def test_every_official_event_card_is_sealed_and_puts_no_dummy_item_in_the_bag()
             assert 0 < item <= gift_builder.MAX_ITEM and not names[item].startswith("★"), card["key"]
 
 
+def test_the_pokemon_home_group_holds_one_card_per_home_gift_and_pkhex_takes_every_card():
+    """Card ids from 9000 are the community's cards of Pokemon HOME's gifts, the latest revision of each;
+    the 9013 Bulbasaur gives a Gigantamax factor its Venusaur uses [docs/swsh_gift.md, Official event cards]."""
+    from pokeldn import pokemon
+    from pokeldn.swsh import events
+    cards = events.load()
+    home = [c for c in cards if c["group"] == events.HOME]
+    assert sorted(struct.unpack_from("<H", c["record"], 0x08)[0] for c in home) == [*range(9000, 9015), 9029]
+    assert all(events.from_home(c["record"]) == (c["group"] == events.HOME) for c in cards)
+    for card in home:                          # the first revision fixed every PID at 0
+        fields = wc8.read(card["record"])
+        assert fields["shiny_type"] != 4 or fields["pid"], card["key"]
+    for card in cards:
+        pokemon.SERVICE.validate_gift(card["record"])
+
+
 @pytest.mark.skipif(not __import__("os").path.exists(SWORD_IMAGE),
                     reason="needs Sword's extracted main NSO")
 def test_the_app_sends_an_official_event_card_byte_for_byte_and_the_game_accepts_every_one(tmp_path, monkeypatch):
@@ -246,7 +262,7 @@ def test_the_event_list_loads_where_text_defaults_to_cp1252(monkeypatch):
     events.load.cache_clear()
     events.by_key.cache_clear()
     try:
-        assert len(events.load()) == 171
+        assert len(events.load()) == 189
     finally:
         events.load.cache_clear()
         events.by_key.cache_clear()

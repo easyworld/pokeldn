@@ -37,8 +37,11 @@ conversion.
 Settings, Your trainer is the original trainer of every Pokemon the app builds: a name, a gender, a
 language and two ID pairs, entered as the games show them. Legends Z-A takes a received Pokemon as its
 player's own only when the original trainer's gender, IDs and name match
-([the received record](za.md#what-the-trade-writes-into-a-received-record)). A record stores the trainer as a 16-bit TID and a
-16-bit SID, the low and high halves of one 32-bit id.
+([the received record](za.md#what-the-trade-writes-into-a-received-record)). Legends Arceus's data
+exchange record carries that gender and a look that matches it
+([the record](pla.md#the-games-reader-and-the-pre-handler-phase)); on retail trades the screen
+showed the partner's gender nowhere. A record stores the trainer as a
+16-bit TID and a 16-bit SID, the low and high halves of one 32-bit id.
 
 | games | ID shown | secret ID | stored id |
 |---|---|---|---|
@@ -200,6 +203,18 @@ game. The warning shows on a built or loaded offer, a bank entry, a bank destina
 An unset tracker can change other verdicts: PKHeX 26.8.26 refuses the Hidden Ability of the Black 2 Patrat
 in `tests/data/bank_import.json` moved into Legends Z-A without a tracker, and accepts it with one.
 
+Mystery Gift - Simulated follows the setting too ([Mystery Gift - Simulated](#mystery-gift---simulated)).
+Among the gifts, PKHeX wants a tracker only on one HOME gave: under `empty` its copy has none, under
+`made` a made one (`MendGift` in `services/pkhex/Program.cs`). A made tracker comes with what HOME
+changes on a Pokemon it has seen, which PKHeX's check expects of one with a tracker
+[HomeQuirks]:
+a Scarlet/Violet Pokemon's height is its scale, a Legends Z-A one's height and weight, and a Legends Z-A
+Alpha carries the Alpha mark (`HomeSeen`). PKHeX.Core 26.8.26 holds 16 such gifts for Sword/Shield, 4
+each for Brilliant Diamond/Shining Pearl, Legends Arceus and Legends Z-A, and 5 for Scarlet/Violet, and
+every gift passes the check under either setting. The Sword/Shield Mystery Gift sends its 16 as the
+community's cards (Official events, Pokemon HOME): the console makes the Pokemon, so it never carries a
+tracker, whatever the setting ([Pokemon HOME](swsh_gift.md#pokemon-home)).
+
 ### Importing
 
 The Bank page's plus button, or a file dropped on its grid, imports a Pokemon file or a game save. The
@@ -329,8 +344,9 @@ them. An app that finds a service running other code
 
 The sprites are the 96x96 PNGs behind `sprites.front_default` and `sprites.front_shiny` of
 `https://pokeapi.co/api/v2/pokemon/{id}`, read from `raw.githubusercontent.com/PokeAPI/sprites`
-(`sprites/pokemon/{id}.png`, `sprites/pokemon/shiny/{id}.png`). The JSON (300 KB per species) is not fetched; the sprite path is fixed by the id. Twelve National Dex numbers sampled from 1 to 1025
-all have both sprites; 1026 returns 404. When a shiny sprite is missing, the normal one is shown.
+(`sprites/pokemon/{id}.png`, `sprites/pokemon/shiny/{id}.png`). The JSON (300 KB per species) is not
+fetched; the sprite path is fixed by the id. All 1,025 National Dex numbers have both sprites; 1026
+returns 404. When a shiny sprite is missing, the normal one is shown.
 
 | where | size |
 |---|---|
@@ -358,6 +374,7 @@ A sprite downloads on first use and is read from disk afterwards, with no networ
 | no network, nothing cached | the pixelarticons `circle-question` icon; no error; the next attempt waits 60 s |
 | HTTP 404 | a `{id}.none` marker; not asked again for 7 days |
 | reply that is not a PNG, or over 200 KB | not cached |
+| PNG with a colour profile, text or other extra chunks | saved and shown without them: only IHDR, PLTE, tRNS, IDAT and IEND are kept (26 of the 2,050 sprites, most of them Gen 9) |
 | damaged cached file | deleted, downloaded again |
 | data folder not writable | the sprite shows for the session and is not saved |
 | Settings, Pokemon sprites off | the cache is read, nothing is downloaded |
@@ -425,6 +442,77 @@ A click seats a trainer, numbered by the slot it takes; a second click leaves th
 Each pick passes `--raid-partner`, in order. Raising Consoles joining drops the last pick, and a
 pick the chosen stage lacks (Dylan or Luke below four stars) is dropped. Folding only hides the card
 (`GamesView.show_raid_partners`): the choice still goes to the raid, and the header names it.
+
+## Mystery Gift - Simulated
+
+The Mystery Gift - Simulated tool's card, on Let's Go, Brilliant Diamond/Shining Pearl, Legends
+Arceus, Scarlet/Violet and Legends Z-A, lists the game's gift Pokemon from PKHeX's event table
+([Simulated Mystery Gifts](gift_simulated.md#the-gifts); `gui/views/event_gifts.py`). Tiles go two
+to a row, newest first: a sprite, the card's title, then the Pokemon, whose it is and when it was
+given; a hover shows the moves. Twenty-four show at a time, Show more adds as many, and a search
+narrows them by any word a tile shows, the ball, a move or the card number. Ten tiles or fewer show
+whole; more scroll in a box of their own (`event_gifts.FIT`).
+
+A click makes a fresh copy for the trainer in Settings and keeps it with the built Pokemon. It becomes
+the trade's offer, shown under the list with its legality, moves and OT. A copy keeps the trainer it
+was made with: pick the gift again after changing the trainer. A gift that names its receiver but
+never reached saves in the trainer's language, such as Let's Go's Chinese Meltan and Melmetal for any
+other, has an illegal tile that says why, and a click on it says so and keeps the offer
+([Saves a card reached](gift_simulated.md#saves-a-card-reached)). With Made for the receiving player
+(Advanced tab) on, the default, the trade makes a gift that names its receiver again for the console's own save
+([Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)). A gift with its
+card's own trainer goes as made: picking it turns the switch off, disabled and faded, and the note
+under it names that trainer (`command.locked`). The launch then passes no `--for-receiver`. Picking a
+gift that names its receiver gives the switch back as it was set.
+
+A gift HOME gave, on any game but Let's Go, has the tracker the HOME tracker setting gives it
+([The HOME tracker setting](#the-home-tracker-setting)). Its tile is outlined in amber and, as the
+chosen copy, shows the setting's warning: "PKHeX flags the missing HOME tracker" or "Can't be
+deposited in HOME". The trade offers it like any other
+([The copy a trade offers](gift_simulated.md#the-copy-a-trade-offers)).
+
+## Pop-ups
+
+A run the app started, another of its child processes, or the app's own code can put a pop-up over
+whatever page shows (`pokeldn.popup`, in the plugin API since 1.2). There are two kinds:
+
+| kind | buttons | callback |
+|---|---|---|
+| `acknowledge(title, text)` | one, `label` (OK) | `on_ack`: the button, Esc or a click outside |
+| `confirm(title, text, agree, disagree)` | agree and disagree, the caller's labels | `on_agree`, `on_disagree` or `on_dismiss`, which Esc and a click outside fire |
+
+Opening one never waits: it returns the pop-up's id, and the answer comes later as its callback. A
+callback runs on the thread that reads the app's answers, unless `set_dispatcher(dispatch)` hands it to the program's own loop; in the app, it runs on a worker
+thread so no callback stalls the window. A callback that raises prints its traceback.
+
+| option | what it does |
+|---|---|
+| `id` | names the pop-up among the program's own; one opened under the id of a pop-up still open replaces it in place, its callbacks dropped. Without one, a new id is made |
+| `tone` | `info`, `warning` or `error`, which pick the icon |
+
+`cancel(id)` closes a pop-up; none of its callbacks fires once `cancel` has returned, except one an
+earlier answer already handed to the dispatcher. A program holding 32
+pop-ups unanswered gets `RuntimeError`. A pop-up's header names the program that opened it: the
+tool, Board installer or Controller service, and nothing for the app's own.
+
+When a program exits, its confirmations close and its acknowledgements stay with no answer to go
+back. With no app (`available()` is false, as in a terminal), a pop-up is a `[pop-up]` line in the
+output, no answer comes, and it does not count toward the 32.
+
+`runner.Process(..., popups=app.popups, label=...)` sets `POKELDN_POPUPS=1` in the child. The child
+sends each pop-up as a `[popup]` line and a JSON object on stdout, which the app keeps out of the log
+and finds wherever in a line another thread's print left it; the app answers with
+`[popup] {"id", "n", "answer"}` on the child's stdin, which `pokeldn.app.runner.child` reads. `n`
+tells a pop-up from one opened again under its id, so a late answer to a replaced pop-up fires
+nothing. Code in the app reaches the manager directly (`popup.attach`). `pokeldn.app.popups.Manager`
+keeps the open pop-ups; `gui.popups.Dialogs` draws them. An app dialog's
+`page.pop_dialog()` closes the app's own top dialog, never a pop-up opened above it.
+
+Mystery Gift - Simulated raises a warning when a gift made for the receiving player goes with the
+trainer from Settings instead, saying why: the save names no one, or its copy stopped at the card,
+PKHeX, the offer check or the loader ([The trade](gift_simulated.md#the-trade)). There is one per
+console (`receiver_gift.pop_up`), a newer reason replacing the one open. The app raises its own for
+an update that did not install and for a plugin it turned off.
 
 ## Updates
 

@@ -144,7 +144,7 @@ def run_host(monkeypatch, capsys, console_class, goal, drop=None, extra=()):
     monkeypatch.setattr(pla_host, "time", types.SimpleNamespace(time=clock, monotonic=clock))
     monkeypatch.setattr(joiner, "trade_box", _faithful_trade_box())
     monkeypatch.setattr(sys, "argv", [
-        "pla_host.py", "--ip-host", "--our-ip", HOST_IP, "--seconds", str(SECONDS),
+        "pla_host.py", "--ip-host", "--our-ip", HOST_IP, "--seconds", str(SECONDS), "--print-packets",
         "--session-update", "--sustain", "--clock", "--data-exchange", "--game-channel",
         "--trade-box", "--trade-box-ours", "--data-exchange-name", "HOST",
         "--data-exchange-id", "11223344", *extra])

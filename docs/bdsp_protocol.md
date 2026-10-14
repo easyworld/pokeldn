@@ -29,7 +29,8 @@ struct's size is its `native_size` in `Il2CppTypeDefinitionSizes`; a string's le
 `global-metadata.dat`'s `fieldMarshaledSizes`; an array's count is what the other fields leave. The
 exact bytes are written by `marshalToNative` in `CodeRegistration.interopData` [1.3.0 main 0x4acd0c8,
 0x255 entries of 56 bytes]. The four captured opaque payloads match byte for byte (`room.NATIVE_SIZES`,
-`room.MEASURED`).
+`room.MEASURED`). An address given as 1.3.0 main is in Shining Pearl's; Brilliant Diamond's 1.3.0
+places the same methods elsewhere.
 
 | id | payload | bytes | layout |
 |---|---|---|---|
@@ -198,8 +199,20 @@ picks who appears:
                           ->  UnionCharacterTable.SheetSheet1{ID, AssetName}
                           ->  OpLoadCharacter("persons/field/" + assetName)
 
-`GetSexId` and `GetNpcColorId` read the same value: 8 is a girl, 0 a boy in a blue cap
+`CreateCharaData` [1.3.0 main 0x022796b0] sets `sexId` from the avatar alone, `avatarId > 7 &&
+avatarId != 16` (`0x02279770`): 8 to 15 a girl, 0 to 7 and 16 a boy. `GetOpcSexId` [0x02279840]
+returns it, and `GetNpcColorId` reads the same avatar: 8 is a girl, 0 a boy in a blue cap
 (`--join-avatar N`).
+
+A console's own join carries work 360 (`SendJoinData` [0x01e4f630] through `GetAvaterId`
+[0x01e54030]). A new save starts it at 0, and creating a save picks no Union Room appearance: native
+code only reads the work (those two methods), and two scripts write it. The optional appearance
+counter (`ev_union_character_select_*`) offers eight trainer classes for the save's sex
+(`_GET_MY_SEX`) and stores 16 or 1 to 7 for a boy, 8 to 15 for a girl. Otherwise, while work 360 is
+0, `ev_connect_union_check_save` and `ev_connect_global_check_net` call
+`ev_traner_other_see_random`, which sets it to 1 + a random value below 16 (`_GET_RND`, `_ADD_WK`),
+either sex. The join names the save's sex only after the counter, and nothing in it says whether
+the player used it.
 
 `NetDataTranerCardData` (0x05, 75 bytes: `fashionId`, `bodyType`, `genderid`, ...) feeds
 `UnionOpcManager.CreateTranerCard()`; a received one draws nothing on screen in the Union Room.

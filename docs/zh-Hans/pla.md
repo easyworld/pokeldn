@@ -273,7 +273,24 @@ DataExchangeStart 步骤的启动函数 `0x26c5288`（由 `0x26be3f0` 构建，�
 | Session（会话）、Clone Clock（克隆时钟）、Reliable（可靠传输） | 对方的可变 ID | 无 |
 | RTT（往返时延）、Stream Broadcast Reliable（可靠流广播） | 网状网络目标 0x0001 | 接收方的可变 ID，明文 |
 
-如果 0x81 消息头部的目标为对方可变 ID，消息就不会到达游戏。同一存档配对时，双向 64 字节内容载荷除发送方站点索引外完全相同；哪些字节因玩家而异尚不清楚。
+头部目标为伙伴变量 ID 的 0x81 消息不会到达游戏。同一存档双方的 64 字节内容负载除发送方站点索引外完全相同。它是 139 字节记录的 zlib 压缩（4 KB 窗口，级别 5；`pokeldn.pla.data_exchange`）：Pia StreamData 头部下的一个数据块（[协议 0x81](pia.md#protocol-0x81-the-stream-broadcast-reliable-transfer-pia-6)），包含存档的 0x80 字节 MyStatus 块（PKHeX `MyStatus8a`）：
+
+    +0x00  1   StreamData kind, 1: the first chunk
+    +0x01  1   transfer id, 0
+    +0x02  1   percent of the block delivered, 0x64
+    +0x03  4   zero
+    +0x07  4   big-endian u32 0x80, the bytes that follow
+    +0x0b  128 the MyStatus block: trainer id pair +0x1b, version +0x1f (47), gender +0x20,
+               language +0x22, UTF-16LE name +0x2b
+
+Pia 写入头部（序列化器 `0x7533e8`，分块循环 `0x7529f8`）。`0x26c564c` 从步骤自身副本整体复制后，游戏在 `0x26bfd28` 调用 `0x753554(stream, exchange + 0xa0, 0x80, 0)` 仅传入数据块（`0x1024038` 为数据块序列化器，块位于对象 `+0x68`）。按接收玩家生成的礼物读取此训练家（`data_exchange.read_trainer`、[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)）。
+
+参考记录中，另外两个非零字段为 32 位。实机存档记录还在记录 +0x60 包含 22 字符账户标识，在 +0x7d 包含值 1：
+
+- +0x3c（记录 +0x47）是开场 4×2 `grid_player` 中选择的外观，值为列号加 4 倍行号（`0x1348df8`，设置器 `0x1023f94`）。同一次选择设置性别，列 2、3 为女（`column > 1`、`0x134d728`），同时设置肤色。八个值为 `p1skin001`（0）、`p1skin004`（1）、`p2skin001`（2）、`p2skin004`（3）、`p1skin002`（4）、`p1skin003`（5）、`p2skin002`（6）、`p2skin003`（7）；`p1` 为男，`p2` 为女。游戏通过 `0x1023f9c` 读取，用于玩家照片 `photo_player_0N` 和结束字幕 `credit_end_0N`。参考值 5 为第三种肤色的男玩家；外观列与 +0x15（记录 +0x20）性别冲突时，不是游戏存档会生成的组合。`bin/pla_host.py` 和 `bin/pla_join.py` 按 `--gender`（应用取自设置）发送对应性别、相同肤色的外观：男为 5，女为 7（`data_exchange.build_record`）。
+- +0x50（记录 +0x5b，PKHeX 的 `Unk_0x50`）为 1，由初始化器 `0x1023144` 在 `0x10230e4` 内写入，后者也写入版本 47。该类没有此字段的访问器。
+
+Game Freak 从偏移基值 `0xcbf29ce484222645` 使用 FNV-1a 64 哈希这些名称。肤色对应 `0x1348cbc` 判断的八个哈希，`grid_player` 对应 `0x13497fc` 打开的布局。
 
 ## 游戏可靠渠道
 

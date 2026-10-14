@@ -2124,3 +2124,15 @@ LABELS.update({'Safeguard prevents status conditions; Grassy Terrain heals each 
  'Light Screen cuts special damage; can paralyze': '光墙降低特殊伤害；可造成麻痹'})
 
 LABELS.update({"Plugins": "插件", "Command-line usage": "命令行用法"})
+
+LABELS.update({'Choose the Mystery Gift Pokemon first.': '请先选择神秘礼物宝可梦。', "This gift is legal only with a handler, which its own trainer's save clears: it goes with your trainer.": '此礼物必须有当前训练家才合法；初训家的存档会清除此信息，因此使用设置中的训练家。', 'Controller service': '手柄服务', 'Board installer': '开发板安装程序', 'Pokemon HOME': 'Pokémon HOME', 'Simplified Chinese': '简体中文', 'Traditional Chinese': '繁体中文', 'English': '英语', 'Japanese': '日语', 'Spanish': '西班牙语', 'Korean': '韩语', 'French': '法语', 'German': '德语', 'Italian': '意大利语'})
+
+LABELS.update({'PKHeX has no Mystery Gift Pokemon for this game.': 'PKHeX 没有此游戏的神秘礼物宝可梦。', 'Neither this species nor its evolutions have a Gigantamax form.': '此种类及其进化形态均没有超极巨化形态。', 'The gift carries the trainer from Settings': '礼物使用设置中的训练家'})
+
+LABELS.update({'Simulated Mystery Gifts': '模拟神秘礼物', 'Skip': '跳过', 'Water': '水', 'Grass': '草', 'Flying': '飞行'})
+
+LABELS.update({'PKHeX flags the missing HOME tracker. Pokemon HOME gave this gift with its own tracker. The console makes the Pokemon from this card without one, whatever the HOME tracker setting, and Pokemon HOME currently accepts it.': 'PKHeX 提示缺少 HOME 追踪码。HOME 发放此礼物时附有追踪码；游戏机按卡片生成时不会写入，且不受 HOME 追踪码设置影响。Pokémon HOME 当前接受此记录。'})
+
+LABELS.update({'Close': '关闭', 'OK': '确定', 'Yes': '是', 'No': '否'})
+
+LABELS.update({'First Challenge Pichu': '首次挑战奖励：皮丘', 'First GTS Trade Rotom': '首次 GTS 交换奖励：洛托姆', 'First Login Reward Pikachu': '首次登录奖励：皮卡丘', 'First Wonder Box Trade Eevee': '首次奇迹盒子交换奖励：伊布', 'Hidden Ability Grookey': '隐藏特性敲音猴', 'Hidden Ability Scorbunny': '隐藏特性炎兔儿', 'Hidden Ability Sobble': '隐藏特性泪眼蜥', 'HOME Starter Bulbasaur': 'HOME 初始伙伴：妙蛙种子', 'HOME Starter Charmander': 'HOME 初始伙伴：小火龙', 'HOME Starter Squirtle': 'HOME 初始伙伴：杰尼龟', 'National Dex Completion Magearna': '全国图鉴完成奖励：玛机雅娜', 'Pokemon GO Transfer Gift Melmetal': 'Pokémon GO 传送奖励：美录梅塔', 'Ver 1.4.0 HOME Bulbasaur': 'HOME 1.4.0 赠礼：妙蛙种子', 'Ver 1.4.0 HOME Squirtle': 'HOME 1.4.0 赠礼：杰尼龟'})

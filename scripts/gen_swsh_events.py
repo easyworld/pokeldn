@@ -4,7 +4,8 @@ folder of projectpokemon EventsGallery `.wc8` files [docs/swsh_gift.md, Official
 
 Kept: a card the game's own validator 0x010b5de0 accepts (run from main under unicorn) and
 the PKHeX gift check passes. Left out: simulated cards, ★ dummy items, and a card whose gift is the
-same as one already kept (date and card id aside).
+same as one already kept (date and card id aside). The community's simulated cards of Pokemon HOME's
+gifts are kept, the latest revision of each, as the Pokemon HOME group under projectpokemon's titles.
 
     ./.venv/bin/python scripts/gen_swsh_events.py DIR [--image scratchpad/swsh/main.bin]
 """
@@ -26,6 +27,14 @@ from pokeldn.swsh import events, wc8                           # noqa: E402
 
 OUT = ROOT / "pokeldn" / "swsh" / "data" / "events.json"
 GROUPS = {1: "Pokemon", 2: "Items", 3: "Battle Points", 4: "Clothing", 5: "Money"}
+# projectpokemon's titles for its Pokemon HOME files, by card id; the gallery names them "Simulated (Trainer) Eevee".
+HOME_LABELS = {9000: "HOME Starter Bulbasaur", 9001: "HOME Starter Charmander", 9002: "HOME Starter Squirtle",
+               9003: "First Login Reward Pikachu", 9004: "National Dex Completion Magearna",
+               9005: "First Wonder Box Trade Eevee", 9006: "First GTS Trade Rotom", 9007: "First Challenge Pichu",
+               9008: "Hidden Ability Grookey", 9009: "Hidden Ability Scorbunny", 9010: "Hidden Ability Sobble",
+               9011: "Shiny Zeraora", 9012: "Pokemon GO Transfer Gift Melmetal",
+               9013: "Ver 1.4.0 HOME Bulbasaur", 9014: "Ver 1.4.0 HOME Squirtle", 9029: "Shiny Keldeo"}
+REVISION = re.compile(r" \(Rev\. (\d+)\)$")
 
 
 def label_of(name):
@@ -36,6 +45,12 @@ def label_of(name):
     label = re.sub(r"^\(Trainer\) ", "", label)
     head, _, rest = label.partition(" ")
     return f"{rest} ({head})" if rest and not head.isascii() else label
+
+
+def revision(label):
+    """`Simulated HOME Pikachu (Rev. 2)` -> (`Simulated HOME Pikachu`, 2); 0 for a label without one."""
+    found = REVISION.search(label)
+    return (label[:found.start()], int(found[1])) if found else (label, 0)
 
 
 def same_gift(raw):
@@ -55,11 +70,18 @@ def main():
     def named(kind, n):
         return (species if kind == "species" else items).get(int(n), f"{kind} #{n}")
     kept, seen, left = [], set(), {}
-    for name in sorted(os.listdir(args.folder), key=label_of):
+    names = sorted(os.listdir(args.folder), key=label_of)
+    latest = {}
+    for base, number in map(revision, map(label_of, names)):
+        latest[base] = max(latest.get(base, 0), number)
+    for name in names:
         raw = (pathlib.Path(args.folder) / name).read_bytes()
         label = label_of(name)
+        home = events.from_home(raw)
         why = None
-        if "Simulated" in label:
+        if revision(label)[1] < latest[revision(label)[0]]:
+            why = "an older revision"
+        elif "Simulated" in label and not home:
             why = "simulated"
         elif not wc8.sealed(raw):
             why = "size or checksum"
@@ -79,7 +101,9 @@ def main():
             continue
         seen.add(same_gift(raw))
         kind = raw[wc8.GIFT_KIND_AT]
-        if kind == 2:
+        if home:
+            label = HOME_LABELS[struct.unpack_from("<H", raw, 0x08)[0]]
+        elif kind == 2:
             label = ", ".join(f"{items[i]} x{q}" for i, q in events.item_pairs(raw))
         elif kind == 3:
             label = f"{struct.unpack_from('<I', raw, 0x20)[0]} Battle Points"
@@ -90,9 +114,10 @@ def main():
             summary = "Added to the player's Battle Points"
         elif kind == 4:
             summary = summary.split(";")[0].removeprefix("Puts ").removesuffix(" in the wardrobe")
-        kept.append({"label": label, "group": GROUPS[kind], "summary": summary[:1].upper() + summary[1:],
-                     "record": base64.b64encode(raw).decode()})
+        kept.append({"label": label, "group": events.HOME if home else GROUPS[kind],
+                     "summary": summary[:1].upper() + summary[1:], "record": base64.b64encode(raw).decode()})
     order = list(GROUPS.values())
+    order.insert(1, events.HOME)
     kept.sort(key=lambda e: (order.index(e["group"]), e["group"] == "Battle Points"
                              and int(e["label"].split()[0]), e["label"].casefold()))
     used = {}

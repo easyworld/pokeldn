@@ -49,9 +49,12 @@ while (Console.ReadLine() is { } line)
             "make" => Make(game, request),
             "paste" => Paste(game, request),
             "check" => Check(game, Convert.FromBase64String((string)request["data"]!), request),
+            "owner" => Owner(game, Convert.FromBase64String((string)request["data"]!)),
             "gift" => Gift(Convert.FromBase64String((string)request["data"]!)),
             "events" => Events(),
             "event" => Event(game, request),
+            "gift_events" => GiftEventList(game, request),
+            "gift_event" => GiftEvent(game, request),
             "sav_read" => SaveRead(game, request),
             "sav_box" => SaveBox(game, request),
             "sav_edit" => SaveEdit(game, request),
@@ -244,7 +247,8 @@ JsonObject Options(Game game, JsonObject request)
     {
         if (!Enum.TryParse<GameVersion>(v, out var chosen) || !versions.Contains(chosen))
             throw new ArgumentException("This version is incompatible with the selected game.");
-        versions = [chosen, .. versions.Where(x => x != chosen)];
+        // "only_version": the trainer's own game alone, as a gift made for a receiving player (docs/gift_simulated.md).
+        versions = (bool?)request["only_version"] ?? false ? [chosen] : [chosen, .. versions.Where(x => x != chosen)];
     }
     return (versions, new SimpleTrainerInfo(versions[0])
     {
@@ -399,7 +403,7 @@ LegalityAnalysis Mend(PKM pk, bool evolved, IEncounterTemplate encounter, ITrain
             // A trade evolution has been through a trade, and some gifts (Z-A's Magearna) arrive already handled.
             pk.CurrentHandler = 1;
             pk.HandlingTrainerName = "POKELDN";
-            pk.HandlingTrainerGender = (byte)(1 - trainer.Gender);
+            pk.HandlingTrainerGender = 0;
             if (pk is IHandlerLanguage language)
                 language.HandlingTrainerLanguage = (byte)trainer.Language;
             Refit(pk, wish);
@@ -466,11 +470,24 @@ LegalityAnalysis Refresh(PKM pk, Wish? wish = null)
     {
         AwakeningUtil.SetSuggestedAwakenedValues(pb7, pb7);
         wish?.ApplyEffort(pk);
-        pb7.ResetCalculatedValues();
+        ResetSizes(pb7);
     }
     pk.ResetPartyStats();
     pk.RefreshChecksum();
     return new LegalityAnalysis(pk);
+}
+
+// Let's Go computes a Pokemon's height and weight, except on HOME's Meltan (card 9028), which keeps the ones HOME
+// gave it [MiscVerifierPB7].
+static void ResetSizes(PB7 pb7)
+{
+    pb7.ResetCalculatedValues();
+    if (pb7.Species == (ushort)PKHeX.Core.Species.Meltan
+        && new LegalityAnalysis(pb7).EncounterMatch is WB7 { IsHeightWeightFixed: true } card)
+    {
+        pb7.HeightAbsolute = card.GetHomeHeightAbsolute();
+        pb7.WeightAbsolute = card.GetHomeWeightAbsolute();
+    }
 }
 
 void Refit(PKM pk, Wish wish)
@@ -535,6 +552,32 @@ PKM Parse(Game game, byte[] data)
     return pk;
 }
 
+// Whose a Pokemon is, read with no legality check, for a gift made for the save that offers it
+// (docs/gift_simulated.md, Made for the receiving player): its original trainer, its current handler (0 while
+// still with that trainer), the handler's name, gender and language, and the version it came from.
+JsonObject Owner(Game game, byte[] data)
+{
+    var pk = Parse(game, data);
+    if (!pk.ChecksumValid)
+        throw new InvalidDataException("The Pokemon checksum is invalid.");
+    return new JsonObject
+    {
+        ["species"] = pk.Species,
+        ["shiny"] = pk.IsShiny,
+        ["egg"] = pk.IsEgg,
+        ["ot"] = pk.OriginalTrainerName,
+        ["tid"] = pk.TID16,
+        ["sid"] = pk.SID16,
+        ["gender"] = pk.OriginalTrainerGender,
+        ["language"] = pk.Language,
+        ["handler"] = pk.CurrentHandler,
+        ["ht_name"] = pk.HandlingTrainerName,
+        ["ht_gender"] = pk.HandlingTrainerGender,
+        ["ht_language"] = pk is IHandlerLanguage handler ? handler.HandlingTrainerLanguage : 0,
+        ["version"] = (int)pk.Version,
+    };
+}
+
 JsonObject Check(Game game, byte[] data, JsonObject request)
 {
     var pk = Parse(game, data);
@@ -593,7 +636,7 @@ JsonObject Check(Game game, byte[] data, JsonObject request)
     if (pk is PB7 pb7)
     {
         pb7.ResetPartyStats();
-        pb7.ResetCalculatedValues();
+        ResetSizes(pb7);
     }
     var reply = Describe(game, pk, new LegalityAnalysis(pk));
     if (note is not null)
@@ -1015,8 +1058,278 @@ JsonObject Event(Game game, JsonObject request)
     };
 }
 
+// A game's Mystery Gift Pokemon in PKHeX's own event database, eggs left out, each under a key that names it
+// across PKHeX updates: its card, species, form and Tera type (one Mew card holds eighteen, one per type). Two
+// records under one key differ only in what the Pokemon does not carry, such as the card's revision.
+IEnumerable<(string Key, MysteryGift Gift)> GiftEvents(Game game)
+{
+    MysteryGift[] table = game.Context switch
+    {
+        EntityContext.Gen7b => EncounterEvent.MGDB_G7GG,
+        EntityContext.Gen8 => EncounterEvent.MGDB_G8,
+        EntityContext.Gen8a => EncounterEvent.MGDB_G8A,
+        EntityContext.Gen8b => EncounterEvent.MGDB_G8B,
+        EntityContext.Gen9 => EncounterEvent.MGDB_G9,
+        EntityContext.Gen9a => EncounterEvent.MGDB_G9A,
+        _ => throw new ArgumentException("PKHeX has no Mystery Gift Pokemon for this game."),
+    };
+    var seen = new HashSet<string>();
+    foreach (var gift in table.Where(g => g.IsEntity && !g.IsEgg))
+    {
+        var key = $"{gift.CardID:0000}-{gift.Species}-{gift.Form}"
+                  + (gift is ITeraTypeReadOnly tera ? $"-{(int)tera.TeraType}" : "");
+        if (seen.Add(key))
+            yield return (key, gift);
+    }
+}
+
+// The day a card's distribution opened, where PKHeX holds it.
+static DateOnly? GiftDate(MysteryGift gift)
+{
+    var window = default(DistributionWindow);
+    var known = gift switch
+    {
+        WB7 g => EncounterServerDate.GetDistributionWindow(g, out window),
+        WC8 g => EncounterServerDate.GetDistributionWindow(g, out window),
+        WA8 g => EncounterServerDate.GetDistributionWindow(g, out window),
+        WB8 g => EncounterServerDate.GetDistributionWindow(g, out window),
+        WC9 g => EncounterServerDate.GetDistributionWindow(g, out window),
+        WA9 g => EncounterServerDate.GetDistributionWindow(g, out window),
+        _ => false,
+    };
+    return known && window.Start.Year > 1 ? window.Start : null;
+}
+
+// The game's Mystery Gift Pokemon, newest first, each made as the request's trainer would receive it: its OT and
+// language when the card fixes them, what it holds, knows and is caught in, whether the copy is legal, and its HOME
+// tracker under the app's setting (MendGift).
+JsonObject GiftEventList(Game game, JsonObject request)
+{
+    var (versions, trainer) = Trainer(game, request);
+    var items = strings.GetItemStrings(game.Context, versions[0]);
+    var list = new List<(DateOnly? Date, JsonObject Entry)>();
+    foreach (var (key, gift) in GiftEvents(game))
+    {
+        var (pk, la) = MakeGift(gift, versions, trainer);
+        (pk, la, var refused) = InTrainerLanguage(gift, pk, la, trainer);
+        var moves = new JsonArray();
+        foreach (var move in pk.Moves)
+            if (move != 0)
+                moves.Add(strings.movelist[move]);
+        var date = GiftDate(gift);
+        list.Add((date, new JsonObject
+        {
+            ["key"] = key, ["card_id"] = gift.CardID, ["title"] = gift.CardTitle.Trim(),
+            ["date"] = date?.ToString("yyyy-MM-dd") ?? "",
+            ["species"] = strings.specieslist[gift.Species], ["species_id"] = gift.Species,
+            ["form"] = gift.Form == 0 ? "" : ShowdownParsing.GetStringFromForm(gift.Form, strings, gift.Species, game.Context),
+            ["level"] = pk.CurrentLevel,
+            // Never, may be (rolled like a wild one) or always.
+            ["shiny"] = gift.Shiny switch
+            {
+                Shiny.Never => "never", Shiny.Random => "random",
+                Shiny.FixedValue => pk.IsShiny ? "always" : "never", _ => "always",
+            },
+            ["tera"] = gift is ITeraTypeReadOnly tera ? strings.types[(int)tera.TeraType] : "",
+            ["ot"] = YourOT(pk, trainer) ? "" : pk.OriginalTrainerName,
+            ["language"] = pk.Language == trainer.Language ? 0 : pk.Language,
+            ["ball"] = strings.balllist[pk.Ball],
+            ["held_item"] = pk.HeldItem == 0 ? "" : items[pk.HeldItem],
+            ["moves"] = moves,
+            ["legal"] = Accepted(la) && refused.Length == 0,
+            ["refused"] = refused,
+            ["home_tracker"] = TrackerState(pk, la),
+        }));
+    }
+    return new JsonObject
+    {
+        ["events"] = new JsonArray(list.OrderByDescending(e => e.Date ?? DateOnly.MinValue)
+            .Select(e => (JsonNode?)e.Entry).ToArray()),
+    };
+}
+
+// A fresh copy of one of the game's Mystery Gift Pokemon, as the request's trainer receives it, for a trade to pass
+// on (docs/gift_simulated.md), legal under the app's HOME tracker setting (MendGift). `refused` says why no save
+// like the trainer's received a card that gives the receiver's own trainer, "" when one did: the copy names that
+// save as its OT, so it must be one the card reached, on the save's version when made for it alone
+// ("only_version", ReachedVersion) and in its language (InTrainerLanguage). A card with its own trainer is never
+// refused: its copy is a traded Pokemon, which any save may hold.
+JsonObject GiftEvent(Game game, JsonObject request)
+{
+    var key = (string)request["key"]!;
+    var gift = GiftEvents(game).FirstOrDefault(e => e.Key == key).Gift
+               ?? throw new ArgumentException($"PKHeX has no Mystery Gift Pokemon {key} for this game.");
+    var (versions, trainer) = Trainer(game, request);
+    var (pk, la) = MakeGift(gift, versions, trainer);
+    var refused = "";
+    if (YourOT(pk, trainer))
+    {
+        if (versions.Length < game.Versions.Length && !ReachedVersion(gift, versions[0]))
+            refused = NeverTo(gift, game.Versions.Where(version => ReachedVersion(gift, version)), versions[0]);
+        else if (Accepted(la))
+            (pk, la, refused) = InTrainerLanguage(gift, pk, la, trainer);
+        else if (game.Versions.Except(versions).Where(version => Accepted(MakeGift(gift, [version], trainer).Legality))
+                     .ToArray() is { Length: > 0 } elsewhere)
+            refused = NeverTo(gift, elsewhere, versions[0]);
+    }
+    if (!Accepted(la) && refused.Length == 0)
+        throw new InvalidDataException($"PKHeX made an illegal {strings.specieslist[gift.Species]} from card "
+                                       + $"{gift.CardID}: {Plain(la).Replace("\n", " ")}");
+    var reply = Describe(game, pk, la);
+    reply["key"] = key;
+    reply["title"] = gift.CardTitle.Trim();
+    // A copy legal only with a handler cannot go to its own trainer: that save clears the handler as it receives
+    // it (docs/sv.md, What a trade rewrites), and PKHeX then refuses it (HOME's starters on Scarlet/Violet, Z-A).
+    reply["handled"] = YourOT(pk, trainer) && pk.CurrentHandler == 1;
+    reply["your_ot"] = YourOT(pk, trainer) && pk.CurrentHandler == 0;
+    reply["refused"] = refused;
+    return reply;
+}
+
+// A card that gives the receiver's own trainer, not one of its own: the copy carries the trainer it was made for.
+static bool YourOT(PKM pk, ITrainerInfo trainer) => pk.OriginalTrainerName == trainer.OT && pk.TID16 == trainer.TID16;
+
+// Whether saves of `version` received the card. HOME's (cards 9000 on) reached either version's saves, whatever
+// origin they fix. Any other card that fixes the Pokemon's origin reached that version's alone (Scarlet/Violet's
+// card 1540: Violet a Koraidon, Scarlet a Miraidon); otherwise its own restriction says (PKHeX's
+// CanBeReceivedByVersion): Scarlet/Violet's RestrictVersion (1 Scarlet, 2 Violet), Let's Go's IRestrictVersion.
+static bool ReachedVersion(MysteryGift gift, GameVersion version) => gift switch
+{
+    { CardID: >= 9000 } => true,
+    WC9 { OriginGame: not 0 } card => (GameVersion)card.OriginGame == version,
+    WB8 { OriginGame: not 0 } card => (GameVersion)card.OriginGame == version,
+    WC9 { RestrictVersion: 1 } => version == GameVersion.SL,
+    WC9 { RestrictVersion: 2 } => version == GameVersion.VL,
+    IRestrictVersion restricted => restricted.CanBeReceivedByVersion(version),
+    _ => true,
+};
+
+static string NeverTo(MysteryGift gift, IEnumerable<GameVersion> reached, GameVersion version) =>
+    $"card {gift.CardID} gave it to {string.Join(" and ", reached.Select(VersionName))} alone, never to "
+    + VersionName(version);
+
+// A card that gives the receiver's own trainer reaches a save in that trainer's language, and the copy is in it.
+// Where the card fixes another (Let's Go's Chinese Meltan and Melmetal, cards 1501 and 1502), the copy in the
+// trainer's language is checked: legal, it is the copy; refused, no save in that language received the card, and
+// -> why, with the copy as the card makes it. A card with its own trainer keeps its language, whoever receives it.
+(PKM Pokemon, LegalityAnalysis Legality, string Refused) InTrainerLanguage(MysteryGift gift, PKM pk,
+    LegalityAnalysis la, ITrainerInfo trainer)
+{
+    if (!Accepted(la) || !YourOT(pk, trainer) || pk.Language == trainer.Language)
+        return (pk, la, "");
+    var copy = pk.Clone();
+    copy.Language = trainer.Language;
+    if (!copy.IsNicknamed)
+        copy.ClearNickname();
+    var checkedCopy = Refresh(copy);
+    return Accepted(checkedCopy)
+        ? (copy, checkedCopy, "")
+        : (pk, la, $"card {gift.CardID} gave it in {LanguageName(pk.Language)} alone, never to a save in "
+                   + LanguageName(trainer.Language));
+}
+
+static string LanguageName(int language) => language switch
+{
+    1 => "Japanese", 2 => "English", 3 => "French", 4 => "Italian", 5 => "German", 7 => "Spanish", 8 => "Korean",
+    9 => "Simplified Chinese", 10 => "Traditional Chinese", 11 => "Latin American Spanish",
+    _ => $"language {language}",
+};
+
+static string VersionName(GameVersion version) => version switch
+{
+    GameVersion.GP => "Let's Go Pikachu", GameVersion.GE => "Let's Go Eevee", GameVersion.BD => "Brilliant Diamond",
+    GameVersion.SP => "Shining Pearl", GameVersion.PLA => "Legends Arceus", GameVersion.SL => "Scarlet",
+    GameVersion.VL => "Violet", GameVersion.ZA => "Legends Z-A", _ => version.ToString(),
+};
+
+// A gift made on each of the game's versions in turn (some cards come to one version only), rolled again where its
+// own check refuses a PID. The first legal copy is kept.
+(PKM Pokemon, LegalityAnalysis Legality) MakeGift(MysteryGift gift, GameVersion[] versions, ITrainerInfo trainer)
+{
+    PKM? pk = null;
+    LegalityAnalysis? la = null;
+    foreach (var version in versions)
+    {
+        var receiver = new SimpleTrainerInfo(version)
+        {
+            OT = trainer.OT, TID16 = trainer.TID16, SID16 = trainer.SID16,
+            Language = trainer.Language, Gender = trainer.Gender,
+        };
+        for (var roll = 0; roll < 8; roll++)
+        {
+            pk = gift.ConvertToPKM(receiver, EncounterCriteria.Unrestricted);
+            SetHomeIVs(gift, pk);
+            la = MendGift(pk, receiver);
+            if (Accepted(la))
+                return (pk, la);
+        }
+    }
+    return (pk!, la!);
+}
+
+// HOME's Legends Z-A starters (cards 9031-9033) have three perfect IVs and 20 in the rest, as PKHeX's check expects
+// [WA9.HomeBaseIV]; PKHeX 26.8.26 makes them with one perfect IV and the rest at 0.
+static void SetHomeIVs(MysteryGift gift, PKM pk)
+{
+    if (gift is not WA9 { IsHOMEGift: true, HomeBaseIV: > 0, FlawlessIVCount: > 0 } card ||
+        pk.FlawlessIVCount == card.FlawlessIVCount)
+        return;
+    var ivs = Enumerable.Repeat(card.HomeBaseIV, 6).ToArray();
+    foreach (var i in Enumerable.Range(0, 6).OrderBy(_ => Random.Shared.Next()).Take(card.FlawlessIVCount))
+        ivs[i] = 31;
+    pk.SetIVs(ivs);
+}
+
+// What the save that received a gift sets on it: a handler for one that arrives already handled, and the HOME
+// tracker of a gift HOME gave, which the "empty" setting leaves unset and "made" fills (docs/gui.md, The bank).
+// Unlike Mend, the event's own moves stay.
+LegalityAnalysis MendGift(PKM pk, ITrainerInfo trainer)
+{
+    var la = Refresh(pk);
+    if (!Accepted(la) && !OnlyTrackerMissing(la) && pk.HandlingTrainerName.Length == 0)
+    {
+        pk.CurrentHandler = 1;
+        pk.HandlingTrainerName = "POKELDN";
+        pk.HandlingTrainerGender = 0;
+        if (pk is IHandlerLanguage language)
+            language.HandlingTrainerLanguage = (byte)trainer.Language;
+        la = Refresh(pk);
+    }
+    if (!Accepted(la) && OnlyTrackerMissing(la) && pk is IHomeTrack { HasTracker: false } home)
+    {
+        home.Tracker = MadeTracker((ulong)Random.Shared.NextInt64(1, long.MaxValue));
+        HomeSeen(pk);
+        la = Refresh(pk);
+    }
+    return la;
+}
+
+// What HOME changes on a Pokemon it has seen, which PKHeX's check expects of one with a tracker: a Gen 9 Pokemon's
+// height copied from its scale (Legends Z-A's weight too), a Legends Z-A Alpha marked [HomeQuirks,
+// MiscScaleVerifier, MiscVerifierPA9].
+static void HomeSeen(PKM pk)
+{
+    switch (pk)
+    {
+        case PK9 sv:
+            sv.HeightScalar = sv.Scale;
+            break;
+        case PA9 za:
+            za.HeightScalar = za.WeightScalar = za.Scale;
+            if (za.IsAlpha)
+                za.RibbonMarkAlpha = true;
+            break;
+    }
+}
+
 // The items a Sword/Shield gift may give or a gifted Pokemon may hold; the GUI lists the same set.
 static IReadOnlySet<ushort> GiftItems() => ItemStorage8SWSH.GetAllHeld().ToHashSet();
+
+// A Gigantamax form: the species Max Soup changes (Gigantamax.CanToggle) and Melmetal, whose factor came only from
+// Pokemon GO. The factor stays through evolution: Sword's card 1641 gave it to a Bulbasaur for its Venusaur.
+static bool CanGigantamax(ushort species, byte form) =>
+    species == (ushort)PKHeX.Core.Species.Melmetal || Gigantamax.CanToggle(species, form) ||
+    EvolutionTree.Evolves8.Forward.GetEvolutions(species, form).Any(e => Gigantamax.CanToggle(e.Species, e.Form));
 
 static IReadOnlySet<ushort> RaidRewardItems()
 {
@@ -1050,8 +1363,8 @@ JsonObject Gift(byte[] data)
         if (data[0x243] > 3 || (data[0x246] > 24 && data[0x246] != 255) ||
             data[0x247] > 4 || data[0x248] > 4 || data[0x24A] > 10)
             throw new InvalidDataException("Invalid gift gender, nature, ability, shininess or Dynamax level.");
-        if (data[0x24B] > 1 || (data[0x24B] == 1 && !Gigantamax.CanToggle(card.Species, card.Form)))
-            throw new InvalidDataException("This species has no Gigantamax form.");
+        if (data[0x24B] > 1 || (data[0x24B] == 1 && !CanGigantamax(card.Species, card.Form)))
+            throw new InvalidDataException("Neither this species nor its evolutions have a Gigantamax form.");
     }
     else if (card.IsItem)
     {

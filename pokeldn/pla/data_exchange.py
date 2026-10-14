@@ -1,8 +1,10 @@
 """The data exchange Legends Arceus runs on Stream Broadcast Reliable (0x81), and its record.
 
 A station sends its record only after receiving the peer's; the frame is `pokeldn.ldn.reliable5`.
-The record is zlib (4 KB window, level 5) of 139 bytes, identical in both directions and across
-sessions; only the player id at +0x1b and the UTF-16 name at +0x2b are written (docs/pla.md).
+The record is zlib (4 KB window, level 5) of 139 bytes; the reference one here is the same in both
+directions and across sessions, a retail save's carries its own trainer. It holds the save's MyStatus block from +0x0b (PKHeX MyStatus8a): the player id at +0x1b,
+version +0x1f, gender +0x20, language +0x22, the UTF-16 name at +0x2b and the look at +0x47. A host
+writes the player id, the name and the gender, and the look follows the gender (docs/pla.md).
 """
 
 import zlib
@@ -22,6 +24,10 @@ PLAYER_ID_OFFSET = 0x1B
 PLAYER_ID_SIZE = 4
 NAME_OFFSET = 0x2B
 NAME_SIZE = 26                    # to the next non-zero field; one name measured
+VERSION_OFFSET, GENDER_OFFSET, LANGUAGE_OFFSET = 0x1F, 0x20, 0x22
+LOOK_OFFSET = 0x47                # u32, the intro's grid_player cell: column + 4 * row
+LOOK_SIZE = 4
+FEMALE_COLUMNS = 0b10             # columns 2 and 3 are the female player's, 0 and 1 the male's
 
 STREAM_OPEN_PAYLOAD = bytes.fromhex("0000000000008000000000")
 
@@ -46,12 +52,24 @@ def decompress(payload):
     return zlib.decompress(bytes(payload))
 
 
-def build_record(player_id=None, name=None, template=REFERENCE_RECORD):
-    """-> the 139-byte reference record with the player id and name written; a name longer than
-    the field raises."""
+def look_for(look, gender):
+    """-> the look of the same skin for the gender (0 male, 1 female): the female player's cell is
+    two columns past the male's."""
+    return (look & ~FEMALE_COLUMNS) | (FEMALE_COLUMNS if gender else 0)
+
+
+def build_record(player_id=None, name=None, gender=None, template=REFERENCE_RECORD):
+    """-> the 139-byte reference record with the player id, name and gender written, and the look
+    moved to the gender's player with the same skin; a name longer than the field raises."""
     record = bytearray(template)
     if len(record) != RECORD_SIZE:
         raise ValueError(f"a record is {RECORD_SIZE} bytes, not {len(record)}")
+    if gender is not None:
+        if gender not in (0, 1):
+            raise ValueError(f"a gender is 0 or 1, not {gender!r}")
+        look = look_for(int.from_bytes(record[LOOK_OFFSET:LOOK_OFFSET + LOOK_SIZE], "little"), gender)
+        record[GENDER_OFFSET] = gender
+        record[LOOK_OFFSET:LOOK_OFFSET + LOOK_SIZE] = look.to_bytes(LOOK_SIZE, "little")
     if player_id is not None:
         if isinstance(player_id, int):
             player_id = player_id.to_bytes(PLAYER_ID_SIZE, "little")
@@ -72,6 +90,19 @@ def read_record(record):
     name = record[NAME_OFFSET:NAME_OFFSET + NAME_SIZE].decode("utf-16-le", "replace")
     return dict(player_id=record[PLAYER_ID_OFFSET:PLAYER_ID_OFFSET + PLAYER_ID_SIZE],
                 name=name.split("\0")[0])
+
+
+def read_trainer(record):
+    """-> the trainer a decompressed record names, as pokeldn.receiver_gift takes it: id pair, version,
+    gender, language and name."""
+    record = bytes(record)
+    if len(record) != RECORD_SIZE:
+        raise ValueError(f"a record is {RECORD_SIZE} bytes, not {len(record)}")
+    player = read_record(record)
+    tid = int.from_bytes(player["player_id"][:2], "little")
+    sid = int.from_bytes(player["player_id"][2:], "little")
+    return {"ot": player["name"], "tid": tid, "sid": sid, "version": record[VERSION_OFFSET],
+            "gender": record[GENDER_OFFSET], "language": record[LANGUAGE_OFFSET]}
 
 
 def build_stream_open(destination_bitmap, sequence_id=SEQUENCE_ID):

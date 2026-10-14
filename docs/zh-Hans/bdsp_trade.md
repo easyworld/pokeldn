@@ -175,8 +175,11 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing))：
 
     0x00  26  tranerName, UTF-16LE, NUL-terminated
     0x1a   4  tranerId, the full 32-bit id, secret id in its high half
-    0x1e   1  cassetVersion, the Pokemon's version (49)
-    0x1f   1  langId, the Pokemon's language (3)
+    0x1e   1  cassetVersion, the save's version (49)
+    0x1f   1  langId, the save's language (3)
+
+游戏机在交换开始、尚未提供宝可梦时发送此记录，表示存档训练家；按接收玩家生成的礼物读取它（`room.traner_trainer`、[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)）。此消息没有性别，会话其他消息也没有。加入外观仅在使用联合房间可选外观柜台后对应存档性别；此前首次连接会随机分配任一性别的外观（[角色模型](bdsp_protocol.md#the-model)）。提供的宝可梦可以补充性别：存档为初训家时读取 OT，否则读取当前训练家（[游戏机对接收宝可梦的处理](#what-the-console-does-to-a-received-pokemon)）。
+
  交换屏幕从该记录中命名伙伴；问候语使用 Pia 玩家名称（[协议页面](bdsp_protocol.md#the-name-in-the-greeting)）：0x24 分支
 `UnionRoomManager$$SetNetData` [1.3.0 main.bin 0x1e51940] 从消息中获取所有四个字段，仅从 `GetGamerData(...).nameStringLanguage` 中获取字体语言，将名称包装在
 `MessageHelper$$SurroundFontTag` 并将其交给 `UnionTradeManager$$SetTargetTranerParam` [0x1c33330]。
@@ -198,6 +201,13 @@ cassetVersion; byte langId` ([Framing](bdsp_protocol.md#framing))：
     0x006..0x007   the checksum
 
 0xC6（PKHeX 的 `HandlingTrainerID`，“未使用？”）保持为零。 PKHeX 的 `IsUntraded` (`Data[0xA8] == 0`) 变为 false。
+
+`TradeStateModel$$ReplacePoke` [1.3.0 main 0x1c29120] 执行修改。它从存档 `DPData.MYSTATUS`（`PlayerWork$$get_playerStatus`，构造器 [0x24a1b30]）创建 `OwnerInfo`：`{trainerId, sex, langID, name}`，包含 ID、`sex ^ 1`、`region_code` 和姓名。状态字段 `sex` 在男孩时为真，与 `_GET_MY_SEX` 的读取方式一致。它将 `OwnerInfo` 传给 `CoreParam$$UpdateOwnerInfo` [0x2495920]，比较宝可梦 OT 性别、32 位 ID 和姓名：
+
+- 三者均相同：清除当前训练家标志，不改写其他字段。
+- 否则：设置标志，将存档姓名、性别（0xC2）和语言写入当前训练家字段，清零回忆，亲密度设为种类基础值。
+
+其他训练家接收时每次写入 0xC2；上述测量中它原本已经是接收方性别。不记录当前训练家 ID 或版本。GTS（`GMSSceneDataModel$$OnReceivePokeData`）、游戏内交换（`LocalKoukan$$CreateTradePokeParam`）、神秘礼物（`MysteryGiftWork$$CreatePokemonParam`）及 `RenkeiData$$Get_1`/`Get_2` 从存档构建相同 `OwnerInfo`。`UpdateOwnerInfo` 是游戏唯一写入当前训练家性别的方法。游戏不含 Pokémon HOME 代码，从 HOME 到来的宝可梦由 HOME 写入。
 
 ### 重复检测
 

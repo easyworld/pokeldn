@@ -8,7 +8,7 @@ has_children: true
 
 宝可梦朱 (`0100a3d008c5c000`) 和紫 (`01008f6008c5e000`) 是原生 Switch 游戏，Pia 链接到 `main`。两者都与扮演两种角色的实机进行交换：`bin/sv_host.py` 主持游戏机的离线链路交换搜索，`bin/sv_join.py` 加入游戏机的网络。零售紫加入主机广告朱的本地通信ID，并且其自己的搜索网络也广告朱的ID（`0x0100a3d008c5c000`，应用程序版本21，场景4）。
 
-两个启动器也支持主持和加入本地太晶团体战（[太晶团体战](sv_raid.md)）。
+两个启动器均支持本地太晶团体战的主机和加入方（[太晶团体战](sv_raid.md)）；主机也可通过交换提供官方礼物宝可梦（[模拟神秘礼物](gift_simulated.md)）。
 
 地址是更新 4.0.0 (`tools/switch/nso_read.py`) 的解压缩 `main` 中的偏移量：文本 `0x0..0x343fc90`、来自 `0x3440000` 的rodata、来自 `0x4383000` 的数据。
 
@@ -150,10 +150,19 @@ GetRtt (`0x6f4498`; `0x6f44bc` 样本数为 *n*) 在没有样本的情况下返�
     +0x07  4   big-endian u32 0x00000568, the 1384 bytes that follow
  站的块是 0xF388 (62,344) 字节：1384 的 45 个块和 64 之一，id 1 到 46，百分比字节 `floor(k * 1384 * 100 / 62344)` (2, 4, 6, 8, 0x0b, ..., 0x37 位于 25，0x52 位于 37，0x64 位于 46）。第一个块包含屏幕上显示的伙伴：
 
-    +0x0b  5   unread
+    +0x0b  4   trainer id, then secret id
+    +0x0f  1   version: 50 Scarlet, 51 Violet
+    +0x10  1   gender
+    +0x11  1   language
+    +0x12  1   ball-throw style, 1 the original
     +0x13  26  the player name, UTF-16 little-endian, NUL-padded; --trainer-name on both launchers
     +0x2d  22  the account identifier, ASCII, `u-` and twenty characters
-    +0x53  1   5
+    +0x53  8   story progress, little-endian: 1 the main story cleared, 4 The Indigo Disk cleared
+
+数据块在栈上由 `0xa52f88`..`0xa530a0` 构建：先读取存档训练家，再从另一存档块读取投球动作（`0xa53054`），然后读取账户标识（`0x1a61a00`），最后读取剧情进度字。后者来自游戏保存在 `0x473a040` 的脚本函数返回值，在 `0xa5309c` 调用。原生 `f20A702BD`（`0x877560`）安装该函数；3.0.1 脚本转储中，`BattleNetworkNetReceiver` 传入初值 0 的函数，`FSYS_SCENARIO_GAME_CLEAR` 为真时置 1，`FSYS_SCENARIO_GAME_CLEAR_SU2` 为真时按位或 4。实机朱发送 5，实机紫发送 0 且账户标识全零，参考记录发送 1。
+
+游戏脚本按注册顺序通过原生读取器取得站点玩家：`PlayerId`、`RomCode`、`Sex`、`LanguageId`、投球动作、`NameStrBuf`（`RegisterPlayerData` 及 3.0.1 转储中的对战设置；投球动作由存档 `ballThrowId` 填入）。实机朱和紫的 ID 对、版本、语言、姓名与各存档捕获的宝可梦一致，即使提供交换所得宝可梦仍代表存档。按接收玩家生成的礼物读取这些字段（`reference.identity_trainer`、[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)）。
+
  Chunks 2到24是高熵的； 25 到 46 为零。电台一次发送其整套数据，通常在第一个数据包中发送 ID 1、25、26 至 36 和 46，在第二个数据包中发送 2、37 和 38 至 45，然后每个数据包发送 3 至 24 个数据包（48 个零售数据包中的 41 个）。相同的零块在 0x00 的存在字节后面移动，每个头字段都继承（[消息帧](pia.md#message-framing)）。一套通常会在 0.2 秒内离开（52 套零售套中有 46 套在 0.19 秒内离开）。 `pokeldn.sv.streams.decompress` 读取它们。
 
 `pokeldn.sv.reference` 在 0x7C 端口 0 上发送电台的 44 条记录及其两个身份片段，记录自模拟朱，其玩家为 `Player`，帐户标识符未设置。 `bin/sv_host.py` 和 `bin/sv_join.py` 发送它们，除非给出 `--record-set`、`--send-on-open` 或 `--no-identity`。
@@ -503,8 +512,8 @@ Reliable 0x7C（一个站）和BroadcastReliable 0x80（每个站）的端口2�
     bc 81 f6 09    a blob, 0x9f6 = 2550 bytes
     ...            2550 bytes
     04
- blob 是 850 个小尾数三字节值，大部分为 1，其余位掩码（`0x0fffff`，
-`0x0002ff`, `0x00003f`, 0)，每个站：站之间的值不同（实机和一对主机之间有 38 个条目；条目 36：`0x040000` 与 `0x0fffff`）。该指数的具体内容尚不清楚。一对主机的四个片段，重播后，被实机接受。
+
+该块包含 850 个小端三字节值，多数为 1，其余为位掩码（`0x0fffff`、`0x0002ff`、`0x00003f`、0），各站点不同：实机与参考双机主机之间有 38 项差异，第 36 项为 `0x040000` 与 `0x0fffff`。索引含义未知。不包含训练家字段，实机数据中没有 ID 对或姓名。参考主机的四个片段重放后可被实机接受。
 
 ### 交换消息携带的记录
 
@@ -613,6 +622,8 @@ Reliable 0x7C（一个站）和BroadcastReliable 0x80（每个站）的端口2�
 | `stats` |零|游戏计算出的六个|
 
 其他所有内容均按发送状态保留。一个空名称作为种类名称返回，如《剑 神秘礼物》记录（`docs/swsh_gift.md`）中那样。
+
+原始训练家与接收存档相同的记录保留当前训练家标志 0，姓名为空，与传说 Z-A 一致（[接收记录的改写](za.md#what-the-trade-writes-into-a-received-record)）。按实机紫的训练家生成的神秘礼物，通过该存档捕获的宝可梦识别训练家（[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)），交换回来后确实如此。
 
 ### 加入搜索游戏机：一次交换，以及什么决定了座位
 

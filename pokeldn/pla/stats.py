@@ -7,6 +7,8 @@ A trade rewrites the party tail's stats with these; verified against a console's
 import math
 import struct
 
+from pokeldn.pokemon import NATURES
+
 MULTIPLIER = (0, 2, 3, 4, 7, 8, 9, 14, 15, 16, 25)
 MULTIPLIER_MAX = 10
 
@@ -38,12 +40,6 @@ NATURE_AMP = (
     (0, 0, 0, 1, -1),   # 22 Sassy
     (0, 0, -1, 1, 0),   # 23 Careful
     (0, 0, 0, 0, 0),    # 24 Quirky
-)
-
-NATURE_NAMES = (
-    "Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish", "Lax",
-    "Timid", "Hasty", "Serious", "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful", "Rash",
-    "Calm", "Gentle", "Sassy", "Careful", "Quirky",
 )
 
 # The stat order of a record's own fields, and the amplifier index each one reads.
@@ -89,7 +85,7 @@ def stats(base, level, ivs, gvs, nature):
 
 
 def nature_name(nature):
-    return NATURE_NAMES[nature] if nature < len(NATURE_NAMES) else f"nature {nature}"
+    return NATURES[nature] if nature < len(NATURES) else f"nature {nature}"
 
 
 # The game's 32-bit float constants; rounding through a double moves the height.

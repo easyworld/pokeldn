@@ -173,8 +173,29 @@ record, recorded from an emulated pair whose player is `Player`; `bin/za_join.py
 `bin/za_host.py` send them (`--game-dir` names another set).
 
 The identity is a `b9` tuple of two: a u32, then a one-member tuple holding a 0x5d-byte `bc` blob.
-The blob is a six-member tuple: a u32, two small integers, the player name and a 32-byte field of
-zeroes, then the rest.
+The blob is a six-member tuple. Its first four members are the save's trainer id (secret id in the
+high half), gender, language and player name. A 32-byte field of zeroes and the rest follow.
+
+The game fills these four from the save's trainer block, PKHeX's `MyStatus9a`, which sits at +0x40
+of the player status object:
+
+| member | block offset | getter |
+|---|---|---|
+| trainer id | +0x00 | `0x824b2c` |
+| gender | +0x05 | `0x505c24` |
+| language | +0x07 | `0x23c398` |
+| name, 13 characters | +0x10 | copied by `0xc90ce4` |
+
+The builder is `0xc90b04`; it stores the value under the name entry the GOT holds at `0x3ec7638`.
+
+A receiving console decodes the members in the same order (`0x9131ec`). Its name box `T_pname_%02d`
+(`0xb13fd4`) checks the language as 1 to 11 against the game's language table (`0x33a308c`); 11 is
+Latin American Spanish. It passes the gender with the name into its text (`0x6b9fb8`).
+
+The recorded identity is a female, English save: `0x378913cf` (5071 and 14217, the trainer of the
+reference sessions' Pokemon), 1 and 2. A gift made for the receiving player reads all four
+(`reference.identity_trainer`,
+[Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)).
 
     1400 b902 82<u32> b901 bc5d b906 82<u32> 01 02 bc1a <name> bc20 <32 bytes> ...
 
@@ -186,9 +207,10 @@ a retail console showed `Player` for its trade partner. Both launchers write `--
 Channel 0x14 carries a key-value store the game keeps in sync between stations
 (`gfa::network::p2p`, built at `0x7796a0`; message id `0x1400 | index`): 1400 is UpdateValue
 (`0xc1bdf4`), 1402 DeleteAllValues and 1403 SyncDataSet (`0xc4b1b4`). The identity's outer u32
-`0x2abe85e2` is the value's key, a constant at `0xdf1b30`. 1403 carries one u32 over the sender's
-values sorted by key, `h = crc32(le32(fnv1a32(value) + h))` from `h = 0` (`0xc4b270`, FNV-1a at
-`0xc4b31c`, standard CRC-32 at `0xc4b420`); for the identity the value is the 0x5d bytes after `bc5d`.
+`0x2abe85e2` is the value's key, a constant at `0xdf1b30`: the FNV-1a 32 of `UserData`, the name the
+game stores the identity under. 1403 carries one u32 over the sender's values sorted by key,
+`h = crc32(le32(fnv1a32(value) + h))` from `h = 0` (`0xc4b270`, FNV-1a at `0xc4b31c`, standard CRC-32
+at `0xc4b420`); for the identity the value is the 0x5d bytes after `bc5d`.
 The receiver recomputes it and moves on only when every station's matches (`0xb8c724`, `0xb8c660`).
 The recorded `Player` identity gives `1403b9018269fb308f`, the recorded message. A renamed identity
 sent with that stale 1403 leaves a retail console on its search screen: it sends its 1400s and 1403

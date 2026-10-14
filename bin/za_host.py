@@ -22,6 +22,7 @@ from pokeldn import config, za
 from pokeldn.za import host as za_host
 from pokeldn.za import streams
 from pokeldn.online import session as online
+from pokeldn import receiver_gift
 from pokeldn.ldn.ldn_mitm_host import IpHostTransport
 from pokeldn.ldn.transport import HostTransport, board_radio, find_ap_phy
 from pokeldn.host_support import resolve_keys, needs_root
@@ -71,6 +72,7 @@ def build_parser():
                          "trade, then hand the console the session and close; by default the host "
                          "waits for the console to leave")
     online.add_arguments(ap)
+    receiver_gift.add_arguments(ap, "--trade-offer")
     return ap
 
 
@@ -100,6 +102,16 @@ def load_payloads(args):
     return identity, tail, selection, offers
 
 
+def gift_offer(offer):
+    """-> a gift made for the receiving player during the trade (pokeldn.receiver_gift), after the checks
+    load_payloads gives each --trade-offer; ValueError for one that fails them. A record that does not decrypt
+    is a Bad Egg to the game: a --trade-offer goes so, a gift does not."""
+    if len(offer) != za.pokemon.OFFER_SIZE:
+        raise ValueError(f"an offer is {za.pokemon.OFFER_SIZE} bytes, not {len(offer)}")
+    za.pokemon.parse_offer(offer)
+    return offer
+
+
 def describe_offer(body):
     try:
         _hdr, plain, _tr = za.pokemon.parse_offer(body)
@@ -125,6 +137,9 @@ def main(argv=None):
     if not args.ip_host and needs_root():
         ap.error("hosting over the radio needs root or POKELDN_RADIO; or pass --ip-host")
     identity, tail, selection, offers = load_payloads(args)
+    # A gift made for the receiving player stands in for an online partner, one per console
+    # (pokeldn.receiver_gift).
+    receiving = None if args.online else receiver_gift.setup("za", args, offers, gift_offer, fresh=renew_offer)
     phy = None
     if not args.ip_host:
         phy = find_ap_phy(log=print) if args.phy == "auto" else args.phy
@@ -178,7 +193,8 @@ def main(argv=None):
                 log=print, record=record,
                 renew_offer=(lambda raw: pokemon_service.offer_bytes("za",
                     pokemon_service.prepare("za", raw, fresh=True))) if renew_offer else None,
-                partner=partner)
+                partner=partner if receiving is None else receiver_gift.ReceiverGift(
+                    "za", *receiving, notify=receiver_gift.pop_up(f"gift-{ip}")))
         for ip in set(sessions) - seated:
             s = sessions.pop(ip)
             print(f"[za-host] the console at {ip} left; {s.console_offers} offer(s), "

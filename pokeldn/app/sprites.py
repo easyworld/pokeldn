@@ -40,13 +40,22 @@ def valid(data: bytes) -> bool:
     return pixels(data) is not None
 
 
-CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+KEPT = (b"IHDR", b"PLTE", b"tRNS", b"IDAT", b"IEND")    # the chunks that draw a sprite, in file order
 
 
-@lru_cache(maxsize=8)
-def pixels(data: bytes) -> tuple[int, int, tuple[tuple[tuple[int, int, int, int], ...], ...]] | None:
-    """(width, height, rows of (r, g, b, a)) of a PNG; None for one this does not read (16-bit,
-    interlaced). Pillow is not in the packaged app."""
+def clean(data: bytes) -> bytes | None:
+    """A PNG this reads, rebuilt from its KEPT chunks alone, so a colour profile, text or any other
+    ancillary chunk never reaches the app's image decoder; None for one this does not read."""
+    chunks = _chunks(data)
+    if chunks is None or pixels(data) is None:
+        return None
+    return PNG + b"".join(struct.pack(">I", len(chunks[kind])) + kind + chunks[kind]
+                          + struct.pack(">I", zlib.crc32(kind + chunks[kind])) for kind in KEPT if kind in chunks)
+
+
+def _chunks(data: bytes) -> dict[bytes, bytes] | None:
+    """A PNG's KEPT chunks, IDAT joined; None for a damaged or animated PNG. The other ancillary chunks are
+    checked against their CRC and skipped unread."""
     try:
         if len(data) > MAX_BYTES or data[:8] != PNG:
             return None
@@ -59,7 +68,7 @@ def pixels(data: bytes) -> tuple[int, int, tuple[tuple[tuple[int, int, int, int]
                 return None
             if (len(kind) != 4 or any(not (65 <= c <= 90 or 97 <= c <= 122) for c in kind)
                     or (not kind[0] & 32 and kind not in (b"IHDR", b"PLTE", b"IDAT", b"IEND"))
-                    or kind in (b"acTL", b"fcTL", b"fdAT", b"iCCP", b"zTXt", b"iTXt")):
+                    or kind in (b"acTL", b"fcTL", b"fdAT")):
                 return None
             body = data[pos + 8:pos + 8 + size]
             if zlib.crc32(kind + body) != struct.unpack(">I", data[end - 4:end])[0]:
@@ -68,8 +77,25 @@ def pixels(data: bytes) -> tuple[int, int, tuple[tuple[tuple[int, int, int, int]
                 return None
             if kind == b"IEND" and (size or end != len(data)):
                 return None
-            chunks[kind] = chunks.get(kind, b"") + body
+            if kind in KEPT:
+                chunks[kind] = chunks.get(kind, b"") + body
             pos += 12 + size
+    except struct.error:
+        return None
+    return chunks
+
+
+CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+
+
+@lru_cache(maxsize=8)
+def pixels(data: bytes) -> tuple[int, int, tuple[tuple[tuple[int, int, int, int], ...], ...]] | None:
+    """(width, height, rows of (r, g, b, a)) of a PNG; None for one this does not read (16-bit,
+    interlaced). Pillow is not in the packaged app."""
+    chunks = _chunks(data)
+    if chunks is None:
+        return None
+    try:
         width, height, depth, color, compression, filtering, interlace = struct.unpack(">IIBBBBB", chunks[b"IHDR"])
         depths = {0: (1, 2, 4, 8), 2: (8,), 3: (1, 2, 4, 8), 4: (8,), 6: (8,)}
         if (not 1 <= width <= MAX_DIMENSION or not 1 <= height <= MAX_DIMENSION
@@ -175,10 +201,10 @@ class SpriteCache:
         path = self._path(species, shiny)
         try:
             with path.open("rb") as source:
-                data = source.read(MAX_BYTES + 1)
+                data = clean(source.read(MAX_BYTES + 1))
         except OSError:
             return None
-        if valid(data):
+        if data is not None:
             self.memory[key] = data
             return data
         try:
@@ -222,7 +248,8 @@ class SpriteCache:
         except (OSError, ValueError):   # URLError, timeouts, resets, DNS: the machine has no network
             self.offline_until = time.monotonic() + OFFLINE_COOLDOWN
             return None
-        if not valid(data):
+        data = clean(data)
+        if data is None:
             return None
         self.offline_until = 0.0
         self.memory[(species, shiny)] = data

@@ -232,6 +232,8 @@ def build_bulk_ack(high, our_next_seq, stream_id=0):
 def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--print-packets", action="store_true",
+                    help="print every packet in and out; the --capture file keeps them either way")
     ap.add_argument("--code", default="",
                     help="join only a console searching with this Link Code; empty takes any")
     ap.add_argument("--comm-id", default=None,
@@ -1130,7 +1132,8 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
                    flags=msg.message_flags, src_var=header.src_var, dst_var=header.dst_var,
                    payload=msg.payload.hex(), t=time.time())
             if msg.protocol not in (PROTO_RTT,) or args.verbose_rtt:
-                print(f"[sv] <- {addr[0]} {_describe_msg(msg)}  {msg.payload.hex()[:160]}")
+                if args.print_packets:
+                    print(f"[sv] <- {addr[0]} {_describe_msg(msg)}  {msg.payload.hex()[:160]}")
             if msg.protocol == PROTO_NET and len(msg.payload) > 1:
                 if msg.payload[:2] == bytes([1, pia_connect.NET_START_HOST_MIGRATION]):
                     host_leaving = True
@@ -1145,7 +1148,8 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
                         send(out(pia_connect.build_net_response(seqid), 0, protocol=PROTO_NET,
                                  flags=RAID_NET_FLAGS if raiding else ESTABLISHING_FLAGS),
                              "net conn response", seqid=seqid)
-                        print(f"[sv] -> {host_ip}: net 0x12 ack, seqid={seqid}")
+                        if args.print_packets:
+                            print(f"[sv] -> {host_ip}: net 0x12 ack, seqid={seqid}")
                 # The 0x50 carries its sequence at [4:8]; the 0x51 echoes it in the 0x12's shape.
                 if args.net_ack and len(msg.payload) >= 8 and msg.payload[0] == 1 \
                         and msg.payload[1] == NET_0x50:
@@ -1154,7 +1158,8 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
                     send(out(body, 0, protocol=PROTO_NET,
                              flags=RAID_NET_FLAGS if raiding else ESTABLISHING_FLAGS),
                          "net 0x51", seqid=seq50)
-                    print(f"[sv] -> {host_ip}: net 0x51 ack, seqid={seq50}")
+                    if args.print_packets:
+                        print(f"[sv] -> {host_ip}: net 0x51 ack, seqid={seq50}")
             if msg.protocol == PROTO_SESSION and msg.payload:
                 kind = msg.payload[0]
                 if (leaving is not None and kind == pia_connect.SESSION_LEAVE_RESPONSE
@@ -1270,8 +1275,9 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
                     print(f"[sv] 0x7c did not parse: {exc}")
                     continue
                 if cm["flags"] & reliable5.FLAG_APPLICATION_DATA:
-                    print(f"[sv] <- CHANNEL 0x7c:{msg.port} seq {cm['sequence_id']} "
-                          f"{reliable5.flag_names(cm['flags'])} {cm['payload'].hex()}")
+                    if args.print_packets:
+                        print(f"[sv] <- CHANNEL 0x7c:{msg.port} seq {cm['sequence_id']} "
+                              f"{reliable5.flag_names(cm['flags'])} {cm['payload'].hex()}")
                     record(rec="channel", src=addr[0], port=msg.port, seq=cm["sequence_id"],
                            flags=cm["flags"], payload=cm["payload"].hex(), t=time.time())
                     if args.game_channel and cm["flags"] & reliable5.FLAG_IS_INITIALIZED \
@@ -1371,9 +1377,10 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
                             note = f" zlib -> {len(body)}B"
                         except Exception as exc:
                             note = f" zlib failed: {exc}"
-                    print(f"[sv] <- RECORD 0x{msg.protocol:02x}:{msg.port} seq {rm['sequence_id']} "
-                          f"{reliable5.flag_names(rm['flags'])} {len(rm['payload'])}B{note}")
-                    print(f"       {body.hex()[:400]}")
+                    if args.print_packets:
+                        print(f"[sv] <- RECORD 0x{msg.protocol:02x}:{msg.port} seq {rm['sequence_id']} "
+                              f"{reliable5.flag_names(rm['flags'])} {len(rm['payload'])}B{note}")
+                        print(f"       {body.hex()[:400]}")
                     if (args.game_channel and msg.protocol == PROTO_BROADCAST_RELIABLE
                             and msg.port == 2 and body[:1] == bytes([port2.TYPE_ANNOUNCE])
                             and not channel["port2"]):

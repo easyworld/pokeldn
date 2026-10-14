@@ -21,10 +21,13 @@ BLOCK_ORDER = [
 __all__ = ["BOX_SIZE", "HEADER_SIZE", "FIRST_MESSAGE", "OFFER_MESSAGE", "COMMIT_MESSAGE", "RESULT_MESSAGE",
            "shuffle_value",
            "crypt", "checksum", "decrypt", "encrypt", "parse_message", "build_message",
-           "TRAINER_ID", "trainer_id", "set_trainer_id", "TRAINER_NAME", "trainer_name", "set_trainer_name"]
+           "TRAINER_ID", "trainer_id", "set_trainer_id", "TRAINER_NAME", "trainer_name", "set_trainer_name",
+           "first_trainer"]
 
 TRAINER_ID = 0x00
 TRAINER_NAME, NAME_SIZE = 0x38, 26   # a first message's name, up to its partner's (docs/lgpe_session.md)
+# A first message's body is the save's MyStatus block (PKHeX MyStatus7b): these and the two above.
+TRAINER_VERSION, TRAINER_GENDER, TRAINER_LANGUAGE = 0x04, 0x05, 0x35
 BOX_TRAINER_ID = 0x0C
 OFF_PID = 0x18                      # PKHeX PB7.cs; the encryption constant is at 0x00
 
@@ -118,6 +121,16 @@ def set_trainer_id(body, tid, sid, offset=TRAINER_ID):
 
 def trainer_name(body):
     return body[TRAINER_NAME:TRAINER_NAME + NAME_SIZE].decode("utf-16-le").split("\0", 1)[0]
+
+
+def first_trainer(body):
+    """-> the trainer a first message's body names, as pokeldn.receiver_gift takes it: the save's MyStatus
+    block gives its id pair, version, gender, language and name (docs/lgpe_session.md, Kind 1)."""
+    if len(body) < TRAINER_NAME + NAME_SIZE:
+        raise ValueError(f"a first message is at least {TRAINER_NAME + NAME_SIZE} bytes, not {len(body)}")
+    tid, sid = trainer_id(body)
+    return {"ot": trainer_name(body), "tid": tid, "sid": sid, "version": body[TRAINER_VERSION],
+            "gender": body[TRAINER_GENDER], "language": body[TRAINER_LANGUAGE]}
 
 
 def set_trainer_name(body, name):

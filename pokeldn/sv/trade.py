@@ -51,7 +51,8 @@ class TradeStage:
     def __init__(self, offer, confirm_delay=1.0, partner=None):
         offers = [offer] if isinstance(offer, (bytes, bytearray)) else list(offer)
         # Online (pokeldn.online): our offer is the partner's console's, and our confirm waits for
-        # both consoles' (docs/online.md).
+        # both consoles' (docs/online.md). A gift made for the receiving player
+        # (pokeldn.receiver_gift) stands in for the partner the same way.
         self.partner = partner
         if not offers and partner is None:
             raise ValueError("a host needs at least one offer")

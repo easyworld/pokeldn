@@ -64,6 +64,38 @@ def test_a_built_record_carries_the_name_and_id_written_into_it():
             assert record[offset] == data_exchange.REFERENCE_RECORD[offset], hex(offset)
 
 
+def test_the_reference_record_is_the_male_player_with_the_third_skin():
+    record = data_exchange.REFERENCE_RECORD
+    look = data_exchange.LOOK_OFFSET
+    assert record[data_exchange.GENDER_OFFSET] == 0
+    assert int.from_bytes(record[look:look + data_exchange.LOOK_SIZE], "little") == 5
+    assert data_exchange.build_record(gender=0) == record
+
+
+def test_a_female_record_carries_the_female_player_with_the_same_skin():
+    record = data_exchange.build_record(gender=1)
+    look = data_exchange.LOOK_OFFSET
+    assert data_exchange.read_trainer(record)["gender"] == 1
+    assert int.from_bytes(record[look:look + data_exchange.LOOK_SIZE], "little") == 7
+    changed = [offset for offset in range(data_exchange.RECORD_SIZE)
+               if record[offset] != data_exchange.REFERENCE_RECORD[offset]]
+    assert changed == [data_exchange.GENDER_OFFSET, look]
+
+
+@pytest.mark.parametrize("male, female", [(0, 2), (1, 3), (4, 6), (5, 7)])
+def test_a_look_moves_two_columns_between_the_players_and_keeps_its_skin(male, female):
+    """p1skin00N and p2skin00N share a row; columns 2 and 3 are the female player's."""
+    assert data_exchange.look_for(male, 1) == female
+    assert data_exchange.look_for(female, 0) == male
+    assert data_exchange.look_for(male, 0) == male
+    assert data_exchange.look_for(female, 1) == female
+
+
+def test_a_gender_other_than_male_or_female_is_refused():
+    with pytest.raises(ValueError):
+        data_exchange.build_record(gender=2)
+
+
 def test_a_name_past_the_field_is_refused_rather_than_written_into_the_next():
     with pytest.raises(ValueError):
         data_exchange.build_record(name="X" * (data_exchange.NAME_SIZE // 2 + 1))

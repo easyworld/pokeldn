@@ -19,9 +19,10 @@ title: Desktop builds
 - Linux：若发行版未提供，请安装 GTK 3 和 libsecret。串口访问需执行 `sudo usermod -aG dialout $USER`（Arch 使用 `uucp` 组），修改组后退出并重新登录。缺少串口或与 brltty 冲突时，参见 [Linux 串口](#linux-serial-ports)。
 
 <a id="your-trainer"></a>
+
 ## 你的训练家
 
-“设置”中的训练家是应用生成的每只宝可梦的初训家，包括名称、性别、语言和两组 ID。请按游戏显示的数值填写。《传说 Z-A》仅在初训家的性别、ID 和姓名都与玩家一致时，才将接收的宝可梦视为玩家自己的宝可梦（[接收的记录](za.md#what-the-trade-writes-into-a-received-record)）。记录实际保存一个 16 位 TID 和一个 16 位 SID，分别组成 32 位 ID 的低半部和高半部。
+设置中的原始训练家用于所有生成的宝可梦，包括姓名、性别、语言及两组按游戏显示输入的 ID。传说 Z-A 仅在原始训练家性别、ID 和姓名均一致时，视接收宝可梦为玩家所有（[接收的记录](za.md#what-the-trade-writes-into-a-received-record)）。传说 阿尔宙斯的数据交换记录包含该性别及对应外观（[记录](pla.md#the-games-reader-and-the-pre-handler-phase)）；实机交换画面没有显示伙伴性别。记录以 16 位 TID、16 位 SID 存储，分别为 32 位 ID 的低、高半部。
 
 | 游戏 | 显示的 ID | 里 ID | 保存的 ID |
 |---|---|---|---|
@@ -125,6 +126,8 @@ Switch 游戏的 ID 对由 `pokeldn/app/settings.py` 中的 `Settings.ids` 按�
 
 每条辅助程序回复包含 `home_tracker`（`empty`、`made` 或空值）；`destinations` 按游戏返回此字段。提示显示在生成或加载的提供记录、银行条目、目标游戏以及导入条目上。追踪码留空也会影响其他检查结果：将 `tests/data/bank_import.json` 中《黑２》的探探鼠传入《传说 Z-A》时，PKHeX 26.8.26 在没有追踪码的情况下拒绝其隐藏特性，有追踪码时则接受。
 
+模拟神秘礼物也遵循此设置（[神秘礼物 - 模拟](#mystery-gift---simulated)）。PKHeX 仅要求 HOME 发放的礼物具有追踪码：`empty` 留空，`made` 生成追踪码（`services/pkhex/Program.cs` 中的 `MendGift`）。生成追踪码时同步应用 HOME 对见过的宝可梦进行的修改，以满足 PKHeX 检查 [HomeQuirks]：朱／紫的身高等于体型值，传说 Z-A 的身高和体重等于体型值，头目带头目之证（`HomeSeen`）。PKHeX.Core 26.8.26 包含剑／盾此类礼物 16 份，晶灿钻石／明亮珍珠、传说 阿尔宙斯和传说 Z-A 各 4 份，朱／紫 5 份，均通过两种设置的检查。剑／盾通过“官方活动 → Pokémon HOME”发送社区整理的 16 张卡片；游戏机自行生成宝可梦，因此无论设置如何都没有追踪码（[Pokémon HOME](swsh_gift.md#pokemon-home)）。
+
 <a id="importing"></a>
 
 ### 导入
@@ -196,8 +199,7 @@ macOS 26 的 `bluetoothd` 对签名为应用包主可执行文件的后台进程
 
 ## 宝可梦精灵
 
-精灵是 `sprites.front_default` 和 `sprites.front_shiny` 后面的 96x96 PNG
-`https://pokeapi.co/api/v2/pokemon/{id}`，读取`raw.githubusercontent.com/PokeAPI/sprites`（`sprites/pokemon/{id}.png`，`sprites/pokemon/shiny/{id}.png`）。未获取 JSON（每个种类 300 KB）；精灵路径由 id 固定。从 1 到 1025 采样的 12 个 National Dex 号码都具有两种精灵； 1026 返回 404。当缺少异色精灵时，将显示正常的精灵。
+精灵图为 `https://pokeapi.co/api/v2/pokemon/{id}` 中 `sprites.front_default` 和 `sprites.front_shiny` 指向的 96×96 PNG，从 `raw.githubusercontent.com/PokeAPI/sprites` 读取（`sprites/pokemon/{id}.png`、`sprites/pokemon/shiny/{id}.png`）。不下载每种约 300 KB 的 JSON，图片路径由 ID 确定。全部 1,025 个全国图鉴编号都有普通和异色图，1026 返回 404。缺少异色图时显示普通图。
 
 |哪里 |尺寸|
 |---|---|
@@ -212,18 +214,20 @@ macOS 26 的 `bluetoothd` 对签名为应用包主可执行文件的后台进程
 
 缓存为应用程序数据文件夹中的 `sprites/`，`normal/` 和 `shiny/` 下每个精灵一个文件。精灵在首次使用时下载，然后从磁盘读取，无需网络访问。规则：
 
-|情况|行为 |
+| 情况 | 行为 |
 |---|---|
-|没有网络，没有缓存| Pixelarticons `circle-question` 图标；没有错误；下一次尝试等待 60 秒 |
-| HTTP 404 | HTTP 404 `{id}.none` 标记； 7 天没有再询问 |
-|回复不是 PNG，或超过 200 KB |未缓存|
-|损坏的缓存文件 |删除了，重新下载|
-|数据文件夹不可写|精灵在会话中显示但未保存 |
-|设置，宝可梦精灵关闭|缓存已读取，未下载任何内容 |
+| 无网络且无缓存 | 显示 pixelarticons 的 `circle-question` 图标，不报错，60 秒后再尝试 |
+| HTTP 404 | 写入 `{id}.none` 标记，7 天内不再请求 |
+| 回复不是 PNG 或超过 200 KB | 不缓存 |
+| PNG 包含颜色配置文件、文本或额外数据块 | 移除后保存及显示，仅保留 IHDR、PLTE、tRNS、IDAT、IEND（2,050 张中有 26 张，大多为第九世代） |
+| 缓存损坏 | 删除并重新下载 |
+| 数据目录不可写 | 当前会话显示，不保存 |
+| 设置中关闭精灵图下载 | 读取缓存，不下载 |
 
 设置有开关和清空缓存的按钮。 `POKELDN_SPRITE_BASE` 替换精灵主机，用于测试（`tests/test_sprites.py`）。
 
 <a id="raid-events"></a>
+
 ## 团体战活动
 
 《朱／紫》的“太晶团体战（主持）”入口通过“团体战活动”卡片主持 Project Pokemon [EventsGallery](https://github.com/projectpokemon/EventsGallery) 中的活动（[活动团体战](sv_raid.md#event-raids)）。应用将活动库中的团体战活动保存为数据目录下的 `EventsGallery/` 副本（`pokeldn.app.events_gallery`）；“清除本地文件”会保留此目录。
@@ -244,7 +248,6 @@ macOS 26 的 `bluetoothd` 对签名为应用包主可执行文件的后台进程
 
 折叠卡片后暂时停用活动（工具值中的 `#raid-event-folded`，`GamesView.show_raid_event`）：团体战卡片、“查找团体战”和命令都改为普通团体战，标题显示“已关闭：活动”。展开后恢复活动。启动时若正在使用活动，卡片自动展开。副本中缺少的活动（尚未下载，或更新后被移除）仍保持选中：标题以红色显示“缺失：活动”，在下载到该活动或改选其他活动前禁止运行（`pokeldn.app.command.code_error`）。
 
-
 <a id="raid-npc-partners"></a>
 
 ## 团体战 NPC 搭档
@@ -255,6 +258,42 @@ macOS 26 的 `bluetoothd` 对签名为应用包主可执行文件的后台进程
 - 对应阶段的训练家卡片每行三张，窄窗口每行两张。卡片显示训练家、宝可梦、等级（我方宝可梦等级的五分之四，`command.raid_pokemon_level`）和太晶属性，再逐行列出特性及三个招式。推荐搭档末尾有金色或银色星标与理由（[推荐搭档](sv_raid.md#favoured-partners)），提示中提供更详细的说明。
 
 点击选择训练家，并按占用空位的顺序编号；再次点击改为随机安排。每个选择依次传递 `--raid-partner`。增加加入游戏机数量会移除最后一项；对应阶段没有的训练家（四星以下的 Dylan、Luke）也会移除。折叠只隐藏卡片（`GamesView.show_raid_partners`），仍将选择传入团体战，标题显示当前选择。
+
+<a id="mystery-gift---simulated"></a>
+
+## 神秘礼物 - 模拟
+
+Let's Go、晶灿钻石／明亮珍珠、传说 阿尔宙斯、朱／紫和传说 Z-A 的“神秘礼物 - 模拟”卡片列出 PKHeX 活动表中的礼物宝可梦（[模拟神秘礼物](gift_simulated.md#the-gifts)；`gui/views/event_gifts.py`）。每行两张，按时间从新到旧排序；显示精灵图、卡片标题、宝可梦、初训家和日期，悬停显示招式。每次显示二十四张，“显示更多”再添加同样数量；可搜索卡片内容、精灵球、招式及卡片编号。十张以内完整显示，超过时在独立区域滚动（`event_gifts.FIT`）。
+
+点击后按设置中的训练家新生成副本，保存在生成宝可梦目录，成为交换提供记录；列表下方显示合法性、招式和 OT。副本保留生成时的训练家，修改设置后需重新选择礼物。以接收玩家为初训家、却未向设置语言分发的礼物，如 Let's Go 中国大陆美录坦和美录梅塔对应其他语言存档，会标为不合法并说明原因；点击后提示原因并保留原提供记录（[卡片覆盖的存档](gift_simulated.md#saves-a-card-reached)）。“高级”中的“按接收玩家生成”默认开启，交换时按游戏机存档重新生成此类礼物（[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)）。具有固定初训家的礼物按原样提供，选择后关闭、锁定并淡化该开关，说明指定训练家（`command.locked`），启动时不传递 `--for-receiver`。选择以接收玩家为初训家的礼物时恢复之前开关状态。
+
+除 Let's Go 外，HOME 礼物按 [HOME 追踪码设置](#the-home-tracker-setting) 处理。卡片以琥珀色边框标出，卡片和选中副本均显示“PKHeX 提示缺少 HOME 追踪码”或“无法存入 HOME”。交换仍按普通提供记录处理（[交换提供的副本](gift_simulated.md#the-copy-a-trade-offers)）。
+
+<a id="pop-ups"></a>
+
+## 弹窗
+
+应用启动的任务、其他子进程或应用自身代码，可在当前页面上显示弹窗（`pokeldn.popup`，插件 API 1.2 起支持）。有两种类型：
+
+| 类型 | 按钮 | 回调 |
+|---|---|---|
+| `acknowledge(title, text)` | 单个 `label` 按钮（OK） | `on_ack`：按钮、Esc 或点击外部 |
+| `confirm(title, text, agree, disagree)` | 调用方指定的同意和不同意按钮 | `on_agree`、`on_disagree` 或由 Esc、点击外部触发的 `on_dismiss` |
+
+打开弹窗不会阻塞，立即返回弹窗 ID；用户回答通过回调稍后到达。默认在读取应用回答的线程执行；`set_dispatcher(dispatch)` 可将其交给程序自身循环。应用中的回调由工作线程执行，以免窗口阻塞。回调异常会打印堆栈。
+
+| 选项 | 行为 |
+|---|---|
+| `id` | 标识程序自身的弹窗；使用仍打开的 ID 时原地替换并移除旧回调，未指定则新生成 |
+| `tone` | `info`、`warning` 或 `error`，决定图标 |
+
+`cancel(id)` 关闭弹窗；`cancel` 返回后不触发回调，已交给调度器的旧回答除外。同时等待回答的弹窗达到 32 个时，程序收到 `RuntimeError`。标题标明来源工具、开发板安装程序或手柄服务；应用自身弹窗不标来源。
+
+程序退出后，确认弹窗关闭，通知弹窗保留但不再返回回答。没有应用时（终端中 `available()` 为假），弹窗仅作为 `[pop-up]` 输出行，无回答且不计入 32 个上限。
+
+`runner.Process(..., popups=app.popups, label=...)` 在子进程设置 `POKELDN_POPUPS=1`。子进程在 stdout 发送 `[popup]` 行和 JSON；应用从日志中过滤此行，即使它夹在其他线程输出中也能识别。应用通过子进程 stdin 回复 `[popup] {"id", "n", "answer"}`，由 `pokeldn.app.runner.child` 读取。`n` 区分同一 ID 下重新打开的弹窗，替换后迟到回答不会触发旧回调。应用代码通过 `popup.attach` 直接访问管理器。`pokeldn.app.popups.Manager` 保存打开的弹窗，`gui.popups.Dialogs` 绘制它们。`page.pop_dialog()` 只关闭应用自己的顶部对话框，不会关闭之后覆盖其上的程序弹窗。
+
+模拟神秘礼物按接收玩家生成失败、改用设置中的训练家时，会弹出原因：无法识别存档，或在卡片、PKHeX、提供记录检查、加载器阶段失败（[交换流程](gift_simulated.md#the-trade)）。每台游戏机一个弹窗（`receiver_gift.pop_up`），新原因替换旧提示。应用自身也会为更新失败和已停用插件显示弹窗。
 
 ## 更新
 

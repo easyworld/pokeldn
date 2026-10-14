@@ -141,19 +141,22 @@ class GiftBuilder:
             sections.append(t.section(translate(group), ft.Column(body, spacing=10)))
         return ft.Column(sections, spacing=14)
 
-    def _tile(self, label, summary, active, on_click, settings=False) -> ft.Control:
-        """The preset's name and full description, including any steps needed to use it."""
+    def _tile(self, label, summary, active, on_click, settings=False, warning="") -> ft.Control:
+        """The preset's name and full description, including any steps needed to use it. A `warning`
+        tile has an amber outline, chosen or not, and says why."""
         head = [t.text(translate(label), 13, weight=ft.FontWeight.W_600, expand=True)]
         if settings:
             head.append(t.pixel_icon("sliders-horizontal", color=t.BLUE if active else t.FAINT,
-                                     tooltip='可设置'))
+                                     tooltip="可设置"))
+        lines = [ft.Row(head, spacing=6), t.text(event_text(summary), 12, t.MUTED)]
+        if warning:
+            lines.append(ft.Row([t.pixel_icon("warning-diamond", size=12, color=t.AMBER),
+                                 t.text(translate(warning), 12, t.AMBER, expand=True)], spacing=6))
         return ft.Container(ft.Row([
             t.pixel_icon("checkbox-on" if active else "checkbox", color=t.BLUE if active else t.FAINT),
-            ft.Column([ft.Row(head, spacing=6),
-                       t.text(event_text(summary), 12, t.MUTED)],
-                      spacing=1, expand=True),
+            ft.Column(lines, spacing=1, expand=True),
         ], spacing=10), padding=ft.Padding(10, 8, 10, 8), border_radius=10,
-            tooltip=event_text(summary), border=ft.Border.all(1, t.BLUE if active else t.BORDER),
+            tooltip=event_text(summary), border=ft.Border.all(1, t.AMBER if warning else t.BLUE if active else t.BORDER),
             bgcolor=t.SELECTED if active else None, on_click=on_click)
 
     def _toggle(self, preset, key) -> None:
@@ -218,7 +221,8 @@ class GiftBuilder:
 
     def events(self) -> ft.Control:
         """Every official card the game's builder ships, filtered by a search and a group."""
-        cards = self.module.OFFICIAL.load()
+        official = self.module.OFFICIAL
+        cards = official.load()
         labels = {c["key"]: event_label(self.game, c) for c in cards}
         tiles = ft.Column(spacing=6, tight=True)
         search = t.field(hint='搜索：皮卡丘、大师球、异色…', value=self.value.get("event_search", ""))
@@ -229,8 +233,11 @@ class GiftBuilder:
             shown = [c for c in cards if (not group["value"] or c["group"] == group["value"])
                      and all(w in f"{c['label']} {c['group']} {c['summary']} {labels[c['key']]} {event_text(c['summary'])}".casefold() for w in words)]
             tiles.controls = t.grid_rows([self._tile(labels[c["key"]], c["summary"], c["key"] == self.value["event"],
-                                         lambda e, k=c["key"]: self._event(k)) for c in shown])
-            count.value = f'{len(shown)} / {len(cards)} 张卡片'
+                                                     lambda e, k=c["key"]: self._event(k),
+                                                     warning=pokemon.HOME_TRACKER_WARNINGS["empty"]
+                                                     if official.from_home(c["record"]) else "")
+                                          for c in shown])
+            count.value = f"{len(shown)} / {len(cards)} 张卡片"
             if update:
                 tiles.update()
                 count.update()
@@ -244,9 +251,9 @@ class GiftBuilder:
         search.on_change = lambda e: filtered("event_search", search.value)
         count = t.text("", 12, t.MUTED)
         render(update=False)
-        groups = _chips([("", '全部')] + [(g, g) for g in self.module.OFFICIAL.GROUPS], group["value"],
+        groups = _chips([("", "全部")] + [(g, g) for g in official.GROUPS], group["value"],
                         lambda k: filtered("event_group", k))
-        intro = t.text('来自 projectpokemon EventsGallery 存档的真实活动卡片，均已通过游戏自身的卡片检查。', 12, t.MUTED)
+        intro = t.text("来自 projectpokemon EventsGallery 的真实活动卡片；Pokémon HOME 分组收录社区整理的 HOME 礼物卡片。每张卡片都通过游戏自身的卡片检查。", 12, t.MUTED)
         listing = ft.Container(ft.Column([tiles], scroll=ft.ScrollMode.AUTO), height=440)
         return ft.Column([intro, search, groups, count, listing], spacing=10)
 
@@ -493,11 +500,16 @@ class GiftBuilder:
         if not egg:
             rows += [ft.Row([self.name_field('携带道具', "bag", "item"), self.name_field('精灵球', "ball", "ball")],
                             spacing=10),
-                     ft.Row([self.text_field('昵称', "nickname", limit=12), self.text_field("OT", "ot", limit=12)], spacing=10),
-                     self.switch_row('异色', "shiny", '收到的宝可梦为异色。'),
-                     self.switch_row('超极巨化', "gigantamax",
-                                     '允许超极巨化；仅适用于具有超极巨化形态的种类。')]
-        rows += [self.moves(self.state), self.number_field('卡片 ID', "card_id")]
+                     ft.Row([self.text_field("昵称", "nickname", limit=12),
+                             self.text_field("OT", "ot", limit=12)], spacing=10),
+                     t.labeled_control("性格", t.dropdown(
+                         [("random", "随机")] + [(str(n), translate(name)) for n, name in enumerate(pokemon.NATURES)],
+                         "random" if self.state.get("nature") is None else str(self.state["nature"]),
+                         on_select=lambda e: self.edit("nature", None if e.control.value == "random"
+                                                       else int(e.control.value)))),
+                     self.switch_row("异色", "shiny", "收到的宝可梦为异色。"),
+                     self.switch_row("超极巨化", "gigantamax", "可进行超极巨化，适用于有超极巨化形态或能进化为该形态的种类。")]
+        rows += [self.moves(self.state), self.number_field("卡片 ID", "card_id")]
         return ft.Column(rows, spacing=10)
 
     def swsh_egg(self) -> ft.Control:
@@ -549,7 +561,7 @@ class GiftBuilder:
                           self.number_field('卡片 ID', "card_id")], spacing=8)
 
     def swsh_money(self) -> ft.Control:
-        return ft.Row([self.number_field("Money", "money", width=120), self.number_field('卡片 ID', "card_id")],
+        return ft.Row([self.number_field("金钱", "money", width=120), self.number_field('卡片 ID', "card_id")],
                       spacing=10)
 
     def swsh_bp(self) -> ft.Control:
@@ -574,11 +586,12 @@ class GiftBuilder:
                 if self.games.tool is self.tool:
                     self.app.ui(lambda: self.show_summary(update=True))
             threading.Thread(target=load, daemon=True).start()
-        return next((entry["name"] for entry in cached or () if entry["id"] == _number(n)), f"{kind} #{n}")
+        return next((entry["name"] for entry in cached or () if entry["id"] == _number(n)), f"{ {'species': '宝可梦', 'item': '道具', 'moves': '招式'}.get(kind, kind)} #{n}")
 
     def show_summary(self, update=False) -> None:
         mode = self.value["mode"]
         self.status.value, self.status.color = "", t.MUTED
+        warnings = []
         if mode == "build":
             when, lines = gift_description(self.game, self.state, self.name)
         elif mode == "preset":
@@ -592,8 +605,10 @@ class GiftBuilder:
         elif mode == "save":
             when, lines = self.save_summary()
         elif mode == "event":
-            when, lines = self.module.OFFICIAL.describe(self.module.OFFICIAL.by_key()[self.value["event"]]["record"],
-                                                      self.name)
+            record = self.module.OFFICIAL.by_key()[self.value["event"]]["record"]
+            when, lines = self.module.OFFICIAL.describe(record, self.name)
+            if self.module.OFFICIAL.from_home(record):
+                warnings = [f"{pokemon.HOME_TRACKER_WARNINGS['empty']}. {self.module.OFFICIAL.HOME_WHY}"]
         else:
             when, lines = "", []
         problem = gift_builder.problem(self.tool, self.value)
@@ -611,6 +626,8 @@ class GiftBuilder:
         self.when.visible = bool(when)
         self.effects.controls = [ft.Row([t.pixel_icon("check", color=t.GREEN), t.text(translate(line), 13, expand=True)],
                                         spacing=8) for line in lines]
+        self.effects.controls += [ft.Row([t.pixel_icon("warning-diamond", color=t.AMBER),
+                                          t.text(translate(line), 13, t.AMBER, expand=True)], spacing=8) for line in warnings]
         if update:
             for control in (self.when, self.effects, self.status):
                 control.update()

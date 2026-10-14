@@ -367,9 +367,10 @@ class RaidHost:
             self._depart("status", now)
 
     def status_acked(self, now):
-        """The console's Net 0x12 to the is-migrating status."""
+        """The console's Net 0x12 to the is-migrating status: NetStartHostMigration waits for every
+        console's (`0x6ac68c`)."""
         if self.departure and self.departure[0] == "status":
-            self._depart("handover", now, HANDOVER_SPAN)
+            self._depart("acked", now)
 
     def gone(self, now):
         """The console left the network: a client of a migrating host leaves to host its own."""
@@ -383,15 +384,22 @@ class RaidHost:
 
     def _leaving(self, now):
         phase, since, _, span = self.departure
+        group = [m for m in self.group.members.values() if m.departure and not m.left]
         if phase == "migration" and now - since >= MIGRATION_WAIT:
             self._depart("status", now)
+        elif phase == "waiting" and not any(m.departure[0] == "migration" for m in group):
+            self._depart("status", now)         # the next host answered its type 7 first (`0x6ded94`)
         elif phase == "status" and now - since >= STATUS_WAIT:
             self._depart("handover", now, HANDOVER_SPAN_UNANSWERED)
+        elif phase == "acked" and all(m.departure[0] in ("acked", "handover") for m in group):
+            for m in group:
+                if m.departure[0] == "acked":
+                    m._depart("handover", now, HANDOVER_SPAN)
         elif phase == "handover" and now - since >= span:
             self.left = True
             return []
         phase, _, due, _ = self.departure
-        if now < due:
+        if now < due or phase in ("waiting", "acked"):
             return []
         repeat = {"migration": MIGRATION_REPEAT, "status": STATUS_REPEAT}.get(phase, HANDOVER_REPEAT)
         self.departure[2] = max(due + repeat, now)
@@ -484,7 +492,7 @@ class RaidHost:
         if self.gone_at is not None:
             return []
         if "start" in self.steps and self.group.due(now):
-            self._depart("migration" if self.group.next_host() == self.index else "status", now)
+            self._depart("migration" if self.group.next_host() == self.index else "waiting", now)
             return self._leaving(now)
         if self.done_at is not None:
             return []

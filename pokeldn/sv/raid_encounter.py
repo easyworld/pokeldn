@@ -11,6 +11,8 @@ from functools import cache
 import json
 import os
 
+from pokeldn.pokemon import NATURES
+
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raid_base.json")
 SPECIES = os.path.join(os.path.dirname(DATA), "species.json")
 MASK64 = (1 << 64) - 1
@@ -60,15 +62,18 @@ GENDER_CUTOFF = {0x1F: 12, 0x3F: 25, 0x7F: 50, 0xBF: 75, 0xE1: 89}
 TERA_NONE = 19          # a PK9's Tera override when none applies
 TERA_TYPES = ("Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug", "Ghost", "Steel",
               "Fire", "Water", "Grass", "Electric", "Psychic", "Ice", "Dragon", "Dark", "Fairy")
-NATURES = ("Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish",
-           "Lax", "Timid", "Hasty", "Serious", "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful",
-           "Rash", "Calm", "Gentle", "Sassy", "Careful", "Quirky")
 # A raid table's shiny rule (RareType): drawn, never, always.
 SHINY_RANDOM, SHINY_NEVER, SHINY_ALWAYS = 0, 1, 2
 # A raid table's scale rule (SizeType): 0 two draws as height and weight, 1 to 5 one draw in a band
 # (range, base), 6 the table's own value [PKHeX SizeType9.GetSizeValue].
 SCALE_BANDS = {1: (0x10, 0), 2: (0x20, 0x10), 3: (0xA0, 0x30), 4: (0x20, 0xD0), 5: (0x10, 0xF0)}
 SCALE_RANDOM, SCALE_VALUE = 0, 6
+# A row's `boss_desc` (docs/sv_raid.md, The battle bootstrap): the shield's HP and time triggers at
+# words 1 and 2, six extra actions (action, timing, value, move) from word 10. An extra action's
+# code and its timing's, by name.
+SHIELD_TRIGGERS, EXTRA_ACTIONS = 1, 10
+ACTIONS = {1: "boss_reset", 2: "player_reset", 3: "move", 4: "drain"}
+TIMINGS = {1: "time", 2: "hp"}
 
 
 class Xoroshiro:
@@ -293,6 +298,31 @@ def rewards(seed, row, stars, fixed=None, lottery=None):
 
 
 @dataclass(frozen=True)
+class Action:
+    """A scripted action the boss takes in battle: `shield`, `boss_reset`, `player_reset`, `move` or
+    `drain` (the Tera Orb's charge), a move action's move, and the (`hp` or `time`, percent left)
+    triggers that bring it, either one."""
+    kind: str
+    move: int
+    triggers: tuple
+
+
+def scripted_actions(row):
+    """-> the boss's scripted actions: the shield, then the extra actions in table order. An action
+    at 0% left never comes, the battle being over; a move action that names no move is left out."""
+    desc = row["boss_desc"]
+    shield = tuple((timing, percent) for timing, percent
+                   in zip(("hp", "time"), desc[SHIELD_TRIGGERS:SHIELD_TRIGGERS + 2]) if percent)
+    out = [Action("shield", 0, shield)] if shield else []
+    for at in range(EXTRA_ACTIONS, EXTRA_ACTIONS + 24, 4):
+        action, timing, percent, move = desc[at:at + 4]
+        kind = ACTIONS.get(action)
+        if kind and timing in TIMINGS and percent and (move or kind != "move"):
+            out.append(Action(kind, move if kind == "move" else 0, ((TIMINGS[timing], percent),)))
+    return out
+
+
+@dataclass(frozen=True)
 class Raid:
     seed: int
     version: str
@@ -317,6 +347,10 @@ class Raid:
     def is_shiny(self):
         b = self.boss
         return (b["trainer_id"] ^ b["secret_id"] ^ (b["pid"] >> 16) ^ (b["pid"] & 0xFFFF)) < 16
+
+    @property
+    def actions(self):
+        return scripted_actions(self.row)
 
     @property
     def context(self):

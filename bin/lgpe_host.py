@@ -25,6 +25,7 @@ from pokeldn.ldn import clone, pia3, pia4, reliable3, station4, station9, sync_c
 from pokeldn.lgpe import pb7
 from pokeldn.lgpe.trade import (TRADE_IN_PROGRESS, _answer_offer, _send_step,
                                 _warn_if_mid_trade, show_offer)
+from pokeldn import receiver_gift
 from pokeldn.app import screen
 from pokeldn.online import session as online
 from pokeldn.ldn import local_protocol as lp
@@ -156,6 +157,7 @@ def build_parser():
                     help="host over ldn_mitm for an emulator instead of the radio (docs/ldn.md)")
     ap.add_argument("--our-ip", default=None, help="with --ip-host, the address to advertise")
     online.add_arguments(ap)
+    receiver_gift.add_arguments(ap, "--offer and --next-offer")
     return ap
 
 
@@ -179,6 +181,15 @@ def console_channel(keys_path, phy, scene, seconds):
     return trio.run(find_console_channel, ldn.load_keys(keys_path), phy, scene, seconds)
 
 
+def boxed(raw):
+    """-> the 232-byte box structure as a station sends it, encrypted; ValueError for one that is not a valid
+    box structure, which a --next-offer may not be either."""
+    body = raw if pb7.valid(raw) else pb7.encrypt(raw)
+    if not pb7.valid(body):
+        raise ValueError(f"not a valid {pb7.BOX_SIZE}-byte box structure")
+    return body
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.online and (args.offer or args.next_offer):
@@ -193,6 +204,11 @@ def main(argv=None):
             if not pb7.valid(fh.read()):
                 print(f"[lgh] next offer {path} is not a valid {pb7.BOX_SIZE}-byte box structure")
                 return 2
+    # A gift made for the receiving player stands in for an online partner (pokeldn.receiver_gift).
+    receiving = None
+    if not args.online and args.offer and args.offer != "echo":
+        offers = [boxed(Path(path).read_bytes()) for path in (args.offer, *args.next_offer)]
+        receiving = receiver_gift.setup("lgpe", args, offers, boxed, fresh=fresh)
     show_offer(args.offer)
     if not args.ip_host and needs_root():
         print("[lgh] hosting over the radio needs root, a board (POKELDN_RADIO), or --ip-host")
@@ -250,8 +266,11 @@ def main(argv=None):
            application_data=adv.data.hex(), session_key=adv.keys.session_key.hex(),
            our_ip=host.our_ip, our_mac=host.our_mac.hex())
 
-    session = Session(host, adv, args, record,
-                      partner=online.partner("lgpe", args, code=args.code, name=args.trainer_name))
+    partner = online.partner("lgpe", args, code=args.code, name=args.trainer_name)
+    if receiving is not None:
+        partner = receiver_gift.ReceiverGift("lgpe", *receiving, shown=lambda body: screen.offer("lgpe", body),
+                                             notify=receiver_gift.pop_up())
+    session = Session(host, adv, args, record, partner=partner)
     t0 = time.monotonic()
     try:
         while True:
@@ -798,6 +817,9 @@ class Session:
             print("[lgh] game: not a trade message")
             return
         print(f"[lgh] game: kind {msg['kind']} step {msg['step']} body {msg['size']} B")
+        if msg["kind"] == pb7.FIRST_MESSAGE:
+            # The console's save, for a gift made for it (pokeldn.receiver_gift).
+            receiver_gift.hear(self.partner, pb7.first_trainer, msg["body"])
         if msg["kind"] == pb7.FIRST_MESSAGE and self.args.first and not self.trade.get("first"):
             self.trade["first"] = True
             body = (pb7.build_message(msg["kind"], msg["body"]) if self.args.first == "echo"

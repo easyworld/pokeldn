@@ -164,17 +164,11 @@ async def _close_quietly(pad) -> None:
         pass
 
 
-def _exit_with_the_app() -> None:
-    """runner's stdin watch interrupts the main thread, which asyncio.run here does not leave: a
-    service from a closed app kept the port and its old code. EOF on stdin ends the process."""
-    import sys
-    sys.stdin.read()
-    os._exit(0)
-
-
 async def serve(port: int = PORT, serial_port: str = ""):
-    if os.environ.get("POKELDN_MANAGED_RUN"):
-        threading.Thread(target=_exit_with_the_app, daemon=True).start()
+    # runner's stdin watch interrupts the main thread, which asyncio.run here does not leave: a service from a
+    # closed app kept the port and its old code. The app closing stdin ends the process.
+    from pokeldn.app import runner
+    runner.at_app_close(lambda: os._exit(0))
     service = Service(serial_port)
     server = await asyncio.start_server(service.client, "127.0.0.1", port)
     print(f"[pad] listening on 127.0.0.1:{port}", flush=True)

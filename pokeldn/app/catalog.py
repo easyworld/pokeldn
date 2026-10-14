@@ -33,6 +33,9 @@ class Field:
     count: str = ""               # a pokemon field: the flag that carries how many there are
     hidden: bool = False          # applied with its default, set on the Advanced tab instead of Basic
     shiny: bool = False           # a switch that makes the species field's Pokemon shiny, for its sprite
+    events: bool = False          # a pokemon field picked among the game's Mystery Gift Pokemon, not built
+    your_ot: bool = False         # a switch for a gift that names its receiver: off and disabled while
+                                  # the one chosen has its own trainer (command.locked)
 
     @property
     def key(self) -> str:
@@ -70,10 +73,14 @@ VERSIONS = (("firered", '火红'), ("leafgreen", '叶绿'))
 LANGUAGES = (("english", '英语'), ("french", '法语'), ("german", '德语'),
              ("italian", '意大利语'), ("spanish", '西班牙语'), ("japanese", '日语'))
 CHANNELS = (("1", "1"), ("6", "6"), ("11", "11"))
-FRESH_PID = Field("--fresh-pid", '每次运行使用新 PID', "switch", default=True, hidden=True,
-                  help='为交换的宝可梦生成新的 PID 和加密常量，使已领取过的存档可以再次接收。活动宝可梦等必须保留 PID 的文件，请关闭此选项。')
-CHANNEL_HELP = 'pokeldn 创建的网络所使用的无线信道。'
-CODE_HELP = '与玩家在游戏机上输入的密码一致。'
+FRESH_PID = Field("--fresh-pid", "每次运行使用新 PID", "switch", default=True, hidden=True,
+                  help="为交换的宝可梦生成新的 PID 和加密常量，使已领取过的存档可以再次接收。活动宝可梦等必须保留 PID 的文件，请关闭此选项。")
+FOR_RECEIVER = Field("--for-receiver", "按接收玩家生成", "switch", default=True, hidden=True,
+                     your_ot=True,
+                     help="以接收玩家为初训家的礼物，会在交换时根据游戏机的存档重新生成；训练家信息来自游戏机提供的宝可梦或会话数据。关闭此项或无法识别存档时，使用设置中的原始训练家。")
+GIFT_OFFER_BACK = ("提供一只在此存档捕获的宝可梦并确认，接收活动宝可梦；送出的宝可梦保存在“已接收”文件夹。")
+CHANNEL_HELP = "pokeldn 创建的网络所使用的无线信道。"
+CODE_HELP = "与玩家在游戏机上输入的密码一致。"
 
 
 def host_seconds(default: str, extra: str = "") -> Field:
@@ -298,7 +305,7 @@ PLA = Game("pla", '传说 阿尔宙斯', "PLA", "pla.md", (
           FRESH_PID,
           host_seconds("900")),
          fixed=("--channel", "6", "--session-update", "--sustain", "--clock", "--data-exchange",
-                "--game-channel", "--trade-box", "--player-name", "{ot}",
+                "--game-channel", "--trade-box", "--player-name", "{ot}", "--gender", "{gender}",
                 "--offer-out", "{received}/pla-{stamp}.pa8"),
          doc="pla.md"),
     Tool("pla-join", '交换（加入）', "bin/pla_join.py",
@@ -307,7 +314,8 @@ PLA = Game("pla", '传说 阿尔宙斯', "PLA", "pla.md", (
          (queued("--offer", required=False, help=PLA_OFFER_HELP),
           Field("--code", '连接密码', "code", default="00000000", help=CODE_HELP),
           FRESH_PID),
-         fixed=("--player-name", "{ot}", "--offer-out", "{received}/pla-{stamp}.pa8"),
+         fixed=("--player-name", "{ot}", "--gender", "{gender}",
+                "--offer-out", "{received}/pla-{stamp}.pa8"),
          doc="pla.md"),
 ))
 
@@ -379,7 +387,7 @@ SV = Game("sv", '朱／紫', "SV", "sv.md", (
                 help=f"留空使用团体战默认奖励，或设置最多 {REWARD_ROWS} 项道具奖励。"),
           Field("--raid-players", "加入的游戏机数量", "choice", default="1",
                 choices=(("1", "1 台"), ("2", "2 台"), ("3", "3 台")),
-                help="团体战会等待指定数量的游戏机加入且全部准备完毕后开始。"),
+                help="团体战会等待指定数量的游戏机加入且全部准备完毕后开始，随后每台游戏机在本机进行独立的对战。"),
           Field(("--raid-partner", "--raid-partner-progress"), "团体战 NPC 搭档", "raidpartners",
                 help="填补空位的训练家：1 台游戏机加入时有 2 名，2 台时有 1 名，3 台时没有。未选择的空位由游戏随机安排训练家。"),
           Field("--raid-catch-normal", "再次捕获活动首领", "switch", hidden=True,
@@ -432,6 +440,28 @@ ZA = Game("za", '传说 Z-A', "PLZA", "za.md", (
          doc="za.md"),
 ))
 
+def simulated_gift(game: Game, host: Tool, steps: tuple[str, ...]) -> Tool:
+    """The trade host offering one of the game's Mystery Gift Pokemon, picked from PKHeX's event table, in
+    place of a built one, and made for the receiving player where the card names them
+    (docs/gift_simulated.md)."""
+    def gift(f: Field) -> tuple[Field, ...]:
+        if f.kind != "pokemon":
+            return f,
+        return (replace(f, label="神秘礼物宝可梦", required=True, events=True, queue=1, more="", count="",
+                        help=f"PKHeX 活动数据库中适用于{game.name}的所有礼物宝可梦，通过交换接收新生成的合法副本。"),
+                FOR_RECEIVER)
+    return Tool(host.key.replace("-host", "-gift-host"), "神秘礼物 - 模拟", host.script,
+                "通过交换接收官方神秘礼物宝可梦，按训练家信息新生成合法副本。", steps, tuple(g for f in host.fields for g in gift(f)), fixed=host.fixed,
+                doc="gift_simulated.md")
+
+
+def with_gift(game: Game, steps: tuple[str, ...]) -> Game:
+    """`game` with its Mystery Gift - Simulated after its trades, made from its trade host."""
+    host = next(t for t in game.tools if t.key == f"{game.key}-host")
+    at = max(n for n, t in enumerate(game.tools) if t.key in (f"{game.key}-host", f"{game.key}-join")) + 1
+    return replace(game, tools=game.tools[:at] + (simulated_gift(game, host, steps),) + game.tools[at:])
+
+
 def with_online(game: Game, steps: tuple[str, ...], code: Field | None = None) -> Game:
     """`game` with its online trade after its local trades; `code` replaces the host's own code field's
     help, or is a new field where the game has no code."""
@@ -449,20 +479,25 @@ def with_online(game: Game, steps: tuple[str, ...], code: Field | None = None) -
 
 GAMES = (
     with_online(FRLG, (f"{FRLG_PATH} → 加入组，然后选择 POKELDN。",
-                       "对方的同行宝可梦显示在右侧：选择要送出的宝可梦，然后"
-                       "确认。"),
+                       "对方的同行宝可梦显示在右侧：选择要送出的宝可梦，然后确认。"),
                 Field("--online-code", "连接密码", "code", help=ONLINE_CODE_HELP)),
-    with_online(LGPE, (LGPE_STEPS, "选择宝可梦并确认。")),
-    with_online(SWSH, ("Y-Comm → 连接交换，通过本地通信输入相同的连接密码；在"
-                       "两条提示消息处按 A，然后在地图上等待。",
+    with_online(with_gift(LGPE, ("选择活动宝可梦，然后启动主机。", LGPE_STEPS, GIFT_OFFER_BACK)),
+                (LGPE_STEPS, "选择宝可梦并确认。")),
+    with_online(SWSH, ("Y-Comm → 连接交换，通过本地通信输入相同的连接密码；在两条提示消息处按 A，然后在地图上等待。",
                        "看到 POKELDN 后选择要送出的宝可梦。")),
-    with_online(BDSP, (f"{BDSP_ROOM} pokeldn 的角色将出现。",
-                       "Y → 交流 → 交换宝可梦；接受问候，然后选择宝可梦。"),
-                Field("--password", "连接密码", "code", help="与交换伙伴约定的八位密码，"
-                      "也需要在联合房间的密码提示处输入。留空使用"
-                      "无密码房间，匹配未设置密码的在线玩家。")),
-    with_online(PLA, (*PLA_STEPS, "提出要交换的宝可梦并确认。")),
-    with_online(SV, (SV_SEARCH, "在交换画面提出交换并确认。")),
-    with_online(ZA, ("X → 连接游玩 → 连接交换 → 附近的玩家，输入相同密码并搜索。",
-                     "在交换盒子中选择宝可梦，提出交换，然后确认。")),
+    with_online(with_gift(BDSP, ("选择活动宝可梦，在玩家进入房间前启动主机。", f"{BDSP_ROOM} pokeldn 的角色将出现。",
+                                 "Y → 交流 → 交换宝可梦；接受问候。", GIFT_OFFER_BACK)),
+                (f"{BDSP_ROOM} pokeldn 的角色将出现。",
+                 "Y → 交流 → 交换宝可梦；接受问候，然后选择宝可梦。"),
+                Field("--password", "连接密码", "code", help="与交换伙伴约定的八位密码，也需要在联合房间的密码提示处输入。留空使用无密码房间，匹配未设置密码的在线玩家。")),
+    with_online(with_gift(PLA, ("选择活动宝可梦，然后启动主机。", *PLA_STEPS, GIFT_OFFER_BACK,
+                                "保持主机运行直到交换结束，中途断开会使交换功能暂时被锁定。")),
+                (*PLA_STEPS, "提出要交换的宝可梦并确认。")),
+    with_online(with_gift(SV, ("选择活动宝可梦，然后启动主机。", SV_SEARCH, GIFT_OFFER_BACK)),
+                (SV_SEARCH, "在交换画面提出交换并确认。")),
+    with_online(with_gift(ZA, ("选择活动宝可梦，然后启动主机。",
+                               "X → 连接游玩 → 连接交换 → 附近的玩家，输入相同密码并搜索。",
+                               "在交换盒子中选择此存档捕获的宝可梦，然后交换。接收活动宝可梦；送出的宝可梦保存在“已接收”文件夹。", "交换结束后按 B 退出。")),
+                ("X → 连接游玩 → 连接交换 → 附近的玩家，输入相同密码并搜索。",
+                 "在交换盒子中选择宝可梦，提出交换，然后确认。")),
 )

@@ -5,11 +5,11 @@ import time
 import zlib
 from types import SimpleNamespace
 
-from pokeldn import za
+from pokeldn import receiver_gift, za
 from pokeldn.ldn import crypto, host_pia, pia_connect, reliable, show_done
 from pokeldn.app import screen
 from pokeldn.ldn.channel_table import TUPLE, decode_uint, encode_uint
-from pokeldn.za import streams
+from pokeldn.za import reference, streams
 
 NET_REPEAT = 0.456                # a reference host re-sends its connection status this often
 PROPERTY_REPEAT = 0.5
@@ -45,6 +45,7 @@ MSG_CONFIRM = bytes.fromhex("0102b90100")
 MSG_COMMIT = bytes.fromhex("0104b90100")
 MSG_CANCEL = "0103"
 MSG_STEP = "0200"
+MSG_IDENTITY = "1400"
 # An offer's last byte: 1 on an unasked preview, 0 on the player's pick; a pick sent with 1 is drawn
 # as nothing (docs/za.md).
 OFFER_PREVIEW, OFFER_PICK = 1, 0
@@ -98,9 +99,11 @@ class HostSession:
         self.code = code
         self.identity, self.identity_tail = bytes(identity), bytes(identity_tail)
         self.selection = bytes(selection)
-        # One 354-byte offer, or a list with one per trade; the last serves every later trade.
-        self.offers = ([bytes(offer)] if isinstance(offer, (bytes, bytearray))
-                       else [bytes(o) for o in offer or ()])
+        # One 354-byte offer, or a list with one per trade; the last serves every later trade. With a
+        # partner its pick is ours, and these go unused: a gift made for the receiving player keeps them
+        # to offer when the save names no one (pokeldn.receiver_gift).
+        self.offers = [] if partner is not None else (
+            [bytes(offer)] if isinstance(offer, (bytes, bytearray)) else [bytes(o) for o in offer or ()])
         self.offer = self.preview = None
         if self.offers:
             self._load_offer(self.offers[0])
@@ -352,6 +355,9 @@ class HostSession:
         if self.counts[key] == 1 or head not in (MSG_SELECTION,):
             self.log(f"[za-host] console {head} on {proto}, {len(inner)} bytes, at "
                      f"{self._elapsed(now):.2f}s")
+        if head == MSG_IDENTITY:
+            # The console's save, for a gift made for it (pokeldn.receiver_gift).
+            receiver_gift.hear(self.partner, reference.identity_trainer, inner, log=self.log)
         if proto != streams.PROTO_RELIABLE:
             return
         if head == MSG_OFFER:

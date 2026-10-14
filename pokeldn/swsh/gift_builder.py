@@ -4,6 +4,7 @@ mirrors a record a retail Sword listed and redeemed (docs/swsh_gift.md, A card d
 import struct
 from dataclasses import dataclass
 
+from pokeldn.pokemon import NATURES
 from pokeldn.swsh import events as OFFICIAL, gift_file, wc8
 
 KINDS = (("pokemon", "Pokemon", "gift"), ("egg", "Egg", "package"), ("items", "Items", "bulletlist"),
@@ -135,6 +136,10 @@ def record(state):
             fields["dynamax_level"] = min(max(_int(state, "dynamax_level"), 0), 10)
         if egg:
             fields["egg"] = 1
+        if (nature := state.get("nature")) not in (None, ""):
+            if not 0 <= int(nature) < len(NATURES):
+                raise ValueError(f"The nature is 0 to {len(NATURES) - 1}.")
+            fields["nature"] = int(nature)
         try:
             raw = wc8.pokemon_card(species, level=level, form=form,
                                    moves=moves, nickname=state.get("nickname") or None,
@@ -217,6 +222,7 @@ def describe(state, name=lambda kind, n: f"{kind} #{n}"):
         level = _int(state, "level")
         lines = [f"Gives {name('species', state.get('species'))}, "
                  + (f"level {level}" if level else "a level the game rolls")
+                 + (f", {NATURES[int(state['nature'])]}" if state.get("nature") not in (None, "") else "")
                  + (", shiny" if state.get("shiny") else "")
                  + (", can Gigantamax" if state.get("gigantamax") else "")]
         if _int(state, "item"):

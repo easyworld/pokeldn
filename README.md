@@ -25,6 +25,7 @@ those protocols and write parts of the code.
 | Trade | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Online trade | ✓ | ○ | ○ | ○ | ○ | ✓ | ○ |
 | Mystery Gift | ✓ | ∅ | ✓ | ∅ | ∅ | ∅ | ∅ |
+| Event Pokemon | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Link battle | ✓ | ✗ | ✗ | ✗ | ∅ | ✗ | ✗ |
 | Console code and save read/write | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
@@ -33,7 +34,9 @@ those protocols and write parts of the code.
 FRLG: FireRed/LeafGreen · LGPE: Let's Go Pikachu/Eevee · SwSh: Sword/Shield ·
 BDSP: Brilliant Diamond/Shining Pearl · PLA: Legends Arceus · SV: Scarlet/Violet · PLZA: Legends Z-A
 
-Scarlet/Violet also supports [local Tera Raids](docs/sv_raid.md).
+Scarlet/Violet also supports [local Tera Raids](docs/sv_raid.md). Event Pokemon arrive through Mystery
+Gift on FRLG and SwSh, and on the other titles as a fresh legal copy of an official gift traded by the
+game's trade host ([Simulated Mystery Gifts](docs/gift_simulated.md)).
 See each game's docs for setup, features and verification coverage.
 
 ## Get started
@@ -84,7 +87,9 @@ Contributors to this repository (GitHub does not list contributors on a fork):
 - [easyworld](https://github.com/easyworld): ESP32 serial reconnects after a high-baud session
 - [capito27](https://github.com/capito27): Scarlet/Violet event Tera Raids, the raid finder's reward
   filter, its full seed search, its ranking by rewards and its size mark filter, and the Tera Raid
-  NPC partners: their draw from the RaidPoint and the host's choice of them
+  NPC partners: their draw from the RaidPoint and the host's choice of them; Simulated Mystery Gifts
+  made for the receiving save, pop-ups for programs, Pokemon HOME's gifts among Sword/Shield's
+  official events, a Tera Raid boss's scripted actions, and Legends Arceus's trainer gender
 - [elsardine6k7](https://github.com/elsardine6k7): friendship in the Pokemon builder and Showdown sets
 
 - [kinnay](https://github.com/kinnay): the [LDN library](https://github.com/kinnay/LDN) this builds on,

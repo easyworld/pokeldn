@@ -221,6 +221,8 @@ def try_decrypt(keys, data, macs):
 def build_parser():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--print-packets", action="store_true",
+                    help="print every packet in and out; the --capture file keeps them either way")
     ap.add_argument("--comm-id", default=None,
                     help="local_communication_id to join, hex. Omit to join the only unknown one")
     ap.add_argument("--keys", default="~/.switch/prod.keys")
@@ -801,8 +803,9 @@ def _run(args, net, keys, facts, opener):
                                               f"result 0, {len(pl)}B) *** acked "
                                               f"{station9.ack_id_of(pl):#x}")
                                     state["host_accepted"] = state["acked_response"] = True
-                                print(f"[lg] station reply type={kind} result={result} "
-                                      f"inverse={is_inverse} {len(pl)}B pl[:24]={pl[:24].hex()}")
+                                if args.print_packets:
+                                    print(f"[lg] station reply type={kind} result={result} "
+                                          f"inverse={is_inverse} {len(pl)}B pl[:24]={pl[:24].hex()}")
                             elif m["protocol"] == mp.PROTOCOL:
                                 acked = mp.ack_for(pl)
                                 if acked:
@@ -818,8 +821,9 @@ def _run(args, net, keys, facts, opener):
                                     print("[lg] *** MESH JOIN RESPONSE - station index "
                                           f"{state.get('station_index', 1)} in the mesh, acked "
                                           "on 0x14 ***")
-                                print(f"[lg] mesh 0x18 type={pl[0]:#x} {len(pl)}B "
-                                      f"pl[:24]={pl[:24].hex()}")
+                                if args.print_packets:
+                                    print(f"[lg] mesh 0x18 type={pl[0]:#x} {len(pl)}B "
+                                          f"pl[:24]={pl[:24].hex()}")
                             elif m["protocol"] == reliable3.PROTOCOL:
                                 w = state.get("window")
                                 r = reliable3.parse(pl)
@@ -837,8 +841,9 @@ def _run(args, net, keys, facts, opener):
                                         if msg:
                                             answer_console(args, state, msg, to_host_bitmap)
                                     else:
-                                        print(f"[lg] reliable: acked, expects "
-                                              f"{r['expected']:#x}")
+                                        if args.print_packets:
+                                            print(f"[lg] reliable: acked, expects "
+                                                  f"{r['expected']:#x}")
                             elif m["protocol"] == rtt.PROTOCOL:
                                 ans = rtt.response_for_v3(pl) if args.connect else None
                                 if ans is not None and not args.no_rtt:

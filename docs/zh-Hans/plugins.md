@@ -20,7 +20,7 @@ title: Plugins
 2. 将 `.pokeplugin` 文件拖到页面上，或点击“添加插件”选择文件。
 3. 阅读插件内容和风险，勾选确认项，再点击“安装”。
 
-插件工具会立即出现在“游戏”页面，带有插头图标和“来自插件……”标记。每个插件卡片都有启用开关，以及打开工具、从新版文件更新、显示文件夹、访问页面和移除的菜单。每次安装或更新都会再次展示风险确认页。手动复制到插件文件夹的插件显示“手动添加”，首次启用时也需确认。
+插件工具立即显示在游戏页，带插头图标和“来自插件…”标注。各插件卡片提供启用开关和菜单，可打开工具、从新文件更新、查看文件夹、访问页面及移除。每次安装或更新都重新显示风险说明。手动复制到插件目录的插件显示“手动添加”，首次启用时也需确认相同说明。
 
 如果插件在启动时使应用关闭或无响应，应用下次启动会停用该插件并显示其名称。移除插件时会询问是否一并删除插件保存的数据。
 
@@ -122,11 +122,31 @@ if __name__ == "__main__":
 
 | 脚本行为 | 应用行为 |
 |---|---|
-| 输出一行 | 在会话输出中显示 |
-| 输出 `[done] trade N complete`（`pokeldn.ldn.show_done()`） | 将一个排队交换标记为完成 |
-| 以代码 0 退出 | 将会话标记为完成 |
-| 以其他代码退出或抛出异常 | 显示会话失败，并在输出中显示异常堆栈 |
-| 收到 `KeyboardInterrupt` | 用户点击了“停止”；应在 15 秒内正常退出，否则进程会被结束 |
+| 打印一行 | 显示在会话输出中 |
+| 打印 `[done] trade N complete`（`pokeldn.ldn.show_done()`） | 标记一次队列交换完成 |
+| 返回代码 0 | 会话结束并标为完成 |
+| 返回其他代码或抛出异常 | 会话失败，输出中显示堆栈 |
+| 收到 `KeyboardInterrupt` | 玩家按了停止；应在 15 秒内退出，否则进程被结束 |
+| 打开弹窗（`pokeldn.popup`，1.2） | 覆盖当前页面显示，返回玩家回答 |
+
+弹窗不会等待玩家：`acknowledge` 和 `confirm` 立即返回 ID，回答通过稍后的回调到达，可能随时在另一线程触发。脚本应保留自身状态，在回答到达时处理，并继续原有工作：
+
+```python
+import queue
+from pokeldn import popup
+
+answers = queue.Queue()
+popup.set_dispatcher(answers.put)       # callbacks wait for the loop below instead of running on their own thread
+asked = popup.confirm("Trade the shiny?", "Your partner offers a shiny Gholdengo.", "Trade", "Skip",
+                      on_agree=lambda: print("trading"), on_disagree=lambda: print("skipping"),
+                      tone="warning")
+while not finished():                   # the script's own work goes on meanwhile
+    try:
+        answers.get(timeout=0.5)()
+    except queue.Empty:
+        pass
+popup.cancel(asked)                     # no use for the answer any more: the pop-up closes, no callback fires
+```
 
 共享模块应使用其他包未使用的名称（例如 `mylib_common`，避免 `utils`），因为插件文件夹会被加入 Python 搜索路径。
 
@@ -165,7 +185,7 @@ if __name__ == "__main__":
 
 更新会替换插件文件夹。设置、缓存和需要长期保存的内容应放在 `register` 提供的 `api.data`，或工具脚本调用 `pokeldn.plugins.data_folder("my-plugin")` 获得的目录中：它位于应用数据目录的 `plugin-data/<id>`，更新时保留，只有用户要求时才随插件移除。
 
-`help=` 在输入项下显示说明，`default=` 提供默认值，`hidden=True` 将字段移到“高级”页。内置工具的字段及其余 `Field` 属性见 `pokeldn/app/catalog.py`。工具的 `fixed` 参数可包含 `{ot}`、`{tid}`、`{sid}`、`{language}`（设置中的训练家）、`{received}`（接收文件夹）及 `{stamp}`（开始运行的时间）。
+`help=` 在输入框下显示说明，`default=` 填充默认值，`hidden=True` 将其移到高级页。内置工具的字段及 `Field` 其他选项见 `pokeldn/app/catalog.py`。工具的 `fixed` 参数可包含 `{ot}`、`{tid}`、`{sid}`、`{language}`、`{gender}`（设置中的训练家）、`{received}`（已接收文件夹）及 `{stamp}`（启动时间）。
 
 <a id="a-game-of-its-own"></a>
 
@@ -284,6 +304,8 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 |---|---|
 | 1.0 | `add_tool`、`add_game`、`add_radio`、`folder`、`version` |
 | 1.1 | `api.data`、`api.level`、`pokeldn.plugins.data_folder(id)` |
+| 1.2 | `pokeldn.popup` |
+| 1.3 | 程序接口：生成器、礼物文件、PKHeX 和开发板 |
 
 <a id="the-api-version-1"></a>
 
@@ -291,14 +313,44 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 
 | 名称 | 含义 |
 |---|---|
-| `api.add_tool(game, tool)` | 在键为 `game` 的游戏下添加 `Tool`：`frlg`、`lgpe`、`swsh`、`bdsp`、`pla`、`sv`、`za`，或插件添加的游戏 |
+| `api.add_tool(game, tool)` | 在键为 `game` 的游戏下添加 `Tool`：`frlg`、`lgpe`、`swsh`、`bdsp`、`pla`、`sv`、`za` 或插件添加的游戏 |
 | `api.add_game(game, icon="")` | 添加游戏分组及工具 |
-| `api.add_radio(scheme, install, label="")` | 添加无线通信后端 |
-| `api.folder` | 插件文件夹（`Path`）；Python 包插件为 None |
-| `api.version`、`api.level` | 应用使用的主版本和级别，即 `1` 和 `1` |
-| `api.data` | 更新时保留的文件夹，首次使用时创建（1.1） |
-| `pokeldn.plugins.data_folder(id)` | 工具脚本访问同一文件夹的接口（1.1） |
+| `api.add_radio(scheme, install, label="")` | 添加无线适配器 |
+| `api.folder` | 插件文件夹（`Path`），Python 包则为 None |
+| `api.version`、`api.level` | 当前 API 主版本和级别，`1` 和 `3` |
+| `api.data` | 更新时保留的目录，首次使用时创建（1.1） |
+| `pokeldn.plugins.data_folder(id)` | 从工具脚本访问同一目录（1.1） |
 | `Tool`、`Field`、`Game` | 应用目录类型，从 `pokeldn.plugins` 导入 |
-| `pokeldn.ldn.show_done()` | 输出将一次交换标记为完成的行 |
+| `pokeldn.ldn.show_done()` | 打印标记一次交换完成的行 |
+| `pokeldn.popup.acknowledge(title, text="", *, id, label="OK", on_ack, tone)` | 单按钮弹窗，返回 ID（1.2，[弹窗](gui.md#pop-ups)） |
+| `pokeldn.popup.confirm(title, text, agree, disagree, *, id, on_agree, on_disagree, on_dismiss, tone)` | 使用调用方指定的同意、不同意按钮；Esc 或点击外部关闭，返回 ID（1.2） |
+| `pokeldn.popup.cancel(id)`、`available()`、`set_dispatcher(dispatch)` | 关闭弹窗并移除回调；判断应用是否显示弹窗；指定回调执行位置（1.2） |
 
-此表是受支持的接口。插件从 pokeldn 导入的其他内容可能在任意版本变化。
+本表及下表列出的接口受兼容性保证。插件从 pokeldn 导入的其他内容可能在任何版本改变。
+
+<a id="the-program-surface-13"></a>
+
+## 程序接口（1.3）
+
+插件或基于 pokeldn 源码的独立程序（触摸屏前端、脚本）可使用与应用相同的代码生成礼物和宝可梦、管理开发板。API 主版本 1 内，这些名称保持含义不变；`tests/test_plugin_surface.py` 逐项验证解析。
+
+| 名称 | 含义 |
+|---|---|
+| `python -m pokeldn --list`、`python -m pokeldn TOOL -- ARGS` | 列出工具键值，或使用设置中的训练家和 `--` 后参数运行工具 |
+| `pokeldn.app.catalog.GAMES` | 内置游戏，每个 `Game` 的 `.tools` 保存 `Tool`：`bin/` 下脚本及字段；应用传入的参数名保持不变 |
+| `pokeldn.pokemon.SERVICE.species(game)`、`.names(game, kind)` | 游戏种类及 `moves`、`items`、`bag`、`held`、`balls`，以 `{"id", "name"}` 列表返回 |
+| `pokeldn.pokemon.SERVICE.options(game, species, trainer)` | 对应种类可以使用的形态、性格、特性、道具和精灵球 |
+| `pokeldn.pokemon.SERVICE.make(game, species, trainer, level, shiny, nickname, version, options)` | 生成对应游戏的合法宝可梦；`options` 接受性格、特性、性别、携带道具、精灵球、亲密度、招式、个体值和努力值；返回各字段及写入路径 `"file"` |
+| `pokeldn.pokemon.SERVICE.paste(game, text, trainer)` | 解析 `text` 中的 Showdown 配置，各条返回 `make` 的字段及 `errors` |
+| `pokeldn.pokemon.BuilderError` | PKHeX 拒绝或缺失时抛出，包含面向玩家的说明 |
+| `pokeldn.pokemon.NATURES` | 按记录索引排列的 25 种性格名称 |
+| `pokeldn.gifts.load(path, game=)`、`pokeldn.gifts.save(path, gift)` | 读写 `.pokegift`、`.wc3`、`.wc8`（[神秘礼物文件](gifts.md)） |
+| `pokeldn.swsh.gift_builder.KINDS`、`PRESETS`、`PRESET`、`OUTFITS` | 剑／盾生成器的礼物类型 `(key, label, icon)`、预设（`.key`、`.label`、`.group`、`.summary`、`.state`）及服装 |
+| `pokeldn.swsh.gift_builder.blank(**changes)`、`record(state)`、`compile(state)`、`describe(state, name)` | 表单状态、封装的 720 字节记录、供 `gifts.save` 使用的礼物及面向玩家的说明；无效状态抛出 `ValueError` 并指出字段。宝可梦状态接受 `nature`（0 至 24，省略则由游戏随机生成） |
+| `pokeldn.swsh.events.load()`、`by_key()`、`gift(key)` | 剑／盾官方活动卡片及单张卡片的礼物 |
+| `pokeldn.frlg.gift.builder.KINDS`、`PRESETS`、`PRESET`、`GIVERS`、`CARTRIDGES` | 火红／叶绿生成器的类型、预设、发放卡片角色及游戏机代码支持的卡带 |
+| `pokeldn.frlg.gift.builder.blank()`、`compile(state)`、`describe(state, name)` | 神奇卡片、神奇新闻及游戏机代码对应的同类接口 |
+| `gui.board.ports()`、`identify(port, blink=)`、`detect_chip(port)` | 串口及开发板运行内容：`.firmware`、`.firmware_version`、`.protocol`、`.current`（协议与当前 pokeldn 相同） |
+| `gui.board.download_firmware(say=)`、`image_for(kind, chip)`、`image_version(path)`、`flash(port, kind=)` | 按 SHA-256 核验发布镜像、为芯片选择镜像、读取版本及检查芯片后刷写 |
+
+从应用或 `python -m pokeldn` 启动的任务各为独立进程：向该 PID 发送 SIGINT，15 秒后仍未退出再发 SIGTERM。不要按名称匹配启动器（`pkill -f`），否则会结束其他程序启动的任务。

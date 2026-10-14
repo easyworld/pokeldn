@@ -31,7 +31,7 @@ def test_the_nature_table_is_the_one_two_panels_read():
     """Byte 9 drew Lax and byte 14 drew Naive on a console's summary."""
     assert stats.nature_name(9) == "Lax" and stats.nature_name(14) == "Naive"
     assert stats.NATURE_AMP[NAIVE] == (0, 0, 0, -1, 1)       # speed up, special defence down
-    assert len(stats.NATURE_AMP) == 25 and len(stats.NATURE_NAMES) == 25
+    assert len(stats.NATURE_AMP) == len(stats.NATURES) == 25
 
 
 def test_a_nature_out_of_range_is_neutral_rather_than_an_error():

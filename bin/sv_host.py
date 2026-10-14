@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pokeldn.host_support import open_output
 from pokeldn import pokemon as pokemon_service
-from pokeldn import config
+from pokeldn import config, receiver_gift
 from pokeldn import sv
 from pokeldn.ldn import pia6, pia_connect, reliable5
 from pokeldn.sv import (pokemon, port2, raid, raid_encounter, raid_event, raid_partners, reference,
@@ -72,6 +72,14 @@ RTT_REQUEST = 0
 RTT_RESPONSE = 1
 # A retail bulk ack: four entries, entry k for station k's stream (docs/sv.md).
 ACK_ENTRIES = 4
+
+
+def identity_chunk(protocol, port, flags, seat):
+    """Whether a console's message may be record 1 of its identity block, which names its save: a compressed
+    record on 0x81 at the port of its station index `seat` (docs/sv.md, The records). Its sequence number is no
+    guide: a console that opened its stream twice sent record 1 at 47."""
+    return (protocol == PROTO_STREAM_BROADCAST_RELIABLE and port == seat
+            and bool(flags & reliable5.FLAG_ZLIB))
 
 
 def _describe(msg):
@@ -257,6 +265,8 @@ def build_parser():
     ap.add_argument("--host-player-id", default="00000000000000020000000000000000")
     ap.add_argument("--no-rtt", action="store_true", help="do not answer RTT requests")
     ap.add_argument("--no-ack", action="store_true", help="do not acknowledge reliable streams")
+    ap.add_argument("--print-packets", action="store_true",
+                    help="print every packet in and out; the --capture file keeps them either way")
     ap.add_argument("--ack-period", type=float, default=1.0,
                     help="seconds between the periodic bulk acks on every port the console used")
     ap.add_argument("--clock", action="store_true", help="answer clone clock requests, if any")
@@ -341,6 +351,7 @@ def build_parser():
                          "console through the commit and the four exchange steps the way a pair's "
                          "host does (pokeldn.sv.trade). Repeatable: the second and later records "
                          "are offered in the same seat, one per trade, as each trade closes")
+    receiver_gift.add_arguments(ap, "--trade-offer")
     ap.add_argument("--offer-set", action="append", metavar="FIELD=VALUE", default=[],
                     help="a field written into the offered record before it is sealed, by its "
                          "pokeldn.sv.pokemon name: nickname=SHINY, species=906, level=50, "
@@ -491,9 +502,11 @@ def main(argv=None):
     args = ap.parse_args(argv)
     raiding = args.raid_seed is not None
     raid_group = prepare_raid(ap, args) if raiding else None
+    offer_check = {}            # a gift made for the receiving player takes it too (pokeldn.receiver_gift)
     if args.trade_offer:
-        args.trade_offer = [pokemon_service.prepare_file("sv", p, fresh=args.fresh_pid,
-            transform=lambda raw: trade.load_offer(raw, args.offer_set)) for p in args.trade_offer]
+        settings = args.offer_set
+        offer_check = dict(fresh=args.fresh_pid, transform=lambda raw: trade.load_offer(raw, settings))
+        args.trade_offer = [pokemon_service.prepare_file("sv", p, **offer_check) for p in args.trade_offer]
         args.offer_set = []
         args.fresh_pid = False
     reference.fill_identity(args)
@@ -557,6 +570,37 @@ def main(argv=None):
     elif args.offer_set or args.offer_dump:
         ap.error("--offer-set and --offer-dump need --trade-offer")
     trading = bool(trade_offers) or partner is not None
+    receiving = (receiver_gift.setup("sv", args, trade_offers, trade.load_offer, **offer_check)
+                 if partner is None else None)
+
+    identities = {}             # ip -> the trainer its console's identity names, for a gift made for it
+
+    def new_stage(ip):
+        """One console's trade. A gift made for the receiving player is made for each console's own
+        save, so each has its own ReceiverGift."""
+        helper = partner
+        if receiving is not None:
+            helper = receiver_gift.ReceiverGift("sv", *receiving, log=print,
+                                                shown=lambda body: screen.offer("sv", body),
+                                                notify=receiver_gift.pop_up(f"gift-{ip}"))
+            if ip in identities:
+                helper.hear(identities[ip])
+        return trade.TradeStage(trade_offers, confirm_delay=args.confirm_delay, partner=helper)
+
+    def hear_identity(ip, payload):
+        """Record 1 of a console's identity block names its save (docs/sv.md, The records), for the gift made
+        for it (pokeldn.receiver_gift)."""
+        try:
+            fields = reference.identity_trainer(streams.decompress(payload))
+        except zlib.error:          # another record's chunk
+            return
+        except ValueError as exc:
+            print(f"[sv] {ip}: identity record 1 does not read: {exc}")
+            return
+        if fields:
+            identities[ip] = fields
+            if ip in stages:
+                stages[ip].partner.hear(fields)
 
     def report_offer(ip, body, n):
         try:
@@ -773,7 +817,8 @@ def main(argv=None):
         last_ack[(src_ip, protocol, port)] = time.time()
         record(rec="out", dst=src_ip, kind="reliable ack", protocol=protocol, port=port,
                ack_id=high + 1, hex=pkt.hex(), t=time.time())
-        print(f"[sv] -> {src_ip}: ack 0x{protocol:02x}:{port} ack_id {high + 1} ({why})")
+        if args.print_packets:
+            print(f"[sv] -> {src_ip}: ack 0x{protocol:02x}:{port} ack_id {high + 1} ({why})")
 
     def send_raid(ip, seq, flags, payload, lowest, retry=False):
         """One of the raid's messages on 0x80 port 0, kept until the console acknowledges it."""
@@ -894,8 +939,10 @@ def main(argv=None):
                                hex=pkt.hex(), t=now)
                         print(f"[sv] -> {ip}: Session type 7, the console hosts next")
                     elif action[0] == "migrating":
+                        # Every seated console, ranked as last sent: a rank is who hosts next.
                         pkt = build_net_probe(
-                            keys, transport.our_ip, transport.our_mac, [transport.our_ip, ip],
+                            keys, transport.our_ip, transport.our_mac,
+                            list(net_tables.get(ip, (transport.our_ip, ip))),
                             net_request_seq.get(ip, net_seqid) + 1, os.urandom(8),
                             args.max_participants if args.net_stations is None else args.net_stations,
                             net_flags=(ESTABLISHING_FLAGS if args.net_flags is None
@@ -950,7 +997,9 @@ def main(argv=None):
                     sv.build_advertise_data(num_players=players, game_data=game_data,
                                             code=args.code))
                 print(f"[sv] advertising {players} player(s)")
-            if not args.no_net_probe:
+            # From the raid's start the seats are fixed: a regular Net 0x11 after the handover's
+            # is-migrating one sent a console back to us as its host and out of the battle's session.
+            if not args.no_net_probe and (raid_group is None or raid_group.started_at is None):
                 if raiding:
                     # A Pia host sends every station the new table on each seat change (`0x69c79c`,
                     # docs/sv_raid.md, Several consoles).
@@ -1125,8 +1174,9 @@ def main(argv=None):
                     continue                    # one console's traffic to another
                 for msg in msgs:
                     counts[msg.protocol] = counts.get(msg.protocol, 0) + 1
-                    print(f"[sv] <- {src_ip} {header!r} footer={ids}")
-                    print(f"       {_describe(msg)}  {msg.payload.hex()}")
+                    if args.print_packets:
+                        print(f"[sv] <- {src_ip} {header!r} footer={ids}")
+                        print(f"       {_describe(msg)}  {msg.payload.hex()}")
                     record(rec="msg", src=src_ip, protocol=msg.protocol, port=msg.port,
                            flags=msg.message_flags, src_var=header.src_var, dst_var=header.dst_var,
                            payload=msg.payload.hex(), t=time.time())
@@ -1232,6 +1282,7 @@ def main(argv=None):
                             pending_late = {k: v for k, v in pending_late.items() if k[0] != src_ip}
                             sent_once = {s for s in sent_once if s[0] != src_ip}
                             stages.pop(src_ip, None)
+                            identities.pop(src_ip, None)     # the next console at this address is another save
                             pending_trade[:] = [e for e in pending_trade if e[1] != src_ip]
                             net_answered.discard(src_ip)
                             host_const, host_var = j["destination_constant_id"], j["destination_var"]
@@ -1312,8 +1363,7 @@ def main(argv=None):
                                 delay, rest = spec.split(":", 1)
                                 pending_late[(src_ip, index)] = (time.time() + float(delay), rest)
                             if trading and args.offer_at is not None:
-                                stages[src_ip] = trade.TradeStage(
-                                    trade_offers, confirm_delay=args.confirm_delay, partner=partner)
+                                stages[src_ip] = new_stage(src_ip)
                                 for delay, out_port, payload in stages[src_ip].offer_first():
                                     schedule_trade(args.offer_at + delay,
                                                    src_ip, out_port, payload)
@@ -1358,15 +1408,19 @@ def main(argv=None):
                                     and not rm["bitmap"][0] & 1 << HOST_STATION_INDEX):
                                 continue                # addressed to another console only
                             if rm and (rm["flags"] & reliable5.FLAG_APPLICATION_DATA):
-                                print(f"[sv] <- {src_ip}: DATA 0x{msg.protocol:02x}:{msg.port} "
-                                      f"stream {rm['stream_id']} seq {rm['sequence_id']} "
-                                      f"{reliable5.flag_names(rm['flags'])} bits={rm['destination_bits']} "
-                                      f"map={rm['bitmap']} {len(rm['payload'])}B "
-                                      f"{rm['payload'].hex()}")
+                                if args.print_packets:
+                                    print(f"[sv] <- {src_ip}: DATA 0x{msg.protocol:02x}:{msg.port} "
+                                          f"stream {rm['stream_id']} seq {rm['sequence_id']} "
+                                          f"{reliable5.flag_names(rm['flags'])} bits={rm['destination_bits']} "
+                                          f"map={rm['bitmap']} {len(rm['payload'])}B "
+                                          f"{rm['payload'].hex()}")
                                 record(rec="data", src=src_ip, protocol=msg.protocol, port=msg.port,
                                        seq=rm["sequence_id"], flags=rm["flags"],
                                        payload=rm["payload"].hex(), t=time.time())
                                 stream_high[key] = max(stream_high.get(key, 0), rm["sequence_id"])
+                                if receiving is not None and identity_chunk(
+                                        msg.protocol, msg.port, rm["flags"], seat_of(src_ip)):
+                                    hear_identity(src_ip, rm["payload"])
                                 if (src_ip in raid_hosts and msg.protocol == PROTO_BROADCAST_RELIABLE
                                         and msg.port == 0):
                                     plain = (streams.decompress(rm["payload"])
@@ -1379,9 +1433,7 @@ def main(argv=None):
                                 if (trading and msg.protocol == PROTO_RELIABLE
                                         and src_ip in station_ids):
                                     if src_ip not in stages:
-                                        stages[src_ip] = trade.TradeStage(
-                                            trade_offers, confirm_delay=args.confirm_delay,
-                                            partner=partner)
+                                        stages[src_ip] = new_stage(src_ip)
                                     st = stages[src_ip]
                                     for delay, out_port, payload in st.on_message(
                                             msg.port, rm["payload"]):
@@ -1397,7 +1449,11 @@ def main(argv=None):
                                         if st.done:
                                             print(f"[sv] {src_ip}: TRADE {st.trades} COMPLETE; "
                                                   f"no record left to offer")
-                                        elif partner is None:
+                                        elif st.partner is not None:
+                                            if partner is None:
+                                                print(f"[sv] {src_ip}: TRADE {st.trades} COMPLETE; the "
+                                                      f"next record goes up once the console offers")
+                                        else:
                                             screen.offer("sv", st.offer)
                                             print(f"[sv] {src_ip}: TRADE {st.trades} COMPLETE; "
                                                   f"offering the next record")
@@ -1423,9 +1479,8 @@ def main(argv=None):
                                         pending_late[(src_ip, f"open{index}")] = (
                                             time.time() + float(delay), rest)
                                     if trading and args.offer_after_open is not None:
-                                        stages.setdefault(src_ip, trade.TradeStage(
-                                            trade_offers, confirm_delay=args.confirm_delay,
-                                            partner=partner))
+                                        if src_ip not in stages:
+                                            stages[src_ip] = new_stage(src_ip)
                                         for delay, out_port, payload in stages[src_ip].offer_first():
                                             schedule_trade(args.offer_after_open + delay,
                                                            src_ip, out_port, payload)
@@ -1487,11 +1542,12 @@ def main(argv=None):
                                     window = (raid_window if (msg.protocol, msg.port)
                                               == (PROTO_BROADCAST_RELIABLE, 0) else channel_window)
                                     window.acked(key, entry["ack_id"], entry["mask"])
-                                print(f"[sv] <- {src_ip}: ACK 0x{msg.protocol:02x}:{msg.port} "
-                                      f"low={rm['lowest_pending']} bits={rm['destination_bits']} "
-                                      f"map={rm['bitmap']} u0={a['unknown0']} "
-                                      + " ".join(f"[s{e['stream_id']} ack={e['ack_id']} f={e['field_0x50']}]"
-                                                 for e in a["entries"]))
+                                if args.print_packets:
+                                    print(f"[sv] <- {src_ip}: ACK 0x{msg.protocol:02x}:{msg.port} "
+                                          f"low={rm['lowest_pending']} bits={rm['destination_bits']} "
+                                          f"map={rm['bitmap']} u0={a['unknown0']} "
+                                          + " ".join(f"[s{e['stream_id']} ack={e['ack_id']} f={e['field_0x50']}]"
+                                                     for e in a["entries"]))
                                 if (not args.no_ack and src_ip in station_ids
                                         and key not in last_ack):
                                     send_ack(src_ip, msg.protocol, msg.port,

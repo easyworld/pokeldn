@@ -49,7 +49,9 @@ and every ack the host sends declares the lowest unacknowledged sequence of the 
 ### Several consoles
 
 `--raid-players N` (1 to 3, the app's "Consoles joining") seats up to three consoles in one lobby,
-each at the lowest free station index, 1 to 3. The host keeps one set of streams per console, as for
+each at the lowest free station index, 1 to 3. The consoles share the lobby and the start;
+from the first turn each one fights its own battle, with its own NPC partners, and gets its own
+rewards ([Which station runs the server](#which-station-runs-the-server)). The host keeps one set of streams per console, as for
 a single one, with that console's index wherever a single console's raid has 1:
 
 | | the console at index *k* |
@@ -92,8 +94,24 @@ retail sender writes three, the station capacity 4 (`0x44dfcb0`) less one (`0x6e
 the number of stations.
 
 The host hands the network to the lowest index still on it, as for one console; the other consoles
-draw the is-migrating Net 0x11 and NetStartHostMigration with no Session type 7. The run ends once
-every console has left the network or each handover has run out.
+draw the is-migrating Net 0x11 and NetStartHostMigration with no Session type 7. The is-migrating
+0x11 to each console ranks every seated station (a rank is who hosts next) and goes to the others only
+after the next host's type 8; NetStartHostMigration goes out once every console has answered its 0x11
+with 0x12, and no plain Net 0x11 follows. The run ends once every console has left the network or each
+handover has run out.
+
+What decides whether the consoles stay in one battle:
+
+| condition | code |
+|---|---|
+| a console that sees another leave keeps it only once it is migrating: `[net+0x249]` set by an is-migrating 0x11, or `[net+0x1c0]` set by NetStartHostMigration; otherwise it drops it from its session and resets its Net station | station-left handler `0x69d08c`, `0x69d174` |
+| a Net 0x11 with a newer sequence drops every station marked as gone | `0x69e008`, `0x6b5074` |
+| the next host waits up to 8000 ms for every Net station to reach state 2 (seen on its new network), then drops those still in state 1, sends Net 0x11, waits for every 0x12 and sends the Session type 5 | NetHostMigrationJob `0x6a9cd4`, `0x6aa2a8`; `0x6d44f0` |
+| the other console waits 10000 ms for that type 5, then fails | `0x6dc024`, `0x6dc124` |
+| the type 7's last u16 at most the next host's applied list sequence | `0x6d9164` |
+
+Two emulated Scarlets handed over this way formed one session on the next host's network (type 5
+answered with type 6, no error on either screen) and fought on with an NPC in the free seat.
 
 A Pia host sends the new Net 0x11 to every station on each change of LDN participants: `0x69c310`
 compares the previous and current connection status, `0x69c79c` increments the one counter
@@ -298,7 +316,7 @@ The RaidPoint, offsets from its start:
 | 0x0e4 | 45 x 16 | reward rows: item, quantity, a rare-item flag, subject |
 | 0x3b4 | u8 | 0 in a retail standard point, 1 in a retail black one |
 | 0x3b8 | 7 x u32 | stars, species (DevID), form, gender, level, 0, Tera type |
-| 0x3d8 | u64 | `randSeed`, the partner seed ([Partners](#partners)): nonzero in retail points; `raid_point` writes the one it is given, 0 by default |
+| 0x3d8 | u64 | `randSeed`, the partner seed ([Partners](#partners)) and the battle's random seed ([The battle's random numbers](#the-battles-random-numbers)): nonzero in retail points; `raid_point` writes the one it is given, 0 by default |
 | 0x3e0 | u32 | `raidNpcGroupID`, the host's raid unlock stage, which picks the partner pool ([Partners](#partners)): 4 in every retail point seen; `raid_point` writes the stage of the raid's progress unless given one |
 
 In the raid tables every six-star record's `raidTimeData` is active with `gameLimit` 450 and
@@ -308,8 +326,11 @@ Bytes 0x3b5..0x3b7, 0x3d4..0x3d7 and 0x3e4..0x3e7 held stale bytes in both retai
 
 The action profile is the record's `bossDesc` in the game's raid tables, in that order; the
 actions are 0 none, 1 reset the boss's stat changes, 2 reset the players', 3 a move, 4 drain the
-Tera orb, and the timings 0 none, 1 time, 2 HP. HP coefficients run 500, 500, 800, 1200, 2000 and
-2500 for one to six stars.
+Tera orb, and the timings 0 none, 1 time, 2 HP. An action's value is the share of the boss's HP or
+of the time left that brings it, and the shield's first two values are the HP and time shares that
+raise it, either one; Serebii's scripted actions for the seven-star Kingambit of August 2026 read
+the same from its record. HP coefficients run 500, 500, 800, 1200, 2000 and 2500 for one to six
+stars.
 
 A retail point's reward rows are the seed's fixed rows, then its lottery draws, then the host's
 bonus rows: three under subject 4 and one under subject 5. A fixed row's subject is the reward
@@ -746,6 +767,190 @@ Measured on an Apple M4 (10 cores), the helper warm:
 | every seed of Scarlet's Paldea black crystal, two Bitter Herba Mystica then two Ability Patches ranked, one boss per species | 20.9 s |
 | every seed of that crystal, wanting the Jumbo mark | 3.3 s |
 
+## The battle between consoles
+
+Measured between two emulated Scarlet 4.0.0, one hosting a 4-star crystal and one joining from the
+Poke Portal, two NPC partners in the free seats. The hosting console stays in the session for the
+whole battle. Every battle message is a battle-start frame on key 0x007b addressed (0x2713, x, y), its
+32-byte header's type at +0x00, a u64 step counter at +0x08, a u64 round at +0x10, then 5 and a
+battler or station byte at +0x18 and +0x19:
+
+| type | from | size | what |
+|---|---|---|---|
+| 0x01, 0x05, 0x11, 0x15, 0x25, 0x29, 0x47, 0x49 | the host, address (0x2713, 1, 2) | 50 to 20626 | a step; each guest answers type + 1 under the same counters |
+| 0x02, 0x12, 0x16, 0x26, 0x2a, 0x48, 0x4a | every station, address (0x2713, 3, 5) or (0x2713, 2, 2) | 50 | the answer to a step |
+| 0x06 | a station for its own battler; the host for its own, for each NPC's and again for the guest's | 250 | one battler's command; +0x19 is the battler slot (0 host, 2 the guest, 3 and 4 the NPCs) |
+| 0x15 | the host, one per acting battler, the boss included | 20626 | the round: five 0x70-byte action blocks (slots 0 host, 1 boss, 2 guest, 3 and 4 NPCs) at +0x20, a byte per slot counting the actions in its block at +0x250 ([Actions](#actions)), the server command queue's length at +0x258 and the queue from +0x25c; 123 to 802 bytes deflated |
+| 0x46 | the host, 62 times at the start | 54 | |
+| 0x51 | the host | 86 | |
+
+In about 4 minutes the joiner's two directions carried 475 reliable messages on 0x80 port 0, 27979
+bytes on the wire, at most 80 in one second one way. Only the host sends the NPCs' commands and the type-0x15 records.
+
+The battle is server and client. The host's builder `0x113c8a0` (type 0x15 at `0x113c908`) copies the
+action blocks, runs the round (`0x113e3d0`) and appends the server command queue it produced; the
+host's AI makes the NPCs' commands, and the boss's action reaches a guest only inside a 0x15. A guest
+plays the queue, and for types 0x13, 0x15, 0x17, 0x19, 0x1f, 0x23, 0x25 and 0x4d it rebuilds the body
+from the host's action blocks with the same builder and compares size and bytes (`0xf5cfa4`); a
+mismatch goes to `0xf5bfd4`, the receive-timeout handler. A station that hosts a battle has to produce
+the queue Scarlet's own engine produces from the same state.
+
+### Which station runs the server
+
+The battle server is the first entry of the port-2 member list, the list every console builds from
+the lobby host's Session type 6 (members at `+0xa0`, codes `+0xc0`, count `+0xc4`; composer
+`0xe457cc`) and type-9 receiver `0x18b68fc`; `pokeldn.sv.port2.build_session` puts the host first.
+
+| step | code |
+|---|---|
+| the raid start `0.4455` (Lua) sets the server slot to 0: `setup:f4891D27C(0)` | `0x182ca10` -> `0x2d36398`, setup `+0x94` |
+| for member i it maps i to slot 0, 2, 3, 4, stores the member's code at `+0x99+slot` and, for its own code, the slot at `+0x90` | `0x1ccd15c` walks the member vector at port-2 `+0x170`; `0x2d363a0`, `0x130ea2c` |
+| `0x2a1cd74` copies setup `+0x94` to `net+0x58` and `+0x90` to `net+0x5c`, once, at battle start | from `0x18915c4` |
+| a console is the server when `!setup.710 && slot == net+0x58` | net vf `+0x78` = `0x2a1d994`; config `+0x2c` via `0xfa363c`, kept at server `+0x490` |
+| the 0x15 checker is installed only on a console that is not the server | `0xfb0ee8` |
+| a receive timeout or a failed check calls net vf `+0x70` = `0x2a1d920`; in a raid it sets `net+0xca` and `0x18e217c` sets `net+0x58` to the console's own slot (`net+0xf0`, written once at `0x2a1cda8`) | `0xf5bfd4` |
+
+Setup `+0x710` is set only by `0x7faed0`, from the Lua binding `f3AF42713` when builder field 22 is
+true; the raid start never sets it. No message names the server: member order does. A console that
+loses its link to the server makes itself the server for the rest of the battle, and every console
+does so independently. When the lobby host listed first stops sending, each console fights its own
+battle.
+
+The member vector is append-only and has three writers, all through `0x18b65c8` -> `0x18b68fc`:
+the session block of a type 6 or 7 (`0x18b566c`, entry `(block+0x98 code, block+0x90 host
+station)`, appended first), the type-6 member replay (`0x279ba2c`) and the type 9 (`0x1954bac`). A
+type 9 before any block is dropped (`0x18b65e4`). Entry 0 on every console is the host its first
+block names. Measured on two emulated Scarlet 4.0.0:
+
+| what the lobby host sent | what the consoles did |
+|---|---|
+| a type 6 whose block host is the receiving console's own station | sent no port-2 join, Error 7 |
+| port-2 type 10 (`0a b9 02 <slot> b9 01 <u64 station>`, parser `0x279bbdc`, erase `0x194562c`) naming the block host, in the lobby | left the session |
+| the same type 10 after the bootstrap | "The raid has been abandoned!" |
+| the same type 10 once the console reported 320173 (loaded) | each fought alone with two NPC partners |
+| a member code naming an empty bootstrap participant | the battle's loading aborted (2162-0001) |
+| five members, the fifth (mapped to slot 0 by the Lua, which remaps only indexes 1 to 3) a console | the lobby listed no member; after the start and the bootstrap both consoles left before any battle frame |
+
+Bootstrap participant k belongs to the member with code k. A console that fails over runs every
+other battler by its own AI: the per-slot readers are built only for a console that was the server
+at battle start (`0xfa52b0`, `0xfa5314`). Its own code is the code of the first vector entry with
+its own station (`0xd5f3b4`), and the Lua's slot loop (`0.4455` @1206..@1248) has no break, so the
+last matching entry sets the console's slot.
+
+### The battle's random numbers
+
+Every random draw of a round comes from one xoroshiro128+ object of 0x28 bytes (vtable `0x4500bd0`):
+
+| offset | size | what |
+|---|---|---|
+| 0x00 | 8 | vtable |
+| 0x08 | 2 x u64 | the state |
+| 0x18 | u64 | the seed |
+| 0x20 | u64 | the number of draws made |
+
+The server's main module (0x378 bytes, constructor `0x12742d0`) holds it at `+0x10`; round code
+reaches it as `[[x+0x10]+0x10]` (`0x11440e8`). The module's initialiser `0x127d824` sets the state
+to the seed and `0x82A2B175229D6A5B`, the count to 0 (`0x127d9a8`), taking the seed from `+0x20` of
+its parameter block. A guest's checker fills that word from the battle setup's `+0x718`
+(`0x2891748`); the raid start `0.4455` (@1152..@1157) sets `+0x718` through the Lua binding
+`fAF4A81E0` (setter `0x7faf1c`) to the RaidPoint's `randSeed`. The partner seed is also the battle
+seed, and the station that writes the bootstrap chooses it. The per-slot modules a server builds
+(`0x126ba88`, from `0xfa9f90`) are initialised with seed 0.
+
+On an emulated Scarlet 4.0.0 fighting a raid hosted with `randSeed` `D64EB3974D89705E`, the
+server's random held that seed and a state equal to it advanced seven steps, with a count of 7, at
+a later round; that round drew four times.
+
+A draw adds `s0 + s1` and steps the state; the count rises by one per call, not per redraw:
+
+| function | draw |
+|---|---|
+| `0x11440f0(rand, n)` | a u64 below n: `s0 + s1` masked to the bits of n − 1, redrawn while n or more; n below 2 returns 0 and draws nothing |
+| `0x114da8c(rand, p)` | `(s0 + s1) & 0x7f` redrawn while 100 or more; true when below p |
+
+Many round functions inline the step instead of calling these.
+
+### Actions
+
+A round's action header is five 0x70-byte blocks, one per client slot, each up to seven 16-byte
+actions (a u64 action word, then the actor's battler id as a u64), and at +0x230 a byte per slot
+counting the actions in its block. The server decodes them in slot order into 0x8c-byte action
+entries (`0x1145e40`, decoder `0x11461b4`). The action word's low four bits are the kind:
+
+| kind | entry kind | fields of the word |
+|---|---|---|
+| 1 | 1, a move | bits 4..7 the target's battle position, 8..23 the move, bit 25 a flag |
+| 2 | 2 | bits 4..19 and 20..27; the next u32 |
+| 3 | 3, a switch | bits 4..7 the party index (the actor is that party member), 8..11, bit 12 |
+| 4 | 6 | bits 4..11, 12..15 and 16..23 |
+| 5 | 4 | bit 4 |
+| 6 | 5 | bits 4..11 |
+| 7, 10, 11 | 7, 8, 9 | none |
+| 9 | 10 | bits 4..11 |
+| 12 | 11 | bits 4..11; the next u32 |
+| 13 | 14 | bits 4..7, 8..11, 12..15, 16..27, 32..43, 44..55, 56..59, 60..63 |
+
+A word whose bits 0..3 are 3 and bit 12 is set is skipped, as are kinds 0, 8, 14 and 15. A recorded
+player action `41 67 03 00 ...` is a move (kind 1) at target position 4, move 871 (Torch Song).
+
+### The server command queue
+
+A type-0x15 record's queue (+0x23c of the body, its length at +0x238) is a run of commands. A
+command is a big-endian u16 id, then its arguments packed by the id's format as one big-endian bit
+stream, padded at the front to whole bytes (writer `0x119bf58`, jump table `0x3c6aa7c`). The id to
+format map is built from 208 rows of (u16 id, u8 format, u8 0) at `0x3c6abe4`, a later row for the
+same id winning; ids run 0 to 205. Ids 0xce to 0xd4 are read by the reader `0xe515f0` itself (jump
+table `0x3c6a90c`):
+
+| id | body |
+|---|---|
+| 0xce | none: the end of the queue |
+| 0xcf, 0xd2 | a group: a u8 byte count, then that many bytes |
+| 0xd0 | a u8 count, at most 4, then that many bytes |
+| 0xd1 | two bytes |
+| 0xd3 | one byte |
+| 0xd4 | none |
+
+Format bytes and their argument widths in bits (`pokeldn.sv.battle.queue.FORMATS`):
+
+| format | widths | format | widths |
+|---|---|---|---|
+| 0x00 | none | 0x57 | 32, 8, 8, 8, 8, 8, 8 |
+| 0x01 | 8 | 0x62 | 32, 16 |
+| 0x02 | 8, 8 | 0x63 | 8, 8, 32 |
+| 0x04 | 5, 3, 8, 16 | 0x65 | 32, 16, 16, 16, 16 |
+| 0x10, 0x20 | 32, 16, then eight of 32 | 0x66 | 8, then five of 32 |
+| 0x11 | 16 | 0x67 | 32, then six of 16 |
+| 0x12 | 8, 16 | 0x72 | 32, 32 |
+| 0x14 | 5, 3, 5, 3 | 0x75 | 32, 8, 32, 32, 32 |
+| 0x17 | seven of 16 | 0x83 | 32, 32, 32 |
+| 0x1a | ten of 16 | 0x84 | 8, 32, 32, 32 |
+| 0x21 | 32 | 0x85 | 8, 8, 32, 32, 32 |
+| 0x22 | 8, 32 | 0x86 | six of 8 |
+| 0x23 | 5, 5, 5, after one pad bit | 0x93 | 32, 8, 8 |
+| 0x28 | eight of 32 | 0x96 | six of 32 |
+| 0x29 | 32, then eight of 8 | 0xa3 | 32, 8, 16 |
+| 0x42 | 5, 3 | 0xa4 | 32, 8, 8, 8 |
+| 0x43 | 8, 8, 8 | 0xb3 | 32, 8, 32 |
+| 0x45 | 16, 16, 16, 32, 16 | 0xc3 | 32, 32, 16 |
+| 0x52 | 32, 8 | 0xc4 | 32, 32, 16, 16 |
+| 0x53 | 8, 8, 16 | 0xd3 | 32, 16, 16 |
+| | | 0xd4 | 32, 32, 16, 8 |
+
+Every queue starts with command 0xb5. A round in which slot 2 used Hex (move 506) on the boss
+carried `0x5a (3, 506, 212)`, `0x5b (3, 506)` and `0xc9 (3, 0, 506, 4, 0)`. Every queue recorded
+from emulated Scarlet 4.0.0 servers and the type-0x15 records between two emulated consoles, 20 in
+all, decodes to its last byte and encodes back to the same bytes (`tests/test_sv_battle_queue.py`).
+The 0xcf groups seen so far are zero-filled.
+
+### Reproducing a round
+
+A round is replayed exactly under unicorn from an emulated console halted at the builder
+`0x113c8a0` with type 0x15: memory comes from the GDB stub one page at a time as the replay first
+touches it, the thread-local page behind `tpidrro_el0` is a stand-in whose `+0x1f8` names a fake
+thread, and SVCs 0x10, 0x11, 0x12, 0x1a, 0x1b, 0x1d and 0x1e return 0. Eleven replayed rounds
+equalled, byte for byte, the bodies the console then built itself; a round touched 159 to 353 pages.
+
 ## Joining
 
 `bin/sv_join.py --raid-pokemon FILE` joins a scene-7 network and takes part as a guest. The
@@ -786,4 +991,5 @@ the host start; its Pokemon stayed in the battle.
 - Whether a retail console's reward screen follows the Lua filter for subjects 2 to 4; subjects 1
   and 5 are measured on a retail guest, the rest on an emulated one.
 - Whether the five-star catch-once records go in the save's list as the seven-star ones do.
-- What the consoles other than the next host do on NetStartHostMigration is unmeasured.
+- Why a retail Violet that associated to the next host's network sent no Pia for 46 s, with the handover
+  of an earlier host (is-migrating 0x11 to both at once).

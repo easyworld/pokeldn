@@ -129,17 +129,19 @@ def test_form_errors_name_the_field_to_fix():
     state["steps"][0]["level"] = 101
     with pytest.raises(ValueError, match="^Step 1"):
         frlg.compile(state)
+    with pytest.raises(ValueError, match="^The nature"):
+        swsh.compile(swsh.blank(nature=25))
 
 
-def test_the_sword_pikachu_preset_is_the_record_the_launcher_builds(monkeypatch):
-    # The checksum includes the date: both builds must use the same second.
-    date = wc8.pack_date(1_700_000_000)
-    monkeypatch.setattr(wc8, "pack_date", lambda t=None: date)
+@pytest.mark.parametrize("changes,extra", [({}, []), ({"nature": 10}, ["--set", "nature=10"])])
+def test_the_sword_pikachu_preset_is_the_record_the_launcher_builds(changes, extra, monkeypatch):
+    # The timestamp also affects the checksum, so both builds need the same clock.
+    monkeypatch.setattr(wc8.time, "time", lambda: 1700000000)
     args = swsh_gift_host.build_parser().parse_args(
         ["--species", "25", "--level", "25", "--move1", "84", "--move2", "45", "--move3", "86",
-         "--move4", "98", "--nickname", "POKELDN", "--ot", "POKELDN"])
+         "--move4", "98", "--nickname", "POKELDN", "--ot", "POKELDN", *extra])
     random.seed(7)
-    built = swsh.record(swsh.PRESET["pikachu"].state)
+    built = swsh.record(dict(swsh.PRESET["pikachu"].state, **changes))
     random.seed(7)
     assert built == swsh_gift_host.build_record(args)
 
@@ -297,6 +299,8 @@ def test_pkhex_takes_every_sword_preset_and_refuses_what_the_game_cannot_hold():
     assert (gmax[0x15], gmax[wc8.POKEMON["gigantamax"][0]], gmax[wc8.POKEMON["dynamax_level"][0]]) == (21, 1, 10)
     with pytest.raises(pokemon.BuilderError, match="Gigantamax"):
         pokemon.SERVICE.validate_gift(swsh.record(dict(swsh.PRESET["gmax-pikachu"].state, species=26)))
+    for species in (1, 809):      # Bulbasaur for its Venusaur; Melmetal, which Max Soup leaves alone
+        pokemon.SERVICE.validate_gift(swsh.record(dict(swsh.PRESET["gmax-pikachu"].state, species=species)))
     cape = bytearray(swsh.record(swsh.PRESET["gold-backpack"].state))
     struct.pack_into("<II", cape, 0x20, 15, 0)                # the setter 0x0143a450 takes categories 0..14
     with pytest.raises(pokemon.BuilderError, match="clothing"):

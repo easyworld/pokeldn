@@ -2,6 +2,7 @@ import errno
 import os
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import flet as ft
@@ -9,8 +10,9 @@ import serial
 
 from gui import board
 from gui.localization import SERVICE
-from pokeldn import plugins, pokemon
-from pokeldn.app import settings, update
+from gui.popups import Dialogs
+from pokeldn import plugins, pokemon, popup
+from pokeldn.app import popups, settings, update
 from pokeldn.app.paths import SESSION
 from gui.views.widgets import on_ui
 
@@ -60,6 +62,11 @@ class App:
         self.plugin_updates: dict = {}                          # plugin id -> plugin_updates.Available
         self.plugin_update_listeners: list = []                 # called on the UI loop after a check
         self.gts = None                                         # gui.views.gts.service, once used
+        # Pop-ups (docs/gui.md, Pop-ups): a run's come through runner.Process; the app's own through
+        # pokeldn.popup, their callbacks on a worker so none stalls the UI.
+        self.popups = popups.Manager(Dialogs(page), call=self.ui)
+        answers = ThreadPoolExecutor(1, thread_name_prefix="popup")
+        popup.attach(self.popups.program("", lambda reply: answers.submit(popup.answered, reply)).take)
         threading.Thread(target=self._watch_controllers, daemon=True).start()
 
     def ui(self, fn) -> None:

@@ -19,6 +19,7 @@ from pokeldn.ldn.pia5 import (PiaHeader5, build_message, ciphertext, decrypt_pay
                               encrypt_payload, gcm_iv, is_pia5, ldn_nonce_crc, pad_payload,
                               parse_messages)
 from pokeldn.ldn import show_done
+from pokeldn import receiver_gift
 from pokeldn.app import screen
 
 SCENE_UNION_ROOM = 0x1100
@@ -587,6 +588,8 @@ class TradePartner:
             return []
         if data_id == room.TRADE_TRANER:
             self.record(rec="their_trainer", t=now, fields=room.parse_trade_traner(body))
+            # The console's save, for a gift made for it (pokeldn.receiver_gift).
+            receiver_gift.hear(self.remote, room.traner_trainer, body)
             return [self.trainer]
         if data_id == room.TRADE_POKE:
             if self.arriving:                  # the next round's first Pokemon

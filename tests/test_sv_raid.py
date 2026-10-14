@@ -476,6 +476,8 @@ class RaidGuestConsole:
         self.done = set()
         self.packet_ids = {}                # destination 1 or not -> the last packet id taken
         self.left = False
+        self.stay = 0.0                         # seconds on the network after NetStartHostMigration
+        self.leave_at = None
         self.pokemon = party(species)
         self.later_join = clock.now + join_at - 0.2      # on the network before its join
         self.at(join_at, pia6.build_session_join(self.cid, self.var, self.ip,
@@ -547,8 +549,8 @@ class RaidGuestConsole:
         if migration and migration["target_var"] == self.var:
             self.at(0.0, pia_connect.build_session_migration_ack_v11(
                 self.cid, self.var, migration["host_constant_id"], migration["host_var"]), 0x98)
-        if protocol == 0x2C and p[:2] == bytes([1, 0x40]):
-            self.left = True
+        if protocol == 0x2C and p[:2] == bytes([1, 0x40]) and self.leave_at is None:
+            self.leave_at = self.clock.now + self.stay
 
     def answer_data(self, protocol, port, rm, body):
         if protocol == 0x7C:
@@ -579,6 +581,8 @@ class RaidGuestConsole:
             self.send_data(2.0, 0x80, 0, raid.message(raid.KEY_BATTLE, 0x93, 1, 7, bytes(4)))
 
     def tick(self):
+        if self.leave_at is not None and self.clock.now >= self.leave_at:
+            self.left = True
         for item in [x for x in self.later if x[0] <= self.clock.now]:
             self.later.remove(item)
             _, body, protocol, port, flags = item
@@ -711,12 +715,15 @@ def test_three_consoles_fight_one_raid(monkeypatch, tmp_path):
     """`--raid-players 3`: each console takes the next seat, every station list names the four
     stations, the start waits for the last console's Ready, the one bootstrap carries every
     Pokemon in its seat, and the network goes to seat 1 while seats 2 and 3 draw the is-migrating
-    status and NetStartHostMigration. A fourth console's join goes unanswered."""
-    made, clock = run_raid_host(
-        monkeypatch, tmp_path, extra=["--raid-players", "3"], seconds=120,
-        consoles=lambda clock: [RaidGuestConsole(clock, 2.4, n, species, join_at)
-                                for n, species, join_at in ((1, 658, 0.2), (2, 6, 8.0), (3, 150, 15.0),
-                                                            (4, 1, 17.0))])
+    status and NetStartHostMigration; seats 2 and 3 stay on the network a while after seat 1 has
+    left, as a retail Violet did. A fourth console's join goes unanswered."""
+    def consoles(clock):
+        made = [RaidGuestConsole(clock, 2.4, n, species, join_at) for n, species, join_at in
+                ((1, 658, 0.2), (2, 6, 8.0), (3, 150, 15.0), (4, 1, 17.0))]
+        made[1].stay = made[2].stay = 1.5
+        return made
+    made, clock = run_raid_host(monkeypatch, tmp_path, extra=["--raid-players", "3"], seconds=120,
+                                consoles=consoles)
     consoles, fourth = made[:3], made[3]
     assert not [r for r in fourth.seen if r["protocol"] == 0x98]
     readies = []
@@ -761,10 +768,17 @@ def test_three_consoles_fight_one_raid(monkeypatch, tmp_path):
     assert all(start_of(c)["t"] > max(readies) for c in consoles)
     handed = [[r for r in c.seen if r["protocol"] == 0x98 and r["data"][0] == 7] for c in consoles]
     assert handed[0] and not handed[1] and not handed[2]
-    for console in consoles[1:]:
-        status = [r for r in console.seen if r["protocol"] == 0x2C and r["data"][1] == 0x11
+    for console in consoles:
+        status = [r["data"] for r in console.seen if r["protocol"] == 0x2C and r["data"][1] == 0x11
                   and r["data"][29] == 1]
-        assert status and any(r["data"] == bytes.fromhex("01400000") for r in console.seen
+        # Every console ranks every seat: one ranking only itself after us opened its own network.
+        assert status and [status[-1][30 + 21 * k + 1] for k in range(4)] == [0, 1, 2, 3]
+        assert all(status[-1][30 + 21 * k + 3:30 + 21 * k + 7] != bytes(4) for k in range(4))
+        nets = [r["data"][29] for r in console.seen if r["protocol"] == 0x2C and r["data"][1] == 0x11]
+        # No plain table after the is-migrating one: it takes the console back as our station.
+        assert 0 not in nets[nets.index(1):]
+    for console in consoles[1:]:
+        assert any(r["data"] == bytes.fromhex("01400000") for r in console.seen
                               if r["protocol"] == 0x2C)
 
 

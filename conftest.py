@@ -13,7 +13,7 @@ for path in (os.path.join(ROOT, "tools", "frlg"), os.path.join(ROOT, "tools", "l
 # A live run's variables left in the shell send the host runtime down the board path (and hang it);
 # pokeldn.app.paths reads POKELDN_DATA at import, so they go before any test module loads.
 for name in ("POKELDN_RADIO", "POKELDN_ESP32_TRACE", "POKELDN_ESP32_BAUD", "POKELDN_ESP32_AP_FLAGS",
-             "POKELDN_ESP32_AP_FLAGS2", "POKELDN_L2", "POKELDN_MANAGED_RUN", "POKELDN_DATA"):
+             "POKELDN_ESP32_AP_FLAGS2", "POKELDN_L2", "POKELDN_MANAGED_RUN", "POKELDN_POPUPS", "POKELDN_DATA"):
     os.environ.pop(name, None)
 
 

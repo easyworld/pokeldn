@@ -455,7 +455,43 @@ Error 7 at the 10.2 s timeout.
 
 A 0x81 message addressed to the peer's variable id in the header never reaches the game. The 64-byte
 content payload is identical in both directions of a same-save pair except for the sender's station
-index; which bytes are per-player is unknown.
+index. It is zlib (4 KB window, level 5) of a 139-byte record (`pokeldn.pla.data_exchange`): one
+chunk under Pia's StreamData header
+([Protocol 0x81](pia.md#protocol-0x81-the-stream-broadcast-reliable-transfer-pia-6)), holding the
+save's 0x80-byte MyStatus block (PKHeX `MyStatus8a`):
+
+    +0x00  1   StreamData kind, 1: the first chunk
+    +0x01  1   transfer id, 0
+    +0x02  1   percent of the block delivered, 0x64
+    +0x03  4   zero
+    +0x07  4   big-endian u32 0x80, the bytes that follow
+    +0x0b  128 the MyStatus block: trainer id pair +0x1b, version +0x1f (47), gender +0x20,
+               language +0x22, UTF-16LE name +0x2b
+
+Pia writes the header (serializer `0x7533e8`, chunk loop `0x7529f8`); the game hands over the block
+alone, `0x753554(stream, exchange + 0xa0, 0x80, 0)` at `0x26bfd28`, after `0x26c564c` copies it whole
+from the step's own copy (`0x1024038`, the block's own serializer: the block sits at `+0x68` of its
+object). A gift made for the receiving player reads the console's trainer
+(`data_exchange.read_trainer`, [Made for the receiving player](gift_simulated.md#made-for-the-receiving-player)).
+
+In the reference record, the block's two other non-zero fields are 32-bit; a retail save's record
+also carries a 22-character account identifier at record +0x60 and a 1 at record +0x7d:
+
+- +0x3c (record +0x47) is the look the player picked from the intro's 4x2 `grid_player`, column +
+  4 x row (`0x1348df8`, setter `0x1023f94`). The same pick sets the gender, female for columns 2 and
+  3 (`column > 1`, `0x134d728`), and the skin. The eight values are `p1skin001` (0), `p1skin004`
+  (1), `p2skin001` (2), `p2skin004` (3), `p1skin002` (4), `p1skin003` (5), `p2skin002` (6) and
+  `p2skin003` (7), `p1` the male player and `p2` the female. The game reads it back (`0x1023f9c`)
+  for the player's picture, `photo_player_0N`, and the end credits, `credit_end_0N`. The
+  reference's 5 is the male player with the third skin; a look whose column disagrees with the
+  gender at +0x15 (record +0x20) is one no save produces. `bin/pla_host.py` and `bin/pla_join.py`
+  send the reference record with the gender `--gender` gives, the app's from Settings, and the look
+  of the same skin for it: 5 male, 7 female (`data_exchange.build_record`).
+- +0x50 (record +0x5b, PKHeX's `Unk_0x50`) is 1, written by the block's initializer (`0x1023144` in
+  `0x10230e4`, which also writes version 47). The class has no accessor for it.
+
+Game Freak hashes these names with FNV-1a 64 from offset basis `0xcbf29ce484222645`: the skins match
+the eight hashes `0x1348cbc` keys on, and `grid_player` the layout `0x13497fc` opens.
 
 ## The game's reliable channel
 

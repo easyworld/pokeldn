@@ -33,7 +33,7 @@ from gui.localization import translate
 from gui import drop, flet_client, screen, theme as t  # noqa: E402
 from gui.app import App  # noqa: E402
 from gui.views.widgets import page_key  # noqa: E402
-from pokeldn import __version__  # noqa: E402
+from pokeldn import __version__, popup  # noqa: E402
 from pokeldn.app import update  # noqa: E402
 from pokeldn.app.paths import ROOT  # noqa: E402
 
@@ -297,26 +297,17 @@ def updated_notice(app: App, outcome: dict) -> None:
     if not error and version == __version__:
         app.page.show_dialog(ft.SnackBar(ft.Text(f"pokeldn 已更新到 {__version__}"), duration=4000))
         return
-    app.page.show_dialog(t.dialog(
-        semantics_label="更新失败",
-        title=t.text("未能安装更新", 17, weight=ft.FontWeight.W_600),
-        content=ft.Container(t.text(f"pokeldn {version} 未能替换当前应用："
-                                    f"{translate(error) if error else '打开了旧版本'}。当前应用未更改。",
-                                    13, t.MUTED), width=460),
-        actions=[t.button("关闭", lambda e: app.page.pop_dialog())]))
+    popup.acknowledge("未能安装更新",
+                      f"pokeldn {version} 未能替换当前应用：{translate(error) if error else '打开了旧版本'}。当前应用未更改。",
+                      id="update-failed", label="关闭", tone="error")
 
 
 def plugin_stopped_notice(app: App) -> None:
     """A plugin froze or closed the app last time while it started; App turned it off."""
-    def open_plugins(e):
-        app.page.pop_dialog()
-        app.navigate("plugins")
-    app.page.show_dialog(t.dialog(
-        semantics_label='插件已停用',
-        title=t.text('插件已停用', 17, weight=ft.FontWeight.W_600),
-        content=ft.Container(t.text(f"上次启动插件 {app.plugin_stopped} 时，pokeldn 关闭或停止响应。该插件现已停用；作者修复后，可在“插件”页面重新启用。", 13, t.MUTED), width=460),
-        actions=[t.secondary_button("关闭", lambda e: app.page.pop_dialog()),
-                 t.button('打开插件页', open_plugins, "plug")]))
+    popup.confirm("插件已停用",
+                  f"上次启动插件 {app.plugin_stopped} 时，pokeldn 关闭或停止响应。该插件已停用；作者修复后，可在“插件”页重新启用。",
+                  "打开插件页", "暂不打开", id="plugin-stopped", tone="warning",
+                  on_agree=lambda: app.ui(lambda: app.navigate("plugins")))
 
 
 def welcome(app: App) -> None:

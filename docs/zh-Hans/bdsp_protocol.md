@@ -20,11 +20,7 @@ nav_order: 2
 `NetDataParser` 注册65条消息； `pokeldn/bdsp/netdata.py` 包含所有这些，由
 `opendpr` 由 `scripts/gen_bdsp_netdata.py` 结账。来源决定了 53 种布局。其他 12 个包含 C# 字符串、数组或列表 (`netdata.OPAQUE`)，由二进制决定它们。
 
-轮椅是编组结构（`ANetData<T>.ConvertStructToBytes` [main.bin 0x27bb0e0]：
-`Marshal.SizeOf`、`AllocHGlobal`、`StructureToPtr`)、字符串和数组作为固定大小字段。结构体的大小是 `Il2CppTypeDefinitionSizes` 中的 `native_size`；字符串的长度是
-`global-metadata.dat` 的 `fieldMarshaledSizes`；数组的计数是其他字段留下的计数。确切的字节由 `marshalToNative` 写入 `CodeRegistration.interopData` [1.3.0 main 0x4acd0c8，
-0x255 56 字节条目]。捕获的四个不透明有效负载逐字节匹配（`room.NATIVE_SIZES`，
-`room.MEASURED`）。
+负载是封送后的结构体（`ANetData<T>.ConvertStructToBytes` [main.bin 0x27bb0e0]：`Marshal.SizeOf`、`AllocHGlobal`、`StructureToPtr`），字符串和数组使用固定长度字段。结构体长度来自 `Il2CppTypeDefinitionSizes` 的 `native_size`；字符串长度来自 `global-metadata.dat` 的 `fieldMarshaledSizes`；数组数量由其他字段留下的空间决定。`CodeRegistration.interopData` 中的 `marshalToNative` 写入精确字节 [1.3.0 main 0x4acd0c8，0x255 项，每项 56 字节]。捕获的四种不透明负载逐字节匹配（`room.NATIVE_SIZES`、`room.MEASURED`）。标为 1.3.0 main 的地址属于明亮珍珠，晶灿钻石 1.3.0 的相同方法位于其他地址。
 
 |编号 | 厦门 |字节|布局|
 |---|---|---|---|
@@ -162,7 +158,10 @@ nav_order: 2
                           ->  UnionCharacterTable.SheetSheet1{ID, AssetName}
                           ->  OpLoadCharacter("persons/field/" + assetName)
 
-`GetSexId` 和 `GetNpcColorId` 读取相同的值：8 是女孩，0 是戴蓝色帽子的男孩（`--join-avatar N`）。
+`CreateCharaData` [1.3.0 main 0x022796b0] 仅按外观设置 `sexId`，条件为 `avatarId > 7 &&
+avatarId != 16`（`0x02279770`）：8 至 15 为女孩，0 至 7 和 16 为男孩。`GetOpcSexId` [0x02279840] 返回此值，`GetNpcColorId` 读取相同外观：8 是女孩，0 是蓝帽男孩（`--join-avatar N`）。
+
+游戏机加入时携带变量 360（`SendJoinData` [0x01e4f630] 经 `GetAvaterId` [0x01e54030]）。新存档初值为 0，创建存档不选择联合房间外观；原生代码仅通过这两个方法读取，两个脚本写入。可选外观柜台（`ev_union_character_select_*`）按存档性别（`_GET_MY_SEX`）提供八种训练家职业：男孩存储 16 或 1 至 7，女孩存储 8 至 15。未使用柜台且变量为 0 时，`ev_connect_union_check_save` 和 `ev_connect_global_check_net` 调用 `ev_traner_other_see_random`，设为 1 加一个小于 16 的随机值（`_GET_RND`、`_ADD_WK`），可能是任一性别。仅使用柜台后，加入外观才表示存档性别，消息没有说明玩家是否使用过柜台。
 
 `NetDataTranerCardData`（0x05，75 字节：`fashionId`、`bodyType`、`genderid`，...）
 `UnionOpcManager.CreateTranerCard()`；收到的一个在联合房间的屏幕上没有绘制任何内容。

@@ -278,6 +278,14 @@ def parse_trade_traner(body):
             "slack": bytes(body[16:26]).hex()}
 
 
+def traner_trainer(body):
+    """-> the trainer a `TradeTranerData` names, as pokeldn.receiver_gift takes it: id pair, version, language
+    and name. It carries no gender (docs/bdsp_trade.md)."""
+    t = parse_trade_traner(body)
+    return {"ot": t["name"], "tid": t["trainer_id"], "sid": t["secret_id"], "version": t["casset_version"],
+            "language": t["lang_id"]}
+
+
 TRADE_TRANER_SIZE = 32
 TRADE_TRANER_NAME_SIZE = 26
 

@@ -48,5 +48,5 @@ def test_raid_finder_translates_choices_without_changing_the_context_keys(monkey
     assert {o.key: o.text for o in version.options} == {"any": "任意游戏", "scarlet": "朱", "violet": "紫"}
     assert {o.key: o.text for o in region.options}["kitakami"] == "北上乡"
     tools = next(g for g in GAMES if g.key == "sv").tools
-    assert [t.key for t in tools] == ["sv-host", "sv-join", "sv-online", "sv-raid-host", "sv-raid-join"]
+    assert [t.key for t in tools] == ["sv-host", "sv-join", "sv-online", "sv-gift-host", "sv-raid-host", "sv-raid-join"]
     assert all(tool_icon(t) == "diamond-gem" for t in tools if "-raid-" in t.key)

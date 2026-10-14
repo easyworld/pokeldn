@@ -20,6 +20,7 @@ Seven games, all on retail hardware, all over the same LDN and Pia layers:
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Trade | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Mystery Gift | ✓ | ∅ | ✓ | ∅ | ∅ | ∅ | ∅ |
+| Event Pokemon | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Link battle | ✓ | ✗ | ✗ | ✗ | ∅ | ✗ | ✗ |
 | Code on the console, save read and write | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
@@ -45,6 +46,7 @@ Legends Arceus, in Scarlet and Violet and in Legends Z-A.
 | [Legends Arceus](pla.md) | Pia header version 11, the trade flow, and the record a host composes. |
 | [Scarlet and Violet](sv.md) | Pia header version 11, the reliable streams, the trade a host runs, and Tera Raids in both roles. |
 | [Legends Z-A](za.md) | Pia header version 16, the game's twenty trade messages, and the trade in both roles. |
+| [Simulated Mystery Gifts](gift_simulated.md) | Official gift Pokemon traded by the host to the five titles with no local Mystery Gift, made for the receiving save. |
 | [Command-line usage](usage.md) | Source setup and commands for each game. |
 | [Desktop app](gui.md) | Setup, Bank, controller, updates and builds. |
 | [Code organization](architecture.md) | Shared modules, Pokémon preparation and verification. |

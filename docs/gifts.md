@@ -88,7 +88,7 @@ assemble the default template to `01 00 a0 e3 1e ff 2f e1`. Check offline runs t
 (`pokeldn/frlg/rom/custom_code.py`) and shows the answer and the bytes. The same check runs before
 Start and before a file is saved: code that faults, or never returns 1, is refused.
 
-The Sword/Shield form builds a Pokemon (optionally able to Gigantamax), an egg, up to six bag items,
+The Sword/Shield form builds a Pokemon (a chosen or rolled nature, optionally able to Gigantamax), an egg, up to six bag items,
 official outfits, Battle Points or money, with a card id. The Pokemon, egg, item, clothing and Battle
 Points kinds write the bytes of a record a retail Sword listed and redeemed
 ([Sword and Shield Mystery Gift](swsh_gift.md#a-card-delivered-to-a-retail-console)); the

@@ -29,8 +29,8 @@ def _expect(data, pos, tag, count=None):
     return value, pos
 
 
-def name_offset(identity, prefix=0):
-    """-> where the player name of a 1400 identity starts; `prefix` bytes of station prefix lead it."""
+def _value(identity, prefix=0):
+    """-> (the three integers leading a 1400 identity's value, where its player name starts)."""
     if identity[prefix:prefix + 2] != b"\x14\x00":
         raise ValueError("not a 1400 identity")
     _, pos = _expect(identity, prefix + 2, TUPLE, 2)
@@ -38,10 +38,17 @@ def name_offset(identity, prefix=0):
     _, pos = _expect(identity, pos, TUPLE, 1)
     _, pos = _expect(identity, pos, BYTES)
     _, pos = _expect(identity, pos, TUPLE, 6)
+    ints = []
     for _ in range(3):
-        _, pos = decode_uint(identity, pos)
+        value, pos = decode_uint(identity, pos)
+        ints.append(value)
     _, pos = _expect(identity, pos, BYTES, NAME_SIZE)
-    return pos
+    return ints, pos
+
+
+def name_offset(identity, prefix=0):
+    """-> where the player name of a 1400 identity starts; `prefix` bytes of station prefix lead it."""
+    return _value(identity, prefix)[1]
 
 
 def named(identity, name, prefix=0):
@@ -68,3 +75,12 @@ def sync_message(identity, prefix=0):
 def player_name(identity, prefix=0):
     at = name_offset(identity, prefix)
     return identity[at:at + NAME_SIZE].decode("utf-16-le").split("\0", 1)[0]
+
+
+def identity_trainer(identity, prefix=0):
+    """-> the trainer a 1400 identity names, as pokeldn.receiver_gift takes it: the save's trainer id and
+    secret id, its gender, its language, then the name, as the game reads them from the save's trainer
+    block (`0xc90b04`, docs/za.md, The game's own exchange)."""
+    (id32, gender, language), at = _value(identity, prefix)
+    return {"ot": identity[at:at + NAME_SIZE].decode("utf-16-le").split("\0", 1)[0],
+            "tid": id32 & 0xFFFF, "sid": id32 >> 16, "gender": gender, "language": language}

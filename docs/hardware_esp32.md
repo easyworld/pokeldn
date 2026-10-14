@@ -179,7 +179,7 @@ the ROM's boot text included, fails the checksum and is discarded.
 | `0x07` AP_KICK | host | 6 MAC, u16 reason; deauthenticates |
 | `0x08` ETH_TX | host | an Ethernet frame, encrypted by the driver with the station's or the group key. A full driver queue (`ESP_ERR_NO_MEM`) is retried every 1 ms for up to 100 ms; a frame to a departed station fails at once with `0x3015` (`ESP_ERR_WIFI_NOT_ASSOC`). A station sends the Ethernet source as its 802.11 transmitter address: a source other than the MAC in LINK is never acknowledged (49 of 49) |
 | `0x09` RAW_TX | host | an 802.11 frame without FCS (`esp_wifi_80211_tx`); advertisements |
-| `0x0A` SNIFF | host | u8 channel, 6 MAC; every management and data frame to or from it, whole, as RX_SNIFF; MAC ff:ff:ff:ff:ff:ff sends every frame on the channel as RX_CENSUS |
+| `0x0A` SNIFF | host | u8 channel, 6 MAC; every management and data frame to or from it and every action frame on the channel (an LDN advertisement keys the network a console moves to), whole, as RX_SNIFF; MAC ff:ff:ff:ff:ff:ff sends every frame on the channel as RX_CENSUS |
 | `0x0B` STATUS | host | none; answered by STATUS |
 | `0x0C` BENCH | host | u32 bytes, u16 message size (8 to 1600); RESULT, then BENCH messages as fast as the UART takes them |
 | `0x0D` LED | host | u8 pattern, u8 peak brightness, u16 period ms (0: the pattern's default), u16 duration ms (0: until the next LED); RESULT. Older firmware answers `0x106` |

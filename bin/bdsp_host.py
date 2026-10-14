@@ -24,6 +24,7 @@ from pokeldn.host_support import open_output, write_file
 from pokeldn import pokemon as pokemon_service
 from pokeldn.ldn import left_after_trade
 from pokeldn.online import session as online
+from pokeldn import receiver_gift
 from pokeldn.bdsp import pokemon, room
 from pokeldn.bdsp.host import (APP_VERSION, MAX_PARTICIPANTS, SCENE_UNION_ROOM,
                                SCENE_UNION_ROOM_PASSWORD, Advertisement,
@@ -86,6 +87,7 @@ def build_parser():
     ap.add_argument("--ap-ifname", default="ldn")
     ap.add_argument("--mon-ifname", default="ldn-mon")
     online.add_arguments(ap)
+    receiver_gift.add_arguments(ap, "--offer")
     return ap
 
 
@@ -144,6 +146,11 @@ def main(argv=None):
             write_file(f'{prefix}_{n}.pb8', raw)
 
     remote = online.partner("bdsp", args, code=args.password or "", name=tname)
+    # A gift made for the receiving player stands in for an online partner (pokeldn.receiver_gift).
+    receiving = None if remote is not None else receiver_gift.setup("bdsp", args, offers, pokemon.build_from,
+                                                                    fresh=args.fresh_pid)
+    if receiving is not None:
+        remote = receiver_gift.ReceiverGift("bdsp", *receiving, notify=receiver_gift.pop_up())
     partner = TradePartner(offers or bytes(0), tname, int(tid), int(sid), complete=args.complete_trade,
                            approach_delay=args.approach_delay, state=args.state,
                            recruiting=args.recruiting, save_theirs=save_theirs, record=record,

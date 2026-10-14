@@ -348,13 +348,18 @@ b 0x51d450`）服务于其他消息类型。
 
 这两个上限都不会限制同一连接中的交换次数。计数器是未经检查递增的 u32（`0x116ea4..0x116eac`），线上类型字段也是 u32，因此只有注册 2^32 - 1 次后 ID 才会回绕。16 项限制统计的是存活项：每项持有弱引用句柄（`[chan+0x58]`，由 `0x4d98a0` 创建）；活动会话中，管理器更新 `0x1175d0`（`0x11761c`）每帧调用 `0x117920`，删除通道强引用计数 `handle+0x54` 为零的项。提交通道随同步保存对象（`0x838c40`）销毁，该对象又随保存进程（`0x835000`）在调度器离开状态 3（`0x886670`）之前销毁；提议通道随队伍提议对象（`0x349dfc`）销毁，该对象在提交后释放（`0x886c70`），并由交换后保存流程替换（`0x3445e0`）。一个连接约有四个存活通道。
 
-类型 1，消息体 0x168，表示身份：将存档的 MyStatus 数据块复制到 `obj+0x450`（`0x3493f4`）。两个站点都在状态 6、尚未收到任何消息时发送。名称以 UTF-16LE 编码，位于以下消息体偏移：
+类型 1，消息体 0x168，为身份记录：存档 MyStatus 块复制到 `obj+0x450`（`0x3493f4`），两个站点均从状态 6 发送，早于接收任何内容。训练家结构为 PKHeX 的 `MyStatus7b`，姓名编码为 UTF-16LE：
 
 ```
-+0x34  2  0x0002
++0x00  4  trainer id, then secret id
++0x04  1  version: 42 Pikachu, 43 Eevee
++0x05  1  gender
++0x35  1  language
 +0x38 26  trainer name, up to the Pokemon name; --trainer-name on both launchers
 +0x52 16  Pokemon name
 ```
+
+按接收玩家生成的礼物从这里读取游戏机训练家（`pb7.first_trainer`、[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)）。
 
 `pokeldn.lgpe.reference` 附带一份身份数据，来自训练家为 `POKELDN` 的模拟存档。`bin/lgpe_join.py` 默认发送这份数据，并用 `--our-trainer` 替换训练家 ID 对。
 
