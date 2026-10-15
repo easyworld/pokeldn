@@ -467,10 +467,12 @@ def set_station_mac(mac) -> None:
     station_mac = None if mac is None else wlan.MACAddress(mac)
 
 
-def board_lost(log=None) -> None:
+def board_lost(log=None, error=None) -> None:
     """Ends the run as the app's Stop does: a board that left USB never comes back to this process."""
-    (log or print)("[esp32] The board disconnected from USB. Try another USB port or cable; if a screen "
-                   "is wired to the board, try without it.")
+    detail = f" ({error})" if error else ""
+    (log or print)(f"[esp32] The board's USB connection failed{detail}. Unplug it and plug it back in. "
+                   "If it happens again, try another USB port or cable; if a screen is wired to "
+                   "the board, try without it.")
     _thread.interrupt_main()
 
 
@@ -481,7 +483,7 @@ def use(port: str | None = None, *, radio: esp32.Radio | None = None, port_facto
     global _radio
     if radio is None:
         if _radio is None:
-            _radio = esp32.Radio.open_serial(port, log=log, on_lost=lambda error: board_lost(log))
+            _radio = esp32.Radio.open_serial(port, log=log, on_lost=lambda error: board_lost(log, error))
         radio = _radio
     else:
         _radio = radio

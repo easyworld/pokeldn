@@ -716,6 +716,30 @@ The flags at `+0x10` set how often a console takes a card ([What the menu refuse
 
 Two Pokemon cards carry a version mask of 1 or 2 and are skipped by the other version.
 
+### Cards that share an id
+
+Different distributions reused card ids. Once a save has taken a once-per-id card (flag bit 0), it
+refuses every other card with that id:
+
+| card id | once-per-id cards |
+|---|---|
+| 1 | the 2022 shiny Galarian Articuno, Zapdos and Moltres (J and M each); the Poke Ball, Great Ball and Ultra Ball Guy tees |
+| 101 | the Pokemon Center Eevee and Pikachu, two revisions each |
+| 118 | the PCSG Eevee and Pikachu |
+| 122 | the Pokemon Center Milcery, Ribbon Sweet and Star Sweet, two revisions each |
+| 125 | the PCSG Milcery, Ribbon Sweet and Star Sweet |
+
+Cards 103 (six cards) and 139 (seven) carry flag bit 2: a save that took one refuses another with the
+same id unless the second card's date is later.
+
+The app's Official events mode takes a card id per card (`event_ids` in the tool's value) and lists
+the cards that share the chosen card's id. A changed id rewrites only the u16 at `+0x08` and reseals
+the record. Under unicorn, the receipt check `0x00ff1a30` refuses the official Articuno (id 1) on a
+save whose bitmap holds id 1, and takes the same card as id 2. The validator `0x010b5de0` and PKHeX
+accept the changed record. A once-per-id card's id stays in 1..2047, because the bitmap read has no
+bound ([What the menu refuses](#what-the-menu-refuses)). The command line does the same with
+`--gift-file FILE --patch 0x08=0200`. No retail console has received a card with a changed id yet.
+
 ## Clothing
 
 A kind-4 record carries twelve pairs of u32 from `+0x20`, a category then an index: the first six

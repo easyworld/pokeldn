@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the board-to-host serial ceiling at one or more baud rates. No console, no radio traffic.
+"""Measure the serial ceiling and sustained uploads without a console.
 
     ./.venv/bin/python tools/ldn/esp32_bench.py --port PORT \\
         --bauds 921600,1500000,2000000,3000000 --bytes 2000000
@@ -11,6 +11,8 @@ that never answers. docs/hardware_esp32.md, The serial ceiling.
                  against the board's tx_eth + tx_eth_failed. --no-flow ignores CREDIT on purpose.
     --trickle S  command latency: a 14-byte ETH_TX every 15 ms for S seconds (--flood adds BENCH the
                  other way); read_max_us stays near the 20 ms read timeout unless a read over-waits.
+    --soak S     sustained host-to-board ETH_TX for S seconds, --size bytes per Ethernet frame,
+                 paced to --rate bytes/s (0: unlimited); STATUS every 5 s, no console required.
 """
 import argparse
 import os
@@ -29,8 +31,10 @@ def main(argv=None):
     ap.add_argument("--port", required=True)
     ap.add_argument("--bauds", default="921600,1500000,2000000,3000000")
     ap.add_argument("--bytes", type=int, default=2_000_000)
-    ap.add_argument("--size", type=int, default=1400, help="bytes per message, 8..1600")
+    ap.add_argument("--size", type=int, default=1400, help="bytes per BENCH message (8..1600) or soak frame (14..1600)")
     ap.add_argument("--uplink", type=int, default=0, metavar="N")
+    ap.add_argument("--soak", type=float, default=0, metavar="SECONDS")
+    ap.add_argument("--rate", type=float, default=460_000, help="--soak: Ethernet bytes/s, 0: unlimited")
     ap.add_argument("--burst", type=int, default=11, help="--uplink: commands written back to back")
     ap.add_argument("--gap", type=float, default=0.02, help="--uplink: seconds between bursts")
     ap.add_argument("--no-flow", action="store_true", help="--uplink: ignore the board's CREDIT")
@@ -41,6 +45,18 @@ def main(argv=None):
     ap.add_argument("--body", type=int, default=0, help="--trickle: bytes after the Ethernet header")
     args = ap.parse_args(argv)
     bauds = [int(b) for b in args.bauds.split(",") if b.strip()]
+    if args.soak:
+        if args.soak < 0 or not 14 <= args.size <= 1600 or args.rate < 0 or not bauds:
+            ap.error("--soak needs positive seconds, --size 14..1600, nonnegative --rate and a baud")
+        if args.uplink or args.trickle or args.no_flow:
+            ap.error("--soak uses CREDIT flow control and cannot be combined with --uplink or --trickle")
+        for baud in bauds:
+            try:
+                soak(args.port, baud, args.soak, args.size, args.rate, bauds)
+            except Exception as exc:
+                print(f"{baud:>8}  soak FAILED: {exc}", flush=True)
+                return 1
+        return 0
     if args.trickle:
         for baud in bauds:
             trickle(args.port, baud, args.trickle, args.flood, args.ap, args.body, bauds)
@@ -69,6 +85,69 @@ def main(argv=None):
 def board_sent(radio):
     fields = dict(kv.split("=", 1) for kv in radio.status().split() if "=" in kv)
     return int(fields["tx_eth"]) + int(fields["tx_eth_failed"]), fields
+
+
+def soak(port, baud, seconds, size=1400, rate=460_000, left_at=()):
+    radio = esp32.Radio.open_serial(port, fast_baud=baud, left_at=left_at, log=print)
+    sent = 0
+    started = time.monotonic()
+    try:
+        radio.ap_start(11, "02:00:00:be:4c:01", "pokeldn-soak".ljust(32, "x"), os.urandom(16))
+        before, _ = board_sent(radio)
+        frame = b"\xff" * 6 + bytes.fromhex("0200000000be") + b"\x08\x00" + random.Random(1).randbytes(size - 14)
+        started = time.monotonic()
+        report_at = started + 5
+        print(f"{baud:>8}  soak starting: {seconds:g}s, {size}-byte frames, "
+              f"{rate:g} Ethernet bytes/s (0: unlimited)", flush=True)
+
+        def report():
+            counted, fields = board_sent(radio)
+            print(f"{baud:>8}  soak {time.monotonic() - started:.1f}s: "
+                  f"sent={sent} bytes={sent * size} counted={counted - before} "
+                  f"uncredited={radio._written - radio._credited} "
+                  f"host_dropped={radio.tx_dropped} resyncs={radio.flow_resyncs} "
+                  f"status={fields}", flush=True)
+            return counted - before
+
+        while time.monotonic() - started < seconds:
+            if radio.lost is not None:
+                raise esp32.RadioError(str(radio.lost))
+            for _ in range(32):
+                radio.send_ethernet(frame)
+                sent += 1
+            if not radio.drain(5):
+                raise esp32.RadioError(f"USB output did not drain: {radio.lost or 'timed out'}")
+            if rate:
+                target = min(started + seconds, started + sent * size / rate)
+                while time.monotonic() < target:
+                    if radio.lost is not None:
+                        raise esp32.RadioError(str(radio.lost))
+                    time.sleep(min(0.05, max(0, target - time.monotonic())))
+            if time.monotonic() >= report_at:
+                report()
+                report_at = time.monotonic() + 5
+        # A periodic STATUS already queued by the firmware can precede the last ETH_TX.
+        deadline = time.monotonic() + 2
+        counted = report()
+        while counted < sent and time.monotonic() < deadline:
+            time.sleep(0.1)
+            counted = report()
+        if counted != sent or radio.tx_dropped:
+            raise esp32.RadioError(f"board counted {counted} of {sent} ETH_TX; host dropped {radio.tx_dropped}")
+        radio.stop()
+    except Exception:
+        print(f"{baud:>8}  soak stopped after {time.monotonic() - started:.1f}s, "
+              f"{sent} frames, {sent * size} Ethernet bytes; "
+              f"written={radio._written} credited={radio._credited} "
+              f"resyncs={radio.flow_resyncs}", flush=True)
+        if radio.lost is None:
+            try:
+                radio.stop()
+            except esp32.RadioError:
+                pass
+        raise
+    finally:
+        radio.close()
 
 
 def uplink(port, baud, total, burst, gap, no_flow=False, left_at=()):

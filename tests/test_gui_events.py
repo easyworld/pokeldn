@@ -59,11 +59,12 @@ def test_card_tooltip_matches_its_localized_visible_summary(source, expected):
 
 
 def test_official_event_search_finds_rewards_by_the_chinese_item_name():
+    from pokeldn.app.gift_builder import normalized
     from pokeldn.swsh import gift_builder
 
     view = GiftBuilder.__new__(GiftBuilder)
     view.game, view.module = "swsh", gift_builder
-    view.value = {"event": "", "event_search": "特性胶囊"}
+    view.value = normalized("swsh", {"event_search": "特性胶囊"})
     control = view.events()
     texts = [c.value for c in walk(control) if isinstance(c, ft.Text)]
     expected = [event_label("swsh", c) for c in events.load()

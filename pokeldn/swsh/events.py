@@ -31,17 +31,52 @@ def by_key() -> dict:
     return {e["key"]: e for e in load()}
 
 
-def gift(key):
+def card_id(raw):
+    return struct.unpack_from("<H", raw, 0x08)[0]
+
+
+def _once(raw):
+    return raw[0x10] & 5
+
+
+def max_card_id(raw):
+    """A once-per-id card's bit is read from a 2048-bit bitmap with no bound (0x00ff1a8c)."""
+    return 2047 if raw[0x10] & 1 else 0xFFFF
+
+
+def record(key, new_id=None):
+    """The card's record, its id changed when `new_id` is given; raises ValueError with what to fix."""
     try:
-        event = by_key()[key]
+        raw = by_key()[key]["record"]
     except KeyError:
         raise ValueError("Pick an event card.") from None
-    return gift_file.from_record(event["record"], name=event["label"])
+    if new_id in (None, "", card_id(raw)):
+        return raw
+    if not 0 < int(new_id) <= max_card_id(raw):
+        raise ValueError(f"The card id is 1 to {max_card_id(raw)}.")
+    out = bytearray(raw)
+    struct.pack_into("<H", out, 0x08, int(new_id))
+    return wc8.seal(out)
+
+
+def gift(key, new_id=None):
+    return gift_file.from_record(record(key, new_id), name=by_key()[key]["label"])
+
+
+def sharing(key, new_id=None):
+    """The labels of the other once-only cards with this card's id: a save that took one refuses the
+    rest [docs/swsh_gift.md, Cards that share an id]."""
+    raw = record(key, new_id)
+    if not _once(raw):
+        return []
+    label = by_key()[key]["label"]
+    return sorted({e["label"] for e in load() if e["key"] != key and e["label"] != label
+                   and _once(e["record"]) and card_id(e["record"]) == card_id(raw)})
 
 
 def from_home(raw):
     """A community card of a gift Pokemon HOME gave [docs/swsh_gift.md, Official event cards]."""
-    return struct.unpack_from("<H", raw, 0x08)[0] >= HOME_CARDS
+    return card_id(raw) >= HOME_CARDS
 
 
 def item_pairs(raw):
@@ -60,12 +95,12 @@ def item_ids(raw):
 def receipt(raw):
     """How often a console takes the card, by the record flags the receipt check 0x00ff1750 reads
     [docs/swsh_gift.md, What the menu refuses]."""
-    card_id = struct.unpack_from("<H", raw, 0x08)[0]
+    number = card_id(raw)
     if raw[0x10] & 1:
-        return f"Card id {card_id}: a console takes it once"
+        return f"Card id {number}: a console takes it once"
     if raw[0x10] & 4:
-        return f"Card id {card_id}: a console takes it once for its date, at most ten such cards a day"
-    return f"Card id {card_id}: a console takes it again"
+        return f"Card id {number}: a console takes it once for its date, at most ten such cards a day"
+    return f"Card id {number}: a console takes it again"
 
 
 def _name(raw, base, index=ENGLISH):

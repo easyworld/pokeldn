@@ -252,6 +252,58 @@ def test_the_app_sends_an_official_event_card_byte_for_byte_and_the_game_accepts
         assert out.read_bytes() == event["record"]
 
 
+def _receipt(runner, taken, record):
+    """The game's receipt check 0x00ff1a30 on a save whose album bitmap (album+0x60+0x1450) holds the
+    card ids in `taken`: 1 refuses the card [docs/swsh_gift.md, What the menu refuses]."""
+    from nso_run import SCRATCH
+    ret, game, album, vtable, rec = 0x01424c24, SCRATCH + 0x10000, SCRATCH + 0x20000, SCRATCH + 0x12000, SCRATCH + 0x4000
+    runner.write(struct.unpack_from("<Q", runner.img, 0x2610798)[0], struct.pack("<Q", game))
+    runner.write(vtable, struct.pack("<4Q", ret, ret, ret, ret))
+    runner.write(game + 0x210, struct.pack("<Q", album))
+    bitmap = bytearray(0x100)
+    for number in taken:
+        bitmap[number >> 3] |= 1 << (number & 7)
+    runner.write(album, bytes(0x1800))
+    runner.write(album + 0x48, struct.pack("<Q", vtable))
+    runner.write(album + 0x60 + 0x1450, bytes(bitmap))
+    runner.write(rec, record)
+    return runner.call(0x00ff1a30, (0, rec))[0]
+
+
+@pytest.mark.skipif(not __import__("os").path.exists(SWORD_IMAGE),
+                    reason="needs Sword's extracted main NSO")
+def test_a_shiny_galarian_bird_given_another_card_id_reaches_a_save_that_took_another_bird(tmp_path, monkeypatch):
+    """The three 2022 shiny Galarian birds all carry card id 1, once per id: a save that took one
+    refuses the others. From the app's event mode with card id 2, the launcher sends the official record
+    with only the id and the checksum changed; the game's validator and receipt check take it."""
+    import swsh_gift_host
+    from nso_run import Runner
+    from pokeldn import pokemon
+    from pokeldn.app import catalog, gift_builder
+    from pokeldn.swsh import events
+    birds = [e for e in events.load() if "galar-2022" in e["key"]]
+    assert {events.card_id(e["record"]) for e in birds} == {1} and len(birds) == 6
+    key = next(e["key"] for e in birds if e["key"].startswith("crown-shiny-articuno"))
+    assert any("Zapdos" in label for label in events.sharing(key)) and events.sharing(key, 2) == []
+
+    tool = next(t for g in catalog.GAMES for t in g.tools if t.key == "swsh-gift")
+    monkeypatch.setattr(gift_builder, "output", lambda tool: str(tmp_path / "gift.pokegift"))
+    value = {"mode": "event", "event": key, "event_ids": {key: 2}}
+    assert gift_builder.problem(tool, value) == ""
+    gift_builder.prepare(tool, value)
+    out = tmp_path / "sent.bin"
+    assert swsh_gift_host.main([*gift_builder.args(tool, value), "--image", SWORD_IMAGE, "--dump", str(out)]) == 0
+    sent, official = out.read_bytes(), events.by_key()[key]["record"]
+    assert wc8.sealed(sent) and events.card_id(sent) == 2
+    assert [i for i in range(len(sent)) if sent[i] != official[i]] in ([8], [8, 0x2CC], [8, 0x2CD], [8, 0x2CC, 0x2CD])
+    pokemon.SERVICE.validate_gift(sent)
+
+    runner = Runner(SWORD_IMAGE)
+    assert (_receipt(runner, {1}, official), _receipt(runner, {1}, sent), _receipt(runner, {1, 2}, sent)) == (1, 0, 1)
+    with pytest.raises(ValueError, match="1 to 2047"):
+        events.record(key, 2048)      # past the 2048-bit bitmap the check reads the block beyond it
+
+
 def test_the_event_list_loads_where_text_defaults_to_cp1252(monkeypatch):
     """Windows opens text as cp1252; the list carries Japanese and Korean names."""
     import pathlib

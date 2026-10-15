@@ -1,4 +1,4 @@
-/* C6 USB watch: a XIAO ESP32C6's USB Serial/JTAG device went deaf with the firmware running on.
+/* C6/S3 USB watch: USB Serial/JTAG can go deaf with the firmware running on.
    Samples the SOF frame number every 5 ms; once frames have counted or the host has sent a byte,
    a 2 s stall keeps the registers from before and after in RTC memory, restarts, and reports them
    as LOG lines on the next HELLO. docs/hardware_esp32.md, Supported boards. */
@@ -6,7 +6,7 @@
 
 #include "sdkconfig.h"
 
-#if CONFIG_IDF_TARGET_ESP32C6
+#if CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32S3
 #include <stdbool.h>
 #include <string.h>
 
@@ -17,8 +17,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "soc/io_mux_reg.h"
-#include "soc/pcr_reg.h"
 #include "soc/usb_serial_jtag_reg.h"
+#if CONFIG_IDF_TARGET_ESP32C6
+#include "soc/pcr_reg.h"
+#else
+#include "soc/system_reg.h"
+#endif
 
 #include "wire.h"
 
@@ -28,9 +32,16 @@
 static const uint32_t REGS[] = {
     USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_FRAM_NUM_REG, USB_SERIAL_JTAG_INT_RAW_REG,
     USB_SERIAL_JTAG_INT_ENA_REG, USB_SERIAL_JTAG_MISC_CONF_REG, USB_SERIAL_JTAG_MEM_CONF_REG,
+#if CONFIG_IDF_TARGET_ESP32C6
     USB_SERIAL_JTAG_CHIP_RST_REG, USB_SERIAL_JTAG_BUS_RESET_ST_REG, USB_SERIAL_JTAG_IN_EP1_ST_REG,
     USB_SERIAL_JTAG_OUT_EP1_ST_REG, PCR_USB_DEVICE_CONF_REG, PCR_SYSCLK_CONF_REG,
     PCR_CPU_FREQ_CONF_REG, PCR_PLL_DIV_CLK_EN_REG, IO_MUX_GPIO12_REG, IO_MUX_GPIO13_REG,
+#else
+    USB_SERIAL_JTAG_IN_EP0_ST_REG, USB_SERIAL_JTAG_IN_EP1_ST_REG,
+    USB_SERIAL_JTAG_OUT_EP0_ST_REG, USB_SERIAL_JTAG_OUT_EP1_ST_REG,
+    SYSTEM_PERIP_CLK_EN0_REG, SYSTEM_PERIP_RST_EN0_REG, SYSTEM_SYSCLK_CONF_REG,
+    SYSTEM_CPU_PER_CONF_REG, IO_MUX_GPIO19_REG, IO_MUX_GPIO20_REG,
+#endif
 };
 #define NREGS (sizeof(REGS) / sizeof(REGS[0]))
 
@@ -73,6 +84,7 @@ static void beacon(uint32_t frames)
 static void watch_task(void *arg)
 {
     uint32_t healthy[NREGS];
+    snap(healthy);   /* host bytes can arm the watch before the first observed SOF change */
     int64_t healthy_us = 0, last_change = esp_timer_get_time();
     uint32_t last_frame = *(volatile uint32_t *)USB_SERIAL_JTAG_FRAM_NUM_REG & 0x7ff;
     bool armed = false;   /* a board on a charger sees no frame and no host byte: never restart it */

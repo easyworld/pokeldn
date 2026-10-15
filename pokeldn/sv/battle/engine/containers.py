@@ -44,16 +44,6 @@ def find_value(m, owner, key, *_):
     return node + 0x18 if node else 0
 
 
-@lifted(0xFAF09C)
-def format_slot(m, table, key_ptr, *_):
-    """operator[] of the queue's command-format map: the value byte (+0x12) of the key's node. The
-    engine never inserts: a missing key refuses the round."""
-    node = find_u16(m, table, m.u16(key_ptr))
-    if not node:
-        raise UnliftedCall("command-format map insert")
-    return node + 0x12
-
-
 @lifted(0xF21C94)
 def battler(m, owner, ident, *_):
     """The battler with id `ident` from the u32-keyed map at owner+0x140, or 0."""

@@ -424,6 +424,9 @@ The dispatcher is at `main + 0x057014`, its jump table at `main + 0x17D7F6`. It 
 Thirty-five entries, twenty-three distinct handlers. Every number `sloopsvc.c` names has its own.
 0x46, 0x4E and 0x58 to 0x60 share the default, exactly the decomp's gaps. 0x48 and 0x56 share one
 handler (`WriteSector`, `ReplaceSector`); 0x40 and 0x41 share one that branches on the number.
+The dispatcher's `x0` is the CPU object, `w2` the number, and `x3` the register context its
+handlers read: the guest's `r0` at `+0x48` and `r1` at `+0x4C` (the `0x52` handler's
+`ldp w1, w22, [x20, #0x48]` after `mov x20, x3`).
 
 The default is `cmp w19, #0x2a ; cset w0, hi ; ret`. That `w0` is the wrapper's own "handled"
 boolean, not the guest's r0, so an unimplemented number is inert (no hang) and leaves every guest
@@ -768,9 +771,14 @@ target is `buffer_data + fold + 0xA`, the fold being the selected region's slot 
 With `fold = size - 0xB` (in range) the write pair is `(size-1, size)`: the region's last byte
 gets `0x01` and the first byte of the neighbouring allocation gets `0x80`. With
 `fold = size - 0xA` the pair is `(size, size+1)`: `0x01 0x80` onto the neighbour's first two
-bytes. One Mystery Gift session buys one chosen fold; the payload's branch into the patched site
-does not return, and the body loops afterwards with the same parked `r0`, re-writing the same
-pair.
+bytes. One Mystery Gift session buys one chosen fold per visit.
+
+The body behind the site returns through a five-word frame: its epilogue at `0x081E177C` is
+`movs r0,#0 ; pop {r4,r5,r6,r7} ; pop {r1} ; bx r1`. A payload that branches to the site skips
+the function's prologue and must push that frame itself, with `lr` at a continuation; the body
+then returns to the payload, which can run more code and finish the session normally. A payload
+that pushes any other frame unwinds through its caller's stack instead, and the measured runs
+re-entered the site with the same parked `r0`.
 
 Window 4, the GBA IO registers, maps to a 0x400-byte region object that sits immediately behind
 its own backing allocation: the backing is at bus `+0x14C0`, the object at bus `+0x18C0`, and
@@ -794,21 +802,112 @@ through the debugger instead, that pointer stayed in place for five minutes with
 running and the process alive. No code site in the image writes a wrapper object's header after
 init.
 
+#### Every placement a one-write plant can make
+
+A plant writes one of two byte patterns on the neighbour: `80` on its first byte (the region's
+own last byte takes the `01`), or `01 80` on bytes `k` and `k+1`, `k` in 0..9. The neighbour's
+first eight bytes are its vtable pointer, so the pointer the consumer then reads resolves against
+the file image and its relocations. Four placements read live main memory:
+
+| object | bytes written | planted pointer | consumer |
+| --- | --- | --- | --- |
+| the component (vtable `main + 0x1C3878`) | `80` at +0 | `0x086C9880` | the `bkpt #0x52` chain's `[P + 0x98]` = `main + 0x1C3918` = `main + 0x5492C` |
+| the component | `01 80` at +0..1 | `0x086C8001` | `[P + 0x98]` = `main + 0x1C2099` = raw `0x1F7` |
+| the IO object (vtable `main + 0x1C2408`) | `80` at +0 | `0x086C8480` | the bus accessor slots, below |
+| the IO object | `01 80` at +0..1 | `0x086C8001` | the bus accessor slots: `0x1F7`, zero, raw addends |
+
+The other placements resolve outside the image. `01 80` at +1 gives `0x08800178` (component) and
+`0x08800108` (IO object), inside main's bss. A zero-filled bss model predicts a null
+call there; the file image alone does not establish the contents during a live session. `01 80`
+at +2 through +7 moves byte 2 or byte 3, so the consumer's read itself faults. At +8 and +9 the
+pair lands on the field at `+8` (the component's `0x000004BF` becomes `0x00008001` at +8 and
+`0x008001BF` at +9) and the vtable pointer stays in place, so the dispatch is the object's own.
+
+Two site visits can compose their pairs on the IO object when no `0x04` access occurs
+between them; the payload's instruction fetches from ROM or EWRAM do not themselves access
+that object. Repeating a placement is idempotent, and writes at +8 or +9 leave the vtable
+pointer unchanged. Distinct placements confined to bytes 0 and 1 can still leave one of the
+in-image pointers above; compositions that change higher pointer bytes need separate analysis.
+On the component, the next `bkpt #0x52` consumes the current plant. The STWI driver produces
+about 60 such calls a second while the link is up, but that rate alone does not establish that
+a call intervenes between every pair of payload visits.
+
+The IO object's planted block, by bus slot. The access class comes from the caller's result mask
+(`and #0xffff` at `main + 0x18378` for a 16-bit load, the word rotate at `main + 0xBDB8` for a
+32-bit load, `and #0xff` at `main + 0xD914` for an 8-bit load).
+
+| bus slot | access | planted target | with the IO object as `this` |
+| --- | --- | --- | --- |
+| `+0x18` | 16-bit load | `main + 0x30EAC` | the key handler's default case: `w2` is the full `0x04xxxxxx` address, above every register id the handler switches on, so it stores `w3 & 0xffff` at `[x1]`; the call site at `main + 0x18330` passes `x1 = CPU + 0x20` and `w3 = 1`, and the guest's load returns the handler's leftover `w0` |
+| `+0x20` | 32-bit load | `main + 0x31114` | calls `main + 0x3580C` with `(x1 from the site, IO + 0x20)`, then tail-calls `main + 0x22404` with `x0 = [[IO + 8] + 0x90]` |
+| `+0x28` | 8-bit load | `main + 0x36D54` | a 0x76000-byte object's teardown family: `[x0 + 0x76C70]`, `+0x76C30`, `+0x76C00`, `[x0 + 0x4E68]` |
+| `+0x30` | store | `main + 0x36E40` | `x0 -= 0x1A10`, then `main + 0x3664C`, the same teardown family on the rebased pointer |
+| `+0x38` | store | raw `0xFFFFFFFFFFFFE5E0` | the call faults |
+| `+0x40` | store | `0` | null call |
+| `+0x48` | | `main + 0x36E4C` | the teardown family at `+0x76C60`, `+0x76C20`, `+0x76BF0`, `[x0 + 0x4E58]` |
+| `+0x68` | | `main + 0x310A8` | `x0 -= 0x10`, then `main + 0x30EAC` |
+
+None of the placements above reaches a dispatch target that guest memory supplies: the four
+in-main placements read main's own data, and the IO object's block calls main's own handlers with
+the bus's arguments.
+
+On retail (a Switch Lite, English FireRed, the payloads delivered over LDN by a XIAO ESP32S3
+radio), the component plant and the in-range write are told apart by the link teardown, not by the
+screen. Every run returned to HOME with "The software was closed because an error occurred" about
+two seconds after the script, so the message is generic; the graceful Pia leave
+(`Session type 3`) is not:
+
+- with the fold one past the cartridge buffer (component, `r0 = 0x08FFFFF6`), the console left LDN
+  with no `Session type 3` (tags `pl01`, `pl04`) - the abrupt abort the emulator's dispatch shows,
+  now on hardware;
+- with the fold in range (`r0 = 0x08FFFFF0`, tag `pl03`, write at buffer `+0xFFFFFA`) and with the
+  EWRAM end-overrun that lands on VRAM (`r0 = 0x0203FFF6`, tag `pl02`), the console sent
+  `Session type 3` and left gracefully; ordinary card sessions (`scratchpad/re1_host.log`,
+  `rt02`..`rt04`) do the same.
+
+So the record-resolver store reaches a live wrapper object on retail when the fold crosses the ROM
+buffer's end, and the app aborts there; the same store kept in guest-visible memory does not. A
+payload that pushes the body's frame returns from the site on retail as well.
+
+The dispatch after the plant is the app's next `bkpt #0x52`. The game produces them from two
+places: the STWI driver's IWRAM copy, about 60 a second while the link is up (a live read of its
+hit count), and its own calls into `Sio32IDMain` at the site (12 hits in a live read of record 1).
+With the vtable's low byte at `0x80` that
+dispatch reaches `main + 0x5492C`, which re-reads `[component] + 0x98` on the planted pointer and
+recurses until the thread stack leaves its region; the console returns to HOME with no
+`Session type 3`. A payload that puts the cartridge's own instruction back over the IWRAM copy's
+`bkpt #0x52` and reverts the cartridge copy's two load-time patches (the 4 KB block that holds
+both sites, through `swi 0x48`) removes both sources: the console then shows the game's own
+communication error, leaves LDN with `Session type 3`, files its network report and runs on. The
+plant is inert in that state, not repaired: no code site restores the vtable. The reverted
+cartridge copy is process-lifetime state as well: the wireless menu then reports the adapter as
+not connected, and a full relaunch re-applies the wrapper's load-time patches.
+
 ### Where the boundary stands
 
-Every guest path into the wrapper's own memory is decoded on this page. The one store past a
-region's backing is the resolver's `0x8001` strh at `fold + 0xA`; a planted pointer's consumers
-read their targets from `main`'s own data at static addresses ([What a plant over a seam
-does](#what-a-plant-over-a-seam-does)). The syscalls' stores into the component and their
-readers are in [The remaining syscalls](#the-remaining-syscalls); the `main + 0x1C36C8` class's
-fields are written by its own constructor and its own code ([What follows the ROM
-buffer](#what-follows-the-rom-buffer-the-sloop-component)). The third load-time patch replaces
-a wait loop. The bad-word filter's two buffers are length-bounded inside the dispatcher's own
-frame ([The bad-word filter](#the-bad-word-filter)); the flash-sector path's bounds are in
-[The flash sector path](#the-flash-sector-path).
+The guest paths examined on this page include a store past a region's backing: the resolver's `0x8001` strh at `fold + 0xA`; a planted pointer's consumers
+read their targets from `main`'s own data at static addresses ([Every placement a one-write plant
+can make](#every-placement-a-one-write-plant-can-make)). The four placements that read live
+memory and what every other placement leaves are listed there; the component's consumer during a
+session after the low-byte `80` plant is `main + 0x5492C`, from the `bkpt #0x52` hook chain.
+The single-write analysis identifies no call target supplied by guest bytes; it does not
+establish the outcome of every sequence of writes. Removing the chain's two guest sources
+prevented the observed dispatch. The syscalls' stores into the component and their readers are in
+[The remaining syscalls](#the-remaining-syscalls); the
+`main + 0x1C36C8` class's fields are written by its own constructor and its own code ([What
+follows the ROM buffer](#what-follows-the-rom-buffer-the-sloop-component)). The third load-time
+patch replaces a wait loop. The bad-word filter's two buffers are length-bounded inside the
+dispatcher's own frame ([The bad-word filter](#the-bad-word-filter)); the flash-sector path's
+bounds are in [The flash sector path](#the-flash-sector-path).
 
-The next surface is the wrapper's own LDN parsing: the emulator is a Pia client of the ldn user
-service, and the other seat's advertisement bytes reach it in native form.
+The Pia side has both ends decoded: the guest's `RfuGameData` and username are re-packed into the
+advertisement record and base85-encoded ([The advertisement
+record](#the-advertisement-record)); the peer's `NetworkInfo` bytes reach the candidate list
+verbatim ([The wrapper's own scan pipeline](#the-wrappers-own-scan-pipeline)); the peer's session
+messages pass the per-type bounds before a handler reads them ([The Pia session-message
+dispatcher](#the-pia-session-message-dispatcher)). The following [wire-parsing section](#the-pia-librarys-own-wire-parsing)
+traces the statically linked `PiaCommon-6_42_1` path from the UDP socket to the session queue;
+that trace is not an exhaustive validation of its length checks or all message handlers.
 
 #### The remaining syscalls
 
@@ -834,7 +933,7 @@ column is what one issue from the Mystery Gift client with `sloop-svc` showed.
 | 0x4F | `main + 0x057248` -> `main + 0x058B54` | builds `{u16 tag 0x4757; u32 value = r0}` on its stack; the tagged-property dispatcher `main + 0x4EBD0` and setter `main + 0x058BB4` store the value unvalidated at `component + 0x6052A0` | writing 3 and `0x7FFFFFFF`, each followed by 0x49 and 0x4A, changed nothing observable |
 | 0x50 | getter `main + 0x058BA4` | reads the same 4-byte count back | |
 | 0x51 | `main + 0x057270` -> `main + 0x0511BC` | reads `component + 0x3404` into an out-parameter and clears it; the out-parameter is always the dispatcher's own stack slot | |
-| 0x52 | `main + 0x05728C` | loads `[bus vtable + (r1 >> 24) * 8 + 0x50]` with the index unbounded 0..255, calls the load's `+0x48` virtual, and discards the result: guest `r1` reads back 0. On a fresh boot no index loads an object pointer with a real `+0x48` method | |
+| 0x52 | `main + 0x05728C` | folds guest `r0` through the bus object's region table (`[component + 0xE0] + 0x50`) and calls the region's `+0x48` fold. A non-zero guest `r1` also runs the pointer resolver `main + 0x562CC`: it reads `[[bus] + 0x50 + (r1 >> 24) * 8]` with the index unbounded 0..255, calls the value's `+0x48` as a virtual, then returns `backing + offset` when `offset < size`. The handler is the resolver's only caller, discards its result and returns `r0 = 0`, so guest `r1` reads back 0. The 256 entries read live are main's own method pointers, negative values and zeros, none an object with a `+0x48` method | |
 | 0x53 | `main + 0x0572D4` | answers `component + 0x2770 == 0` (through `[component + 0xD0]`) | |
 | 0x54 | `main + 0x0572EC` | `svc_CommsAllowedByParentalControls` [sloopsvc.c:182] | returns 1 |
 | 0x55 | `main + 0x057304` | stores `r0` at `component + 0xE1BC`, folds the stored word through the region table and reads one byte back ([What the play reports are built from](#what-the-play-reports-are-built-from)) | |
@@ -873,9 +972,170 @@ The per-candidate layout 0x45 writes is unsettled: the copy loop's byte count do
 `sizeof(struct RfuTgtData)`; read it live before depending on it.
 
 `component + 0x6050D8`, the 24 bytes `swi 0x47` copies ([main + 0x058694], a pre-indexed
-store from the guest's `r0` buffer), has no reader in the image. `component + 0x605360`'s
-readers are the activity diff `main + 0x058698` (through `component + 0x6050E0`) and
-`svc_SetActivity`'s setter `main + 0x058B40`; both compare or store the activity code.
+store from the guest's `r0` buffer), is read back by the same handler, which re-packs it into the
+advertisement record. `component + 0x605360`'s readers are the activity diff
+`main + 0x058698` (through `component + 0x6050E0`) and `svc_SetActivity`'s setter
+`main + 0x058B40`; both compare or store the activity code.
+
+#### The advertisement record
+
+The `swi 0x47` handler assembles the 24-byte RFU record the advertisement carries from the guest's
+own `RfuGameData` (16) and `gHostRfuUsername` (8) [include/link_rfu.h:103-115, src/sloopsvc.c:34-46]:
+
+| record | source |
+| --- | --- |
+| `[0:2]` | `RfuGameData[2:4]`, the trainer id (`compatibility.playerTrainerId`) |
+| `[2:10]` | the username |
+| `[10:12]` | the wrapper's RFU session id, `main + 0x3F2E0([component + 0x6050D0])` |
+| `[12:16]` | `RfuGameData[4:8]`, `partnerInfo` |
+| `[16:20]` | the search word, packed from `RfuGameData[0:2]` and `[8:12]` |
+| `[22:24]` | `RfuGameData[8:10]`, `tradeSpecies` |
+
+The search word's bits, from the two source words: 0-6 the activity (`RfuGameData` bits 16-22),
+7 the gender (bit 24), 8-10 the version (`RfuGameData[0:2]` bits 10-12), 11-14 the language (bits
+0-3), 15 `startedActivity` (bit 23), 16 `canLinkNationally` (bit 7), 17 `hasNationalDex` (bit 8),
+18-23 the `tradeType` (bits 10-15), 24 `gameClear` (bit 9), 25-31 the `tradeLevel` (bits 25-31).
+`hasNews` and `hasCard` (bits 4 and 5) are not copied. The two bytes at `[20:22]` are left as the
+frame held them.
+
+The encoder `main + 0x2A90` writes five characters per 4-byte group, low digit first, over an
+alphabet of `0x23` upward with `0x5C` skipped, and refuses when the output would pass the capacity
+it is given. The handler calls it with a capacity of `0x20` for the 24 bytes, so the 30 characters
+fit, and stores the text at `component + 0x6C0` with its `strlen` at `component + 0x700`
+(`main + 0x15FAE0` and `main + 0x15FB20`, the `strlen`/`memcpy` PLT stubs).
+
+The captured app data the host's beacon clones (`pokeldn/frlg/link/host_beacon.py`) is 122 bytes:
+`0x5C` of Pia system header and 30 characters reading back as trainer id `0x1050`, the name
+`GREEN`, RFU session id `0xac65` and search word `0x1584` (activity 4, version 5, language 2, bit 7
+set).
+
+The record text goes into an advertise-data builder the handler builds for the occasion (class
+vtable `main + 0x1CB8C8`, constructor `main + 0x87514`): a `0x180`-byte Pia advertise area at
+`+0x1C`, the used size at `+0x18` starting at the `0x5C` header, the app data pointer
+`main + 0xA2C70` = `+0x78`, the app data size `main + 0xA2C90` = used minus `0x5C`, clamped to
+`0x124` (slot `+0x28`, `main + 0x875AC`; the header offset `0x5C` is slot `+0x30`,
+`main + 0x875A4`). `main + 0xA3480` appends the 30 characters at the app data offset through the
+buffer object it holds at `+8` (its capacity is the buffer's vtable slot `+0x28`, its used size at
+the buffer's `+0x18`, and the append sets bit 1 of the buffer's `+8`); its only caller is the
+handler (`main + 0x58838`). The
+handler then delivers the builder at `main + 0x58854`: `x0 = [component + 0x3528]`,
+`main + 0xB1304`. That method calls a method on `[session + 0xD0]`, passes it on as an argument,
+zeroes the u32 at `+0xD8` and calls
+`main + 0xD4DD0(x0 = [session + 0x70], x1 = [session + 0xD0], x2 = [session + 0x30], x3 = the
+builder)`. The delivery takes `X = [session + 0x30]` and calls `X`'s vtable slot `+0xA8` as
+`(X, [session + 0x70] + 0x90, builder)`, after gating on `X`'s slots `+0xD8` (must return true)
+and `+0xE8` (must return false). The session's `+0x30` is set by `main + 0xAF760` from
+`[[session + 8] + 0xB8]`, the session owner's `+0xB8`.
+
+`X` has the facade classes' shape: `nn::pia::local::LocalFacade` (vtable `main + 0x1CB548`) and
+`nn::pia::net::NetFacade` (`main + 0x1CBE60`) share the implementation, and their slots are
+`+0xA8` = `main + 0x8D4AC`, `+0xD8` = `main + 0x8D84C` (true when the facade's `+0x28` is set and
+its `+0x30` non-null), `+0xE8` = `main + 0x8D920` (true when `[[facade + 0x30] + 0x12D8]` is
+non-zero). The facade's `main + 0x8D4AC` validates through `main + 0x8C6FC`, locks the manager
+(`[facade + 0x30] + 0x2B8` through `main + 0x94B78`, so the facade holds the manager at `+0x30`),
+takes the value at the builder's `+8` (`main + 0xA3710`) and hands it to the manager's
+`main + 0x99C3C`, then records the transport at `[facade + 0x48]` and state 8 at `[facade + 0x40]`.
+The manager passes the buffer on to the job's receive half (below), and the job's publish half
+reaches `nn::ldn::SetAdvertiseData` through the manager's blob builder.
+
+The object the component keeps at `[component + 0x3528]` is a `nn::pia::session::Session`: the
+class whose methods fill `main + 0xAF4E0` through `0xB23xx` (primary vtable `main + 0x1CE300`, a
+second at `main + 0x1CE330`, constructor `main + 0xAF4E0`, which initializes fields from
+`+0x10` onward and treats `+0xD8` as a u32). Its methods set `+0x30` (`main + 0xAF760`),
+`+0x70` (set by
+`main + 0xAF9F0`; live it holds the `UpdateSessionPropertyJob` singleton, whose `+0x10` u16 the
+setter maintains) and `+0xD0` (`main + 0xAFA94`), and clear them at `main + 0xAFB44`; the delivery
+caller reads `+0x150`,
+`+0x528`, `+0x70`, `+0x30`, `+0xD0` and `+0xD8`, all Session fields. The component picks it at
+`main + 0x528F8` from the object it embeds at `+0x34A0` (its first word) or from the global at
+relocated slot `main + 0x1D1AB0` (which points outside the image, to `0x41FB1C8`), and opens it
+with `main + 0xB14E0`, which stores the callback `main + 0x52BB4` at `+0x88` and the component at
+`+0x90`. The Session's constructor has no caller in the image and its vtable-pointer slot is
+loaded only by that constructor and the destructor, so the instance arrives from outside this
+module. The live shape (emulated French FireRed, Mystery Gift session; the same `main`
+binary): the layer is a set of bss singletons: `Session` at `main + 0x1029950`,
+`SessionProtocol` at `main + 0x1032000`, the owner at `main + 0x9E1798`, the `LocalFacade` at
+`main + 0x9E15B8`, and three session-job singletons at `main + 0x103FBB0`, `+0x103FCE8` and
+`+0x1040180` (`LeaveMeshWithHostMigrationJob`, `ProcessHostMigrationJob`, `KickoutManageJob`).
+During a live session `[component + 0x3528]` is exactly that `Session`, where component =
+`[session + 0x90]`, the object the syscall dispatcher receives (its RFU shadow at `+0x6050D8`
+holds the last record: activity `0x15`, the username bytes). `[session + 8]` (the owner; also
+`[protocol + 8]` for every protocol and `[reader + 0x60]`) has no vtable: `+0xB8` holds the
+facade, `+0xC8` the protocol manager. `[session + 0x30]` = the `LocalFacade`
+(typeinfo-verified). The session jobs' `+0x80` is `[SessionProtocol + 0x130]` = the Session and
+their `+0x88` is the SessionProtocol (their constructor `main + 0xCB0D0`: `stp x9, x19,
+[x20, #0x80]`, `x9 = [x19 + 0x130]`).
+
+The advertise machinery belongs to a different object, the
+`nn::pia::local::LdnBackgroundProcessJob` (class vtable `main + 0x1CAC48`, `0xA60` bytes, factory
+`main + 0x7EED8` = the manager's vtable slot `+0x278`, constructor `main + 0x83A88`), which
+derives from `nn::pia::net::NetBackgroundProcessJob` (vtable `main + 0x1CB928`) and embeds a
+`nn::pia::common::StepSequenceJob::Step` at `+0xD8` (vtable `main + 0x1C9770`) and a
+`nn::pia::local::LocalConnectNetworkSetting` at `+0x320` (vtable `main + 0x1CA2D0`). Its base
+constructor `main + 0x875BC` stores the network manager at `+0xA8` and builds the sub-objects; its
+constructor builds the advertise-data builder at `+0x8C0` (`main + 0x87514`). The job's method
+`main + 0x84260` (vtable slot `+0x60`) is the receive half: it locks the manager (`+0x2B8`),
+touches the holder (`main + 0x87374` on `[manager + 0x200] + 0xA8` and `[manager + 0x2D8]`),
+validates the incoming buffer through `main + 0x8885C` (the buffer's size `main + 0xA2C90` within
+the manager's slot `+0x100` limit, the buffer's `+0x8` bit 1 set, `[manager + 0x12D8]` zero, the
+`main + 0x879C0` check with `w2 = 8`, a timestamp at `[job + 0xA0]`), copies the buffer's
+`0x180`-byte advertise area (`+0x1C`) into the job's builder at `+0x8C0` (`main + 0x87578`) and
+sets the job's next step to slot `0x130`. It is reached through the job's vtable: the manager's
+`main + 0x99C3C` hands the buffer to the object it keeps at `+0x250` (a
+`StepSequenceJob::Step`-derived delegate, constructor `main + 0xA2824`, `0x98` bytes, a `0x38`-byte
+helper at `+0x88`, the manager at `+0x90`), whose `main + 0xA28E4` calls the job's slot `+0x60` as
+`(job, helper, buffer)`. The publish half is the job's `+0x130` (`main + 0x84360`), which passes
+the job's builder `+0x8C0` to the manager's slot `+0xD0` at `main + 0x8445C`. Eight sites in the
+steps of Pia's own session jobs
+(`main + 0xCB0CC`-`0xCC738`; `nn::pia::session::LeaveMeshWithHostMigrationJob`, vtable
+`main + 0x1CEB70`, `nn::pia::session::ProcessHostMigrationJob`, `main + 0x1CEBA0`,
+`nn::pia::session::KickoutManageJob`, and the classes at construction slots
+`main + 0x1D26F8`-`0x1D2728`) each gated by the job's state byte at `+0x90` read the holder at
+`+0x80` (which is `[SessionProtocol + 0x130]`, the `Session`; live-verified) and call
+`[holder + 0x30]`'s vtable slot `+0x130`; `[holder + 0x30]` is the `LocalFacade` (live typeinfo),
+whose `+0x130` entry is `main + 0x8E0B4`.
+
+The chain is gated on the wrapper's network state, and it is the leader-side path. The `swi 0x47`
+body delivers only when the session is non-null, the byte at `component + 0x690` is set,
+`component + 0x2770` is at least 10 and the session predicate `main + 0xB06BC` answers false
+(`main + 0x5879C`-`0x587DC`). The byte at `+0x690` is the listener list's enabled flag: it is set at
+`main + 0x53A58` only while `[component + 0x6A0] == [component + 0x6A4]` (the wrapper's scan and
+join pair), and cleared by the tagged-property dispatcher's walk (`main + 0x4EBB0`, mode `-2`) and
+by the teardown that writes `-1` into both. The delivery's own gates then compare two Pia address
+structs in the manager: `X`'s slot `+0xD8` tails into `main + 0x95C90`, which requires both
+`[manager + 0x1268]` and `[manager + 0x1288]` to pass `main + 0x74BE0` (a valid address) and to
+compare equal in `main + 0x74C18` (the u16 at `+0x18`, then 0x10 bytes at `+8`); slot `+0xE8`
+requires `[manager + 0x12D8]` to be zero. Those two structs hold the wrapper's local address
+(`127.0.0.1` on the emulator) and the peer's (the host's IP), so the chain runs only while the
+console is the leader of the network it is on. A joining console's record stays in the shadow; its
+game data still reaches the parent through the session.
+
+Confirmed live on the emulator in one frame, all eight hops, with a `swi 0x47` carrying version 5,
+language 2, trainer id `0x1234`, activity `0x45` and the username `PKLDNTST`: the handler's shadow
+took the 24 bytes; with the gate byte and the address pair poked equal, the session's
+`main + 0xB1304` ran, the facade's `main + 0x8D4AC` took the stack builder (its app data carried the
+30-character record text ``Z8J4;Vk.+>`.uN;#####<P?>######``), the manager's `main + 0x99C3C` and
+its `+0x250` delegate's `main + 0xA28E4` passed it on, the job's `+0x60` validated it and copied the
+`0x180`-byte area into the job's builder at `+0x8C0` (`main + 0x87578`), the job's `+0x130` ran from
+the state machine, and the manager's blob builder `main + 0x80C3C` received the job's builder with
+the same record text. The job itself runs as a state machine: its `+0x38`/`+0x40` hold
+the current step (a vtable slot with a one-bit virtual flag, or a direct function) and the base
+method `main + 0x6EAA0` ("ExecuteCore", the job's slot `+0x20`) dispatches it; the steps seen are
+the vtable slots `0xB8`, `0xC8`, `0xD8`, `0xE8`, `0xF8`, `0x108`, `0x118`, `0x138`, `0x148` and
+direct functions such as `main + 0x891F0`.
+
+The manager class (`nn::pia::local::LdnProtocol`; vtable `main + 0x1CA5B0`, pointer formed at
+`main + 0x7E244` from the relocated slot `main + 0x1D1E98`) keeps its own `NetworkInfo` at
+`[manager + 0x2D8] + 0xB8`: the
+advertise size is `NetworkInfo + 0x26A` (`+0x322`), the blob `NetworkInfo + 0x26C` (`+0x324`),
+`NetworkInfo + 0x282` at `+0x33A`. Its method `main + 0x80C3C` (the only consumer of a builder's
+app data; `main + 0xA2C70` has this one caller) zeroes `+0x380` (`NetworkInfo + 0x2C8`), copies
+the app data there, sets the size to the app data plus `0x5C` at `+0x322`, writes the `0x5C`-byte
+Pia system header at `+0x324` with the holder's own method (its vtable slot `+0x68`), and calls
+`nn::ldn::SetAdvertiseData(holder + 0x324, size)` (PLT `main + 0x160A90`, GOT `0x1d3800`). Two
+more manager methods advertise a second object's data (`main + 0x7F990`, `0x81140`: `[object +
+0x18]`, the size its vtable slot `+0x38` plus `main + 0x8AC20`), and `main + 0x80EBC` rebuilds the
+holder from `[manager + 0x128]` before advertising it.
 
 `component + 0x2770` (through `[component + 0xD0]`) is read by `swi 0x53` (a boolean) and by
 `main + 0x0511CC` and `main + 0x0511F4`, which no syscall reaches. `main + 0x0511F4` compares it with
@@ -900,7 +1160,10 @@ the host. The reports as Ryujinx's `prepo` prints them:
 The game report is parsed from the flash image. `main + 0x05A280` finds the newest slot by the sector
 footers (signature `0x08012025`), copies its 14 sectors (0xE000 bytes) to `component + 0x140 + 0x70`,
 and `main + 0x05A370` walks it with a per-game description table: badge flag bits, Hall of Fame and
-Pokedex flags, money XORed with the save's key. `swi 0x57` fills `MonsSelect` (the starter, through
+Pokedex flags, money XORed with the save's key. Every offset and bit index comes from the static
+table; the one count the copied save supplies, `playerPartyCount` (a byte), bounds the party walk at
+`main + 0x05AAE0`, and 255 entries of 0x64 bytes stay inside the 0xE000 copy. `swi 0x57` fills
+`MonsSelect` (the starter, through
 the internal-to-national table at `main + 0x17DA8C`); the printed JSON carries a fixed subset of the
 table and omits `MonsSelect`. `swi 0x62` increments `component + 0xE1B0`, which becomes `CommsError`:
 each call adds one to `CommsError` in the next report Ryujinx's `ServicePrepo ProcessPlayReport`
@@ -1014,9 +1277,185 @@ name, the parent id u16 (`0x59f1`).
 
 In `main` the list is written only through the fill family (`main + 0x58BB4`, `0x58BE4`,
 `0x58BF8`), all virtual; every other component-anchored access in the image is a read. The
-owner class's vtable pointer `main + 0x1C3B30` is formed by no `main`-side idiom (adrp/add,
-movz/movk, literal pool, reloc addend all absent): owner-class objects are constructed
-outside `main`.
+owner class's vtable pointer `main + 0x1C3B30` is formed in `main` by loading the relocated slot
+`main + 0x1D1B38` (value `main + 0x1C3B20`) and adding `0x10`: `main + 0x58558` stores it while it
+zeroes the candidate list at `component + 0x6050F0`, and `main + 0x58FD8`/`0x59054` in the two
+component initializers. The same idiom forms the manager class's pointer (slot `main + 0x1D1E98`;
+`main + 0x7E244`, `0x7E4D0`) and the session class's (slot `main + 0x1D2770`; `main + 0xB7D24`,
+`0xB7E78`).
+
+### The Pia session-message dispatcher
+
+The wrapper's native Pia session receive is a type switch at `main + 0xB9FC0`. A chain of nodes is
+walked: `[node + 0x10]` is the message body and its first byte is the type, while the node's own
+three leading bytes are the protocol address used as the queue key. A node is dispatched
+when the manager object's `[x0 + 0xA0]` is non-zero and the type is at most `0x11`, and the switch
+is `adr x8, main + 0xB9FD0` (`main + 0xB9FCC`), `ldrb w9, [main + 0x180FC9 + type]` (`main +
+0xB9FC4`; `adr x27, main + 0x180FC9` at `main + 0xB9EFC`), `add x8, x8, w9, lsl #2`, `br x8`. The
+byte table at `main + 0x180FC9` has one entry per type; the eighteen case blocks sit at
+`main + 0xB9FD0 + index * 4`, each ending in an unconditional `b main + 0xB9F80` and each calling
+its handler (`main + 0xBCB60`, `main + 0xBE438`, `main + 0xBE8BC`, ...).
+
+Each handler bounds its read against the message before touching it: the type-1 handler
+`main + 0xBE438` opens `cmp w2, #0x15; b.ne` (only a `0x15`-byte message reaches the copy), and the
+per-type tests the audit decoded are type 2 `>= 4`, type 3 `== 0x16 or 0x22`, type 4 `== 0xf`,
+type 6 `>= 0xf`, type 9 `== 0x1e or 0x2a`, type 10 and 12 `== 0x15`, type 11 `>= 0xe`, type 13
+`== 0xa`, type 14 `>= 0x4d`, type 17 `>= 0xd`. The variable-length reader `main + 0xC0D90` derives
+its byte count from the bit count, compares it against the declared length, and refuses on short.
+No handler in this set was found to copy a message-controlled length into a fixed buffer.
+
+The types are the Pia session protocol's own message types; the host's session layer
+(`pokeldn/ldn/pia_connect.py`) numbers them 0 join request, 1 join ack, 2 join response, 3 leave
+request, 4 leave response, 5 update, 6 update ack, 7 start host migration, 8 migration ack. The
+type-1 handler `main + 0xBE438` reads a 21-byte message as `[0]` type, `[1:9]` and `[9:0xB]` the
+source station's constant id and variable id, `[0xB:0x13]` and `[0x13:0x15]` the destination's, and
+refuses unless the destination pair matches the transport's own ([transport + 0x1B8], `+0x1C0`),
+then looks the source station up and calls `main + 0xC9B4C` on it. The type-2 handler
+`main + 0xBE8BC` accepts 4 bytes or more, gates on the manager's state byte (`+0x30 == 0xFD`),
+and switches on message byte 3 over 3 to 0x10.
+
+The receive path's owner is the session class (`nn::pia::session::SessionProtocol`; vtable base
+`main + 0x1CE8E0`; its vtable pointer is
+formed at `main + 0xB7D24`/`0xB7E78` from the relocated slot `main + 0x1D2770`, its constructor is
+`main + 0xB7E70`). The pump is that class's vtable slot `+0x50`, `main + 0xB9CA0`, which calls the
+walker `main + 0xB9DB0`; the chain hangs off the object at `[protocol + 0xF8]` (the session packet
+reader, attached by the protocol manager) at its `+0x70` table (`main + 0xD6D68` returns that
+address). Message objects are constructed by `main + 0xD4430` (its
+vtable pointer comes from the relocated slot `main + 0x1D27B0`). The Pia library itself is
+statically linked in `main` (the image carries `SDK MW+Nintendo+PiaCommon-6_42_1-Release` and the
+session job names).
+
+### The Pia library's own wire parsing
+
+`main` links the whole Pia 6.42.1 stack (the image carries the `SDK MW+Nintendo+...` release
+strings for `PiaCommon`, `PiaLocal`, `PiaNet`, `PiaSession`, `PiaTransport` and `Pia_ZStandard`,
+plus the mangled class names). The classes described above by their vtables only are:
+
+| earlier wording | class (mangled name at the vtable's typeinfo) | vtable |
+| --- | --- | --- |
+| the network manager | `nn::pia::local::LdnProtocol` | `main + 0x1CA5B0` |
+| the session object (builder at `+0x8C0`) | `nn::pia::local::LdnBackgroundProcessJob` | `main + 0x1CAC48` |
+| the session class (the receive path) | `nn::pia::session::SessionProtocol` | `main + 0x1CE8E0` |
+| the packet object | `nn::pia::common::Packet::Header` | `main + 0x1CA100` |
+| the local receive stream | `nn::pia::local::LocalInputStream` | `main + 0x1CA540` |
+| the net receive stream | `nn::pia::net::NetInputStream` | `main + 0x1CC1D0` |
+
+The transport classes' vtables are `PacketReader` `main + 0x1CF1A8` (a second at `main + 0x1CE7E8`),
+`PacketWriter` `main + 0x1CF258`, `ProtocolManager` `main + 0x1CF3A0`, `ProtocolMessageReader`
+`main + 0x1CF458`, `ProtocolMessageWriter` `main + 0x1CF490`, `ReliableProtocol` `main + 0x1CF4C8`,
+`Station` `main + 0x1CF8C8`, `StationManager` `main + 0x1CF938`, `ReceiveThreadStream`
+`main + 0x1CFB20`, `SendThreadStream` `main + 0x1CFB68`; the session classes' are `Session`
+`main + 0x1CE300`, `SessionPacketReader` `main + 0x1CE748`, `SessionPacketWriter`
+`main + 0x1CE7F8`, `SessionStation` `main + 0x1CED20`; the local classes' are `LocalProtocol`
+`main + 0x1CA9B0`, `LocalService` `main + 0x1CB460`, `LocalFacade` `main + 0x1CB548`.
+
+**The packet.** The packet object is `0x1D18` bytes: the parsed header at `+8` through `+0x24`, the
+datagram buffer at `+0x30` (capacity `0x1C5C`, the bound in the append helpers `main + 0x75664`
+and `main + 0x75694`, the second of which records a footer size at `+0x14`), the received size at
+`+0x1C90` (the local receive path stores it at `main + 0x7DE40`, after a `0x5AC`-byte
+receive and a check against that limit). Its parse (`main + 0x752D4`, vtable slot
+`+0x18`; the entry `main + 0x752C8` supplies the object's own buffer and the constant `0x1C5C`)
+requires more than `0x1C` bytes and reads the `0x1D`-byte header:
+
+| at | size | meaning | lands at |
+| --- | --- | --- | --- |
+| 0x00 | 4 | magic `0x32AB9864`, big-endian | `+0x08` |
+| 0x04 | 1 | version in bits 0-6, encrypted flag `0x80` | `+0x0C` |
+| 0x05 | 1 | one byte, kept as sent | `+0x0D` |
+| 0x06 | 2 | destination variable id, big-endian | `+0x0E` |
+| 0x08 | 2 | source variable id, big-endian | `+0x10` |
+| 0x0A | 2 | packet id, big-endian | `+0x12` |
+| 0x0C | 1 | footer size | `+0x14` |
+| 0x0D | 8 | nonce, as sent | `+0x15` |
+| 0x15 | 8 | GCM tag, as sent | `+0x1D` |
+
+The version this app speaks is `0x10` (16): the validity check `main + 0x75610` demands the magic,
+`([+0xC] & 0x7F) == 0x10` and `size - 0x1D < 0x1C40`. The payload pointer is `+0x4D` (the buffer
+past the header, `main + 0x75474`); `main + 0x75458` returns `buffer + t`, where
+`t = (n + 0x1D)` in 32-bit arithmetic, or null when `(t >> 2) > 0x716`. This capacity
+check allows `t` through `0x1C5B`; the message walker separately checks against the received
+size minus the header and footer (`main + 0xDE278`).
+
+**The socket and the receive stream.** The socket is a small holder (constructor `main + 0x6D93C`:
+fd `-1` at `+0`, a count at `+4`, the family at `+8`, the protocol at `+0xC`); `main + 0x6D95C`
+opens it (`nn::socket::Socket`, PLT `main + 0x160940`), `main + 0x6DBF4` closes it
+(`main + 0x160950`), `main + 0x6DCD0` binds it (`main + 0x160960`), and `main + 0x6DE6C`,
+`0x6DF44`, `0x6E00C`, `0x6E0F0` set options (`main + 0x160970`). The datagram calls are
+`main + 0x6E1D0` (`nn::socket::RecvFrom`, PLT `main + 0x160980`, flags `0x80`, the source address
+converted back by `main + 0x6E9D0`) and `main + 0x6E538` (`nn::socket::SendTo`,
+`main + 0x160990`). The local receive stream (variable id at `+0x88`, a lock at `+0x68`, the
+socket holder pointer at `+0x18`) runs the pump `main + 0x7DD10` (vtable slot `+0x10`): it receives
+into a packet's buffer and parses the header into it (`main + 0x7DDEC`; `main + 0x6E1C8` is the
+thunk); the packet filter `main + 0x91280` (slot `+0x20`) first requires a valid packet.
+When the version is at least 7, the footer is non-empty and the destination variable id is
+at most 1, the footer must contain at least two bytes, and the stream's own id (`+0x88`) must
+be non-zero and appear among its big-endian u16 recipient ids (`footer_size >> 1` entries). Separately, when
+`([+0xC] & 0x7E) >= 6` and the destination is 2 or more, it must equal the stream's own `+0x88`.
+
+**The threads.** The transport's receive and send loops are `nn::os` threads named "Pia
+ReceiveThreadStream" (started at `main + 0xE9020`, the name via `adr` at `main + 0xE9034`) and "Pia
+SendThreadStream" (`main + 0xEA758`), created through `main + 0xF6010` (`nn::os::CreateThread`,
+PLT `main + 0x15FDF0`, and `StartThread`, `main + 0x15FE00`).
+
+**From the wire to the session handlers.** A received session message is parsed by the session
+packet reader and left in a per-address table that the session protocol walks each update.
+
+`nn::pia::session::SessionPacketReader` (vtable `main + 0x1CE748`) inherits
+`nn::pia::transport::PacketReader` (vtable `main + 0x1CF1A8`). The reader's `+0x30` method
+(`main + 0xD5DE0`) processes received packets and calls `main + 0xD6460(reader, packet)`
+to walk their messages. The walker starts at datagram offset `0x1D` and stops before
+`packet_size - footer_size` (`main + 0xDE278`, `0xD6510`-`0xD6538`); the footer follows
+the payload. It parses each message with `main + 0x74EA8` and takes the protocol address
+used as the queue key through the reader's `+0x78` virtual (`main + 0xD6D0C`: the u16 at message
+`+0x2C` with the byte at `+0x2E` as its high part) and calls
+`main + 0xD6944(table, address, message)`.
+
+The table is embedded at `reader + 0x70`: a u32 bucket count at `+0`, a pointer to the
+bucket array at `+8` (0x18 bytes per bucket, the chain head at `+0`, the tail at `+8`)
+and an optional hash callback at `+0x40`. `main + 0xD6944` loads the array pointer before
+adding `index * 0x18`; the buckets are not inline in the table. The bucket
+index is `callback(address) % count`, or `(address[0] + address[1] + address[2]) % count` when no
+callback is set. `main + 0xD71F0(bucket, address, message)` takes a node, copies the message into
+it (the three address bytes at `+0`, the body pointer at `+0x10`, the id at `+0x18`, more fields
+at `+0x20` through `+0x30` and the rest through `main + 0x74C54`) and appends it to the bucket's
+doubly-linked list (next at `+0x78`, previous at `+0x80`).
+
+The protocol side: `nn::pia::session::SessionProtocol`'s `+0x50` virtual (`main + 0xB9CA0`) runs
+`main + 0xB9DB0` every update. It reads `[protocol + 0xF8]` (the reader, attached as below), takes
+the reader's table at `+0x70`, computes the bucket for the protocol's own three-byte address (the
+u16 at `+0x120` with the byte at `+0x122`, read by the `+0x18` virtual `main + 0x828E4`; that pair
+is a `nn::pia::transport::Protocol` field, set by `main + 0xDA614`), walks the chain and dispatches
+each node by the first byte of the body at `[node + 0x10]` through the jump table to the handlers
+(`main + 0xBCB60`, `main + 0xBE438`, `main + 0xBE8BC`, `main + 0xBF2D4`, and so on), passing
+`(protocol, node, id)`.
+
+The attach: the protocol manager (embedded at `+0xC8` of its owner, its protocol table at `+0x18`)
+walks its table and sets every protocol's `+0xF0` and `+0xF8` from its owner's `+0xF8` and
+`+0x100` (the setters `main + 0xDA8C8` and `main + 0xDA8D0`, the broadcast `main + 0xDB740`, called
+with the pair at `main + 0xEC0E4`; it refuses either argument when zero). The `+0xF8` object is the
+reader, which is why the walker's table is the reader's `+0x70`.
+
+Live, the manager sits at `[session + 8] + 0xC8` (the owner above), and its table at
+`[manager + 0x18]` has a u32 bucket count at `+0` and a bucket-array pointer at `+8`.
+Each bucket is `0x18` bytes: `+0` is a node, the
+node's `+8` is the protocol and the node's `+0x30` chains the next node. In the emulated session
+the table had count `19` and exactly six protocols, one per kind, keyed by the protocol's address
+(u16; the byte at `+0x122` is zero, and each protocol's `+0x108` holds the network's Pia var,
+`0x8fa2`/`0x0766`): `0xfd01` `nn::pia::local::LdnProtocol`, `0xfd03`
+`nn::pia::transport::RttProtocol`, `0xfd05` `nn::pia::transport::UnreliableProtocol`, `0xfd0a`
+`nn::pia::transport::ReliableProtocol`, `0xfd0d` `nn::pia::session::SessionProtocol`, `0xfd0f`
+`nn::pia::transport::MonitoringDataProtocol`. The protocols are one per kind, not per station:
+the `SessionProtocol`'s pump traced the single instance 8 times out of 8, and reader-table nodes
+were filed under the protocol address (`0xfd0a`, message id `0x60`). An instance is created and
+registered by `main + 0xB1F60` (allocate `0xD8E8` bytes via `main + 0xDB114`, constructor
+`main + 0xB7D0C`, insert into the manager's map keyed by the address pair); the Session's
+constructor calls it once and stores the returned address at `+0x12`/`+0x14`.
+
+The `nn::pia::transport::Protocol` base (vtable `main + 0x1CF308`, constructor `main + 0xDA548`,
+vtable pointer from the relocated slot `main + 0x1D2808`) carries the three-byte address at
+`+0x120`/`+0x122`, locks at `+0xC8`, the attached pair at `+0xF0`/`+0xF8`, two configured
+8-byte-plus-u16 values at `+0x100`/`+0x108` and `+0x110`/`+0x118`, a state byte at `+0x123` and a
+flag at `+0xD8`.
 
 ## Repointing the console's outgoing message
 

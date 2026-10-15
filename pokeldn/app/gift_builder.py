@@ -46,6 +46,8 @@ def normalized(game, value):
         value["mode"] = "preset"
     if hasattr(builder, "OFFICIAL") and value.get("event") not in builder.OFFICIAL.by_key():
         value["event"] = builder.OFFICIAL.load()[0]["key"]
+    if not isinstance(value.get("event_ids"), dict):
+        value["event_ids"] = {}         # a card id chosen per event card, over the one it was distributed with
     if value.get("preset") not in builder.PRESET:
         value["preset"] = builder.PRESETS[0].key
     value.setdefault("file", "")
@@ -160,7 +162,7 @@ def compile(tool, value):
             gift = gifts.adapter(game).with_icon(gift, value["icon"])
         return gift
     if value["mode"] == "event":
-        return module(game).OFFICIAL.gift(value["event"])
+        return module(game).OFFICIAL.gift(value["event"], value["event_ids"].get(value["event"]))
     return module(game).compile(_built_state(game, value))
 
 

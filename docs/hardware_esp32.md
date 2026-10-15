@@ -102,15 +102,19 @@ bootloader. A XIAO ESP32S3 with recalibration off answered 300 of 300 opens. The
 With recalibration off, 4 of 600 opens on a C6 found no answer once and a working link on the next
 open, after macOS re-enumerated the device ("Device not configured").
 
-The C6 build also carries a USB watch (`usbwatch.c`): it samples the SOF frame
+The C6 and S3 builds carry a USB watch (`usbwatch.c`): it samples the SOF frame
 number every 5 ms and, once frames have counted or the host has sent a byte, restarts the chip
 after a 2 s stall and reports the USB and clock registers from before and after it as LOG lines on
-the next HELLO. Built with `POKELDN_USB_BEACON=1` in the environment of `idf.py`, the C6 image also
+the next HELLO. This detects a stopped USB frame clock; a stalled driver can leave SOFs advancing,
+and restarting the chip is not a guarantee that a wedged USB peripheral recovers. The active
+transfer ends on restart. Built with `POKELDN_USB_BEACON=1` in the environment of `idf.py`, either image also
 sends those registers, the SOF changes it has seen and the host bytes it has read once a second, as
 a vendor action frame (category 127, OUI `02:55:53`) to the group address `03:55:53:42:57:00`; a
 sniffing board keeps them with `esp32_sniff.py --mac 03:55:53:42:57:00` while the USB link is dead.
 The frame body after the 4-byte vendor header is u32 little-endian: uptime ms, SOF changes, host
-bytes, `wire_dropped`, stall count, then the sixteen registers listed in `usbwatch.c`.
+bytes, `wire_dropped`, stall count, then the sixteen target-specific registers listed in `usbwatch.c`.
+The S3 snapshots its USB endpoints, SYSTEM clocks and resets, and GPIO19/20; the C6 snapshots its
+USB endpoints, PCR clocks and resets, and GPIO12/13. S3 support starts with firmware 1.6.2.
 
 ## Roles
 
@@ -720,6 +724,33 @@ The receive interrupt drops a 64-byte packet when the 16 KB RX ring is full and 
 (`usb_serial_jtag.c:144` ignores `xRingbufferSendFromISR`'s result). The CREDIT window keeps the ring
 from filling; a loss there shows only as bytes written past the board's last CREDIT.
 `POKELDN_ESP32_BAUD` is accepted on all targets and only changes the classic ESP32's line rate.
+
+The PC sets a 1 s serial write timeout. A failed or short write ends the session through the same
+board-loss handler as a read error, without counting the failed frame as written. Rate negotiation
+also bounds the wait for the OS output queue instead of calling an unbounded `flush()`.
+After the initial HELLO and rate negotiation, 1 s without a valid board frame queues a STATUS probe;
+3 s of silence ends the session with a USB error and asks the user to unplug and reconnect the board.
+Idle firmware repeats CREDIT, and older firmware that does not repeat it can answer STATUS.
+Malformed bytes do not count as proof of life. A repeating CREDIT can still recover bytes lost on
+the line, but a completely silent board is not repeatedly resynced into accepting more writes.
+
+To reproduce a long upload without a console, run a two-hour host-to-board soak, using the native
+USB port and an empty AP (replace `COM5` with the board's port):
+
+```sh
+./.venv/bin/python tools/ldn/esp32_bench.py --port COM5 --bauds 921600 \
+    --soak 7200 --size 1400 --rate 460000
+```
+
+This sends 1400-byte Ethernet frames with CREDIT flow control, targets 460000 Ethernet bytes/s,
+and prints cumulative frames, bytes, credits and board STATUS every 5 s. The actual rate can be
+lower if the board or host cannot keep up. `--rate 0` removes pacing. Use a single baud for a USB
+soak: native USB ignores the baud value. The final board count includes Wi-Fi transmit failures,
+so it checks delivery to the command handler, not reception over the air. A USB failure or a final
+frame-count mismatch exits nonzero. Keep the terminal output; `POKELDN_ESP32_TRACE` can additionally
+record the wire messages, but an hours-long full-payload trace can be several GB.
+Follow a successful soak with a full console upload lasting beyond the reported 54-minute failure;
+the empty-AP test does not reproduce the console's acknowledgments or all Wi-Fi load.
 
 USB drains faster than the writer encodes, so under a full-rate board-to-host stream the writer
 never sleeps. On USB targets the reader runs at priority 21, above the writer (20); the UART build

@@ -164,9 +164,11 @@ def _cancel_state(t):
         _refuse("thread cancellation state")
 
 
-def _lock(t, mutex):
-    """nn::os::LockMutex 0x51e2be0 on an uncontended non-recursive mutex (+0x18 the owner handle)."""
-    _cancel_state(t)
+def _lock(t, mutex, cancel=True):
+    """nn::os::LockMutex 0x51e2be0 on an uncontended non-recursive mutex (+0x18 the owner handle);
+    `cancel`: the pthread wrapper's cancel-state calls around it."""
+    if cancel:
+        _cancel_state(t)
     thread = t.u64(t.tls + 0x1F8)
     if t.u8(mutex + 1):
         _refuse("recursive mutex")
@@ -175,7 +177,8 @@ def _lock(t, mutex):
     t.put(mutex + 0x18, 4, t.u32(thread + 0x1B0))
     t.put(mutex + 8, 4, t.u32(mutex + 8) + 1)
     t.put(mutex + 0x10, 8, thread)
-    _cancel_state(t)
+    if cancel:
+        _cancel_state(t)
 
 
 def _unlock(t, mutex):
@@ -680,14 +683,136 @@ def _tc_free(t, tc, p):
     return 0
 
 
+# --- making a thread's cache ----------------------------------------------------------------------
+
+RANDOM_LOCK = 0x5B13248         # SDK data: nn::os::Mutex over the generator below
+RANDOM_READY = 0x5BD9430        # SDK data: u8, bit 0 once the generator is seeded
+RANDOM_STATE = 0x5BD9434        # SDK data: TinyMT32 state, 4 u32
+CACHE_FUNCTIONS = 0x5B54F80     # SDK GOT: 7 pairs of cache functions, the second of each pair
+                                # when flag bit 2 is clear (+0x5189ef0 / +0x518a220 at +8 / +0x10)
+
+
+def _tinymt(t, state):
+    """One TinyMT32 output (mat1 0x8f7011ee, mat2 0xfc78ff1f, tmat 0x3793fdff), state advanced."""
+    s0, s1, s2, s3 = (t.u32(state + 4 * i) for i in range(4))
+    x = ((s0 & 0x7FFFFFFF) ^ s1 ^ s2) & M32
+    x = (x ^ (x << 1)) & M32
+    y = (s3 ^ (s3 >> 1) ^ x) & M32
+    n2 = (x ^ (y << 10)) & M32
+    n1 = s2
+    if y & 1:
+        n1 ^= 0x8F7011EE
+        n2 ^= 0xFC78FF1F
+    t.put(state, 4, s1); t.put(state + 4, 4, n1); t.put(state + 8, 4, n2); t.put(state + 0xC, 4, y)
+    t1 = (s1 + (n2 >> 8)) & M32
+    t0 = y ^ t1
+    return t0 ^ 0x3793FDFF if t1 & 1 else t0
+
+
+def _random(t, dst, n):
+    """0x51e2ce0 (through 0x5183970): `n` bytes of the SDK's TinyMT32 generator, under its lock;
+    0x525f448 fills whole aligned words only here."""
+    lock = t.main + RANDOM_LOCK
+    _lock(t, lock, cancel=False)
+    if not t.u8(t.main + RANDOM_READY) & 1:
+        _refuse("random generator not seeded")
+    if dst & 3 or n & 3:
+        _refuse("random bytes off a word boundary")
+    for i in range(0, n, 4):
+        t.put(dst + i, 4, _tinymt(t, t.main + RANDOM_STATE))
+    _unlock(t, lock)
+
+
+def _heap_object(t, heap, cls):
+    """0x518e0f8(heap, cls, 0, 1): one object for the allocator's own use, off the first partial span
+    of `cls` in state 3 (plain free links); an emptied span leaves the list."""
+    cinfo = _cinfo(t)
+    s = t.u64(heap + 0x880 + 8 * cls)
+    while s:
+        if t.u8(s + 0x13) != 3:
+            s = t.u64(s)
+            continue
+        p, base = t.u64(s + 0x28), t.u64(s + 0x18)
+        if base > p or (base + (t.u64(s + 0x20) << 12)) & M64 <= p:
+            if p:
+                _refuse("abort: free list outside its span")
+            t.put(s + 0x28, 8, 0)
+            nx = t.u64(s)
+            _unlink(t, s)
+            s = nx
+            continue
+        size = t.u16(cinfo + 4 * t.u8(s + 0x12) + 2)
+        k = (p - base) // size
+        if k * size + base != p:
+            _refuse("abort: misaligned free object")
+        w = s + 0x30 + ((k >> 3) & 0x1FFFFFFFFFFFFFF8)
+        bit = 1 << (k & 63)
+        v = t.u64(w)
+        if v & bit:
+            _refuse("abort: free object already out")
+        t.put(w, 8, v | bit)
+        t.put(s + 0x28, 8, t.u64(p))
+        t.put(p, 8, 0)
+        t.put(s + 0x10, 2, t.u16(s + 0x10) + 1)
+        if t.u64(s + 0x28) == 0:
+            _unlink(t, s)
+        return p
+    _refuse("allocator object needs a new span")
+
+
+def _construct_cache(t, tc, heap, flags):
+    """0x51892e4: function table, XOR key (random | 1), heap, large limit, empty lists, batches."""
+    g = t.main + CACHE_FUNCTIONS
+    pick = 8 if flags & 4 == 0 else 0
+    for field, pair in ((0, 0), (8, 0x10), (0x10, 0x20), (0x18, 0x30), (0x30, 0x50)):
+        t.put(tc + field, 8, t.u64(g + pair + pick))
+    t.put(tc + 0x20, 8, t.u64(g + 0x60))
+    t.put(tc + 0x28, 8, t.u64(g + 0x40 + (0 if pick else 8)))
+    _random(t, tc + 0x38, 8)        # 0x5183970 returns 0: the key is always the random word
+    t.put(tc + 0x38, 8, t.u64(tc + 0x38) | 1)
+    t.put(tc + 0x40, 8, heap)
+    t.put(tc + 0x50, 4, flags)
+    t.put(tc + 0x48, 8, (t.u64(heap) << 12) & M64)
+    t.put(tc + 0x54, 8, 0)
+    t.write(tc + 0x60, bytes(0x2AC))
+    t.write(tc + 0x30C, bytes([1, 0x40, 0x40, 0x40, 0x20, 0x20, 0x20, 0x10, 0x10, 0x10]) + b"\1" * 0x2F)
+
+
+def _create_cache(t, allocator):
+    """0x51908b4 (with the holder calls 0x5191f54 / 0x5191f88 / 0x5191f28 and nn::os::SetTlsValue
+    0x51e6fe0): a cache object from the heap, built, counted in the heap's release threshold
+    (+0x20 caches, +0x28 = heap bytes / (2 * caches)), and stored in the thread's slot."""
+    src = allocator + 0x18
+    heap = t.u64(src)
+    _lock(t, heap + 0x30)
+    tc = _heap_object(t, heap, t.u8(t.u64(t.main + CLASS_INDEX) + 0x35))
+    _unlock(t, heap + 0x30)
+    _construct_cache(t, tc, t.u64(src), t.u32(src + 0xC))
+    heap = t.u64(src)
+    _lock(t, heap + 0x30)
+    n = (_s32(t.u32(heap + 0x20)) + 1) & M64
+    t.put(heap + 0x20, 4, n)
+    d = (n << 1) & M64
+    t.put(heap + 0x28, 4, ((t.u64(heap) << 12) & M64) // d if d else 0)     # udiv by 0 is 0
+    _unlock(t, heap + 0x30)
+    t.put(_tls_slot(t, t.u32(allocator + 0x10)), 8, tc)
+    return tc
+
+
+def _tls_slot(t, slot):
+    return t.u64(t.tls + 0x1F8) + 0x80 + 8 * slot
+
+
 def _thread_cache(t, allocator, fn):
     """The calling thread's cache (nn::os::GetTlsValue of the allocator's slot), checked to run the
-    cache functions this port reproduces."""
+    cache functions this port reproduces; Allocate makes a missing one, Free falls to the heap."""
     if not t.u8(allocator + 1):
         _refuse("allocator without thread cache")
-    tc = t.u64(t.u64(t.tls + 0x1F8) + 0x80 + 8 * t.u32(allocator + 0x10))
+    tc = t.u64(_tls_slot(t, t.u32(allocator + 0x10)))
     if not tc:
-        _refuse("thread cache not made yet")
+        if fn != TC_ALLOC:
+            _refuse("free on a thread without a cache (0x5433630)")
+        tc = _create_cache(t, allocator)
     if t.u64(tc + (8 if fn == TC_ALLOC else 0x10)) != t.main + fn:
         _refuse("thread cache with other functions")
     return tc

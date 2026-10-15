@@ -423,6 +423,11 @@ def test_the_gift_builder_renders_every_mode_and_kind_and_exports_what_it_shows(
     from gui.views import gifts as view_module
     if not assembler:
         monkeypatch.setattr(view_module.custom_code, "toolchain", lambda: None)
+    import time
+    from types import SimpleNamespace
+    from pokeldn.swsh import wc8
+    # A WC8 carries the second it was built; the export and the recompile below may straddle one.
+    monkeypatch.setattr(wc8, "time", SimpleNamespace(time=lambda: 1_700_000_000.0, gmtime=time.gmtime))
     from pokeldn import gifts
     from pokeldn.app import gift_builder
     from pokeldn.app.catalog import GAMES

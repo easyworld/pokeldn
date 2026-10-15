@@ -401,7 +401,7 @@ def set_2d0(m, o, ident, *_):
 @lifted(0x16EEB98)
 def unruled_460(m, o, pokecon, b, *_):
     """vf 0x460 of the battler when flag bit 2 of +0x499 is clear, +0x30 is below 2 and the battler's
-    rule value (setup map) is absent, 0 or above 4; else 0."""
+    rule value (setup map) is absent, 0 or above 4 (signed: a negative value gives 0); else 0."""
     s = m.u64(o + 0x38)
     if m.u8(s + 0x499) >> 2 & 1 or m.u32(s + 0x30) > 1:
         return 0
@@ -409,7 +409,7 @@ def unruled_460(m, o, pokecon, b, *_):
     p = m.call(m.main + 0x10E2DD4, m.u64(m.u64(setup + 8) + 0x50), m.vcall(b, 0x98) & 0xFFFFFFFF)
     if p:
         v = m.s(p, 4)
-        if 0 < v <= 4:
+        if v <= 4 and v != 0:  # cmp #4; ccmp #0, le at 0x16eebec: signed
             return 0
     return m.vcall(b, 0x460)
 

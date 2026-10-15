@@ -30,6 +30,9 @@ def translate(value: str) -> str:
     outfit = re.fullmatch(r"Puts the (.+) in the wardrobe", value)
     if outfit:
         return "在衣柜中添加" + translate(outfit[1]) + "。"
+    card_id_error = re.fullmatch(r"The card id is 1 to (\d+)\.", value)
+    if card_id_error:
+        return f"卡片 ID 必须为 1 至 {card_id_error[1]}。"
     invalid_gift = re.fullmatch(r"Invalid gift file: (.+)", value, re.S)
     if invalid_gift:
         return "礼物文件无效：" + translate(invalid_gift[1])

@@ -22,6 +22,12 @@ conversion.
 
 ## First launch
 
+The desktop header and navigation rail share a solid background. The checkerboard is confined
+to the workspace. The header has no visible app title and supports dragging and double-clicking
+to maximize or restore. macOS retains its native window buttons; Windows and Linux use buttons
+in the app header. The integrated header has been visually checked on macOS; Windows and Linux
+window-manager behavior remains unverified.
+
 - macOS: the app is unsigned. Open it once and close the warning, then open System Settings →
   Privacy & Security → Security → Open Anyway next to pokeldn. Confirm with your password.
   Later launches open normally.

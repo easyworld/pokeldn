@@ -91,6 +91,8 @@ def client_of_position(m, o, pos, out_slot, out_index, *_):
     m.put(out_slot, 1, slot)
     count = 0 if slot == 5 else sum(slot_of_position(mode, rule, p) == slot for p in range(pos))
     m.put(out_index, 1, count)
+    # x0 is left at the table 0x3c6a374 once the loop from 0x1153a54 runs, else it is still o.
+    return m.main + 0x3C6A374 if pos >= 3 and slot != 5 else o
 
 
 # Client slot -> side class per battle mode (0x3c6a450, 0x3c6a455, 0x3c6a45a); slot 5 or past: 2.

@@ -1,4 +1,4 @@
-/* C6 only: restart when the USB host link stops seeing SOFs, and report the
+/* C6/S3: restart when the USB host link stops seeing SOFs, and report the
    registers around the stall after the restart. docs/hardware_esp32.md, Supported boards. */
 #pragma once
 
