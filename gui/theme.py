@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from dataclasses import fields
 
 import flet as ft
 import flet.canvas as cv
@@ -28,6 +29,8 @@ BRAND_BLUE = ("#4FD9F5", "#4E61FC")   # the logo's two gradients (assets/logo.sv
 BRAND_RED = ("#FAA555", "#FD474D")
 SELECTED = ft.Colors.with_opacity(0.14, BLUE)
 MONO = "monospace"
+CJK_FONT = "Noto Sans CJK SC"
+FONT_ASSETS = {CJK_FONT: "fonts/NotoSansCJKsc-Regular.otf"}
 CONTROL_HEIGHT = 34
 CONTROL_PADDING = ft.Padding(12, 8, 12, 8)
 CONTROL_RADIUS = 8
@@ -59,6 +62,8 @@ def system_font_family() -> str | None:
 def app_theme(*, system_fonts: bool = True) -> ft.Theme:
     return ft.Theme(
         font_family=system_font_family() if system_fonts else None,
+        text_theme=ft.TextTheme(**{f.name: ft.TextStyle(font_family_fallback=[CJK_FONT])
+                                   for f in fields(ft.TextTheme)}),
         color_scheme_seed=BLUE,
         color_scheme=ft.ColorScheme(primary=BLUE, secondary=BLUE, surface=PANEL, on_surface=TEXT,
                                     error=RED, outline=BORDER, surface_container_highest=FIELD),
@@ -72,7 +77,7 @@ def app_theme(*, system_fonts: bool = True) -> ft.Theme:
 
 
 def text(value: str, size: float = 13, color: str = TEXT, weight=None, **kwargs) -> ft.Text:
-    kwargs.setdefault("style", ft.TextStyle(height=1.4))
+    kwargs.setdefault("style", ft.TextStyle(height=1.4, font_family_fallback=[CJK_FONT]))
     return ft.Text(value, size=size, color=color, weight=weight, **kwargs)
 
 
@@ -123,9 +128,9 @@ def notch(*controls: ft.Control) -> ft.Row:
 
 def panel_header(title: str, *actions: ft.Control) -> ft.Container:
     return ft.Container(
-        ft.Row([text(title, 15, weight=ft.FontWeight.W_600), ft.Row(list(actions), spacing=2)],
+        ft.Row([text(title, 15, weight=ft.FontWeight.W_600, expand=True), ft.Row(list(actions), spacing=2)],
                alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=ft.Padding(18, 14, 12, 6), height=52)
+        padding=ft.Padding(18, 14, 12, 6))
 
 
 def section(title: str, body: ft.Control | None = None, trailing: ft.Control | None = None) -> ft.Column:
@@ -204,7 +209,8 @@ def field(label: str = "", value: str = "", hint: str = "", mono: bool = False, 
         kwargs.setdefault("input_filter", ft.InputFilter(f"^{'[0-9]' if digits else '.'}{count}$"))
     if digits:
         kwargs.setdefault("keyboard_type", ft.KeyboardType.NUMBER)
-    style = ft.TextStyle(size=13, color=TEXT, font_family=MONO if mono else None)
+    style = ft.TextStyle(size=13, color=TEXT, font_family=MONO if mono else None,
+                         font_family_fallback=[CJK_FONT])
     uniform = not kwargs.get("multiline") and not label and "height" not in kwargs
     if uniform:
         kwargs.setdefault("height", CONTROL_HEIGHT)
@@ -222,7 +228,8 @@ def field(label: str = "", value: str = "", hint: str = "", mono: bool = False, 
 def dropdown(options: list[tuple[str, str]], value: str | None, on_select=None, **kwargs) -> ft.Dropdown:
     return ft.Dropdown(value=value, options=[ft.DropdownOption(key=k, text=t) for k, t in options],
                        on_select=on_select, dense=True, filled=True, bgcolor=FIELD, border=_border(),
-                       text_size=13, expand=True, height=CONTROL_HEIGHT, content_padding=CONTROL_PADDING,
+                       text_size=13, text_style=ft.TextStyle(font_family_fallback=[CJK_FONT]),
+                       expand=True, height=CONTROL_HEIGHT, content_padding=CONTROL_PADDING,
                        trailing_icon=pixel_icon("chevron-down", color=MUTED),
                        selected_trailing_icon=pixel_icon("chevron-up", color=BLUE),
                        menu_style=ft.MenuStyle(bgcolor=PANEL, shape=ft.RoundedRectangleBorder(radius=10)),
@@ -230,7 +237,7 @@ def dropdown(options: list[tuple[str, str]], value: str | None, on_select=None, 
 
 
 def labeled_control(label: str, control: ft.Control, **kwargs) -> ft.Column:
-    return ft.Column([ft.Container(text(label, 11, MUTED), height=16,
+    return ft.Column([ft.Container(text(label, 11, MUTED),
                                    alignment=ft.Alignment.CENTER_LEFT), control],
                      spacing=4, tight=True, **kwargs)
 
@@ -254,7 +261,7 @@ def button(label: str, on_click=None, icon=None, color: str = BLUE, filled: bool
         shape=ft.StadiumBorder(), padding=ft.Padding(16, 8, 16, 8),
         side={ft.ControlState.FOCUSED: ft.BorderSide(2, ft.Colors.with_opacity(0.6, BLUE)),
               ft.ControlState.DEFAULT: ft.BorderSide(0, ft.Colors.TRANSPARENT)},
-        text_style=ft.TextStyle(size=13, weight=ft.FontWeight.W_500),
+        text_style=ft.TextStyle(size=13, weight=ft.FontWeight.W_500, font_family_fallback=[CJK_FONT]),
         overlay_color={ft.ControlState.DEFAULT: ft.Colors.TRANSPARENT,
                        ft.ControlState.HOVERED: ft.Colors.with_opacity(0.08, "#FFFFFF"),
                        ft.ControlState.PRESSED: ft.Colors.with_opacity(0.14, "#000000")},

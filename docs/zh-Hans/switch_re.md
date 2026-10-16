@@ -70,6 +70,8 @@ NCA 部分在标题密钥下是 AES-128-CTR（计数器：该部分的 CTR 值�
     ./.venv/bin/python tools/switch/bktr_read.py UPDATE.nsp --base BASE.nsp \
         --extract /Data/Managed/Metadata/global-metadata.dat
 
+基础内容必须是更新所对应游戏的 Program NCA，且带有 CTR RomFS 分区；XCI 的更新分区包含系统标题的 Program NCA，找到的第一个 Program NCA 可能属于其中之一。
+
 ## 寻找来电者
 
 扫描 `bl` 的图像字（`100101` 加上带符号的 26 位字偏移量）和尾部调用 `b` (`000101`)，单行 C# 转发器将其编译为：
@@ -83,7 +85,7 @@ NCA 部分在标题密钥下是 AES-128-CTR（计数器：该部分的 CTR 值�
 对 nnSdk 的调用会经过一个由 JUMP_SLOT 重定位填充的 GOT 槽，命名该符号：交叉引用槽 (`tools/switch/nso_imports.py`)，然后计算其一个 PLT 存根的调用者。
 ## 工具
 
-除上述 `xci_read.py`、`romfs_read.py`、`bktr_read.py` 和 `rtti_names.py` 外，全部离线：
+读取器位于 `pokeldn.switch`（容器与 NCA、RomFS、NSO、Trinity 包）；工具是其命令行入口，需要游戏文件的程序通过它读取用户自行转储的内容。除上述 `xci_read.py`、`romfs_read.py`、`bktr_read.py` 和 `rtti_names.py` 外，全部离线：
 
     tools/switch/nso_read.py     an NSO's three segments decompressed (pure-Python LZ4) at their
                                  memory offsets: a file offset is an address

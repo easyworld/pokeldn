@@ -134,6 +134,8 @@ def main(argv=None):
 
     try:
         record = build_record(args)
+        if not args.export_gift:
+            record = wc8.for_distribution(record)
         pokemon.SERVICE.validate_gift(record)
     except (OSError, pokemon.BuilderError, ValueError, struct.error) as exc:
         print(str(exc), file=sys.stderr)

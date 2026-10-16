@@ -56,3 +56,37 @@ def get_tls_value(m, slot, *_):
 @lifted(0x343DA30)
 def set_tls_value(m, slot, value, *_):
     m.put(_tls_slot(m, slot), 8, value)
+
+
+@lifted(0x343D5B0)
+def ticks_to_ns(m, ticks, *_):
+    """nn::os::ConvertToTimeSpan (the SDK's, through [0x46ca3d0]): ticks of the 19.2 MHz counter as
+    nanoseconds, saturated at the s64 limits."""
+    t = ticks - (1 << 64) if ticks >> 63 else ticks
+    if t > 0x0275254609ABE000:
+        return 0x7FFFFFFFFFFFFFFF
+    if t < -0x0275254609ABE000:
+        return 1 << 63
+    div = lambda a, b: abs(a) // b * (1 if a >= 0 else -1)      # C division, toward zero
+    q = div(t, 19200000)
+    frac = div((t - q * 19200000) * 1000000000, 19200000)
+    return (q * 1000000000 + frac) & 0xFFFFFFFFFFFFFFFF
+
+
+@lifted(0x343E6D0)
+def initialize_light_event(m, event, signaled, mode, *_):
+    """nn::os::InitializeLightEvent as measured for (not signaled, auto clear 1): bytes +0 and +1 = 1,
+    state +4 = 0. Any other arguments are refused."""
+    if signaled & 0xFF or mode & 0xFFFFFFFF != 1:
+        raise UnliftedCall("InitializeLightEvent with unmeasured arguments")
+    m.put(event, 1, 1); m.put(event + 1, 1, 1); m.put(event + 4, 4, 0)
+    return event
+
+
+@lifted(0x2A70AB4)
+def destroy_event_holder(m, p, *_):
+    """Set the vtable 0x44a92f8 and finalize the light event at +0x28 (nn::os::FinalizeLightEvent
+    clears its byte +1)."""
+    m.put(p, 8, m.main + 0x44A92F8)
+    m.put(p + 0x29, 1, 0)
+    return p + 0x28

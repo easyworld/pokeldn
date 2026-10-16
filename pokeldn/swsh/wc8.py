@@ -57,6 +57,17 @@ def unpack_date(rec):
             (v >> 6) & 0x3F, v & 0x3F)
 
 
+def for_distribution(rec):
+    """Fill an absent distributor date at send time; local wireless preserves it (docs/swsh_gift.md)."""
+    if not sealed(rec):
+        raise ValueError("The WC8 size or checksum is invalid.")
+    if rec[:8] != bytes(8):
+        return bytes(rec)
+    out = bytearray(rec)
+    out[:8] = pack_date()
+    return seal(out)
+
+
 def build(card_id=0x270F, region_mask=0xFFFF, dedup=0, extra=None, date=None):
     """A sealed record with the card id, the region mask, the duplicate-check byte and the date set,
     and `extra` ({offset: bytes}) written over it before sealing."""

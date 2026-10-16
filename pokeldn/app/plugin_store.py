@@ -125,7 +125,13 @@ def _read(path: str) -> Package:
         if state in ("newer", "older"):
             raise PackageError(message)
         module = str(meta.get("module", "plugin"))
-        if f"{prefix}{module}.py" not in names:
+        if "locale" in meta or "strings" in meta:
+            from pokeldn.app.i18n import read_pack
+            try:
+                read_pack(meta, lambda name: archive.read(prefix + name))
+            except ValueError as error:
+                raise PackageError(str(error)) from None
+        elif f"{prefix}{module}.py" not in names:
             raise PackageError(f"The package has no {module}.py next to plugin.toml.")
         contents = {n: archive.read(n) for n in names}
         findings = scan(contents)

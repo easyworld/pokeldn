@@ -15,9 +15,9 @@ if os.path.isdir(BUNDLED_LDN):
 
 import trio
 
-import ldn
+from pokeldn.ldn import api as ldn
 from pokeldn.ldn.transport import board_radio, find_ap_phy, list_phys
-from pokeldn.host_support import resolve_keys
+from pokeldn.host_support import resolve_keys, needs_root
 
 STALE_VIFS = ["ldn", "ldn-mon", "ldn-tap"]
 
@@ -42,7 +42,7 @@ def main():
     ap.add_argument("--dwell", type=float, default=1.5, help="seconds per channel")
     args = ap.parse_args()
 
-    if os.geteuid() != 0 and not board_radio():
+    if needs_root():
         ap.error("must run as root (monitor mode needs the raw radio); re-run with sudo -E")
 
     phy = find_ap_phy(log=print) if args.phy == "auto" else args.phy

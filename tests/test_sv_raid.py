@@ -188,6 +188,33 @@ def test_partners_take_four_fifths_of_the_host_pokemon_s_level_whatever_the_stag
     assert [raid_partners.level_for(host) for host in (20, 50, 100, 37, 12)] == [16, 40, 80, 29, 9]
 
 
+# Partner seed, then the encryption constant, TID, SID, PID, height and weight both partners' records
+# held in an emulated Scarlet 4.0.0's memory during five raid battles (docs/sv_raid.md, Partners).
+PARTNER_RECORDS = [
+    (0xB040669FFB23783B, 0x1DC0E296, 20321, 19657, 0xAB3F81C5, 106, 198),
+    (0x89F4C84C70AD570C, 0x934AC167, 61641, 52925, 0x7BB08914, 88, 136),
+    (0x8AF9920EC9C3F0CA, 0xEC615B25, 53888, 50857, 0x86C6240B, 110, 71),
+    (0xAB3BCF8D691DC958, 0x8BBB33B3, 30677, 58200, 0x4BA16A7D, 151, 195),
+    (0xC39985CC37F43B70, 0x5A91A5CB, 24528, 23528, 0x76D0FABB, 87, 172)]
+
+
+@pytest.mark.parametrize("record", PARTNER_RECORDS)
+def test_a_partner_seed_gives_the_identity_and_size_a_scarlet_gave_its_partners(record):
+    assert raid_partners.identity(record[0]) == record[1:]
+
+
+def test_the_partner_table_is_the_game_s_raid_trainer_tables():
+    """raid_partners.json is the game's raid_trainer_01..03 and trdata entries; Serebii's text agrees
+    with it, with Steel for Henry, and Dylan and Luke take their species' default Tera type."""
+    for stage in range(len(raid_partners.LEVELS)):
+        game, ours = raid_partners.game_pool(stage), raid_partners.pool(stage)
+        assert [g["species"] for g in game] == [p.species for p in ours]
+        assert {g["level"] for g in game} == {raid_partners.LEVELS[stage]}
+        assert [raid_encounter.TERA_TYPES[g["tera"]] if g["tera"] is not None else p.trainer
+                for g, p in zip(game, ours)] == [p.trainer if p.trainer in ("Dylan", "Luke") and stage > 2
+                                                  else p.tera for p in ours]
+
+
 def test_a_partner_seed_draws_the_trainers_asked_for_in_slot_order():
     for names in ([], ["Luke"], ["Dylan", "Luke"], ["ava", " Eli "]):
         wanted = [raid_partners.trainer(name) for name in names]
@@ -212,13 +239,15 @@ def test_the_raidpoint_carries_the_partner_seed_and_the_raid_s_stage():
 
 
 def test_lz4_blocks_cross_an_independent_decoder():
-    """Ours read by `nso_read.lz4_block`; one liblz4 1.10 made (LZ4_compress_default) read by ours."""
-    from nso_read import lz4_block
+    """Ours read by the NSO reader's `lz4_block`; one liblz4 1.10 made (LZ4_compress_default), with
+    overlapping matches, read by both."""
+    from pokeldn.switch.nso import lz4_block
     plain = raid.bootstrap(raid_encounter.generate(0xBD13FB43), ())
     assert lz4_block(lz4.compress(plain), len(plain)) == plain
     theirs = bytes.fromhex("ff0552616964506f696e745f504f4b454c444e5f30000100145f504b4c444e0500240f6300"
                            "06500000000000")
-    assert lz4.decompress(theirs, 149) == b"RaidPoint_POKELDN_0" + bytes(40) + b"PKLDN" * 12 + bytes(30)
+    want = b"RaidPoint_POKELDN_0" + bytes(40) + b"PKLDN" * 12 + bytes(30)
+    assert lz4.decompress(theirs, 149) == lz4_block(theirs, 149) == want
 
 
 def test_the_port2_session_and_the_channel_table_are_a_retail_host_s():
@@ -593,7 +622,7 @@ class RaidGuestConsole:
 
 
 def run_raid_host(monkeypatch, tmp_path, rewards=(), extra=(), ready_after=2.4, seconds=60,
-                  consoles=None):
+                  consoles=None, bag=None):
     """-> the scripted console (or the list given in `consoles`, made with the clock) and the clock,
     after the host has run against them."""
     clock = Clock()
@@ -645,7 +674,7 @@ def run_raid_host(monkeypatch, tmp_path, rewards=(), extra=(), ready_after=2.4, 
     monkeypatch.setattr(sv_host, "needs_root", lambda: False)
     monkeypatch.setattr(sv_host.pokemon_service, "prepare_file", lambda game, path, **kw: path)
     monkeypatch.setattr(sv_host.pokemon_service.SERVICE, "names",
-                        lambda game, kind: [{"id": 15, "name": "Quick Ball"}])
+                        lambda game, kind: bag if bag is not None else [{"id": 15, "name": "Quick Ball"}])
     tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
     args = build(tool, {"--raid-pokemon": {"file": str(ours)}, "--raid-seed": "000F34C3",
                         "--raid-reward": [{"item_id": str(i), "quantity": str(q)} for i, q in rewards]},

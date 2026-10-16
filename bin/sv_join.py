@@ -29,7 +29,7 @@ if os.path.isdir(BUNDLED_LDN):
     sys.path.insert(0, BUNDLED_LDN)
 
 import trio
-import ldn
+from pokeldn.ldn import api as ldn, radios
 
 from pokeldn.host_support import open_output
 from pokeldn import pokemon as pokemon_service
@@ -586,7 +586,7 @@ def main(argv=None):
             async def seat():
                 # ldn.connect can block for minutes when the console's host phase ends under it; the
                 # scope bounds the association alone.
-                with trio.move_on_after(args.connect_timeout) as scope:
+                with trio.move_on_after(radios.join_timeout(args.connect_timeout)) as scope:
                     async with ldn.connect(param) as network:
                         scope.deadline = float("inf")
                         info = network.info()

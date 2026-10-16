@@ -1,6 +1,6 @@
 """The heap the battle server allocates from: the game's guarded pair of nn::mem::StandardAllocator
 (main+0x4740ee0) and the SDK allocator under it, a thread cache over a page heap of spans
-(docs/sv_raid.md, The house engine). SDK functions are keyed by their offset from main (SDK address
+(docs/sv_raid.md, Reproducing a round). SDK functions are keyed by their offset from main (SDK address
 minus main), as the replay maps them. Every SDK entry runs on a transaction: a path this port does not
 reproduce refuses the call with nothing written.
 
@@ -22,7 +22,11 @@ Layout, as the code reads it:
     +0 u16 pages per span, +2 u16 object size
 """
 
-from pokeldn.sv.battle.machine import FUNCTIONS, MASK, Machine, UnliftedCall, lifted
+import re
+import struct
+
+from pokeldn.sv.battle.engine.calls import _need, _tail, _vtail
+from pokeldn.sv.battle.machine import FORMAT, FUNCTIONS, MASK, Machine, UnliftedCall, lifted
 
 M64 = MASK[8]
 M32 = MASK[4]
@@ -39,14 +43,19 @@ CLASSES = 0x39
 SLOT_DIV7 = 0x6DB6DB6DB6DB6DB7  # the inverse of 7: descriptor offset / 0x70
 
 
+_CHANGED = re.compile(rb"[^\x00]+")      # a run of changed bytes in a page's XOR
+
+
 class _Tx(Machine):
-    """Reads through to `base`, buffers every write; `commit` stores the bytes that changed."""
+    """Reads through to `base`, buffers every write; `commit` stores the bytes that changed, run by run,
+    from the span of each page the writes touched."""
 
     def __init__(self, base):
         super().__init__(pages=None, main=base.main, stack=base.sp, tls=base.tls)
         self.base = base
         self.cache = {}
         self.orig = {}
+        self.span = {}              # page -> [lowest, highest + 1) offset written
 
     def page(self, address):
         p = address & ~(PAGE - 1)
@@ -55,27 +64,42 @@ class _Tx(Machine):
             b = self.cache[p] = bytearray(self.base.read(p, PAGE))
         return b
 
+    def _touch(self, p, lo, hi):
+        s = self.span.get(p)
+        if s is None:
+            self.orig[p] = bytes(self.page(p))
+            self.span[p] = [lo, hi]
+        else:
+            if lo < s[0]:
+                s[0] = lo
+            if hi > s[1]:
+                s[1] = hi
+
     def write(self, address, data):
         i = 0
         while i < len(data):
             p = address & ~(PAGE - 1)
-            if p not in self.orig:
-                self.orig[p] = bytes(self.page(p))
             o = address & (PAGE - 1); k = min(len(data) - i, PAGE - o)
+            self._touch(p, o, o + k)
             self.cache[p][o:o + k] = data[i:i + k]; address += k; i += k
 
+    def put(self, address, size, value):
+        o = address & (PAGE - 1)
+        if o + size > PAGE:
+            return super().put(address, size, value)
+        p = address - o
+        self._touch(p, o, o + size)
+        struct.pack_into(FORMAT[size], self.cache[p], o, value & MASK[size])
+
     def commit(self):
-        for p, old in self.orig.items():
-            new = self.cache[p]
-            i = 0
-            while i < PAGE:
-                if new[i] == old[i]:
-                    i += 1; continue
-                j = i
-                while j < PAGE and new[j] != old[j]:
-                    j += 1
-                self.base.write(p + i, bytes(new[i:j]))
-                i = j
+        for p, (lo, hi) in self.span.items():
+            new, old = self.cache[p][lo:hi], self.orig[p][lo:hi]
+            if new == old:
+                continue
+            n = hi - lo
+            diff = (int.from_bytes(new, "little") ^ int.from_bytes(old, "little")).to_bytes(n, "little")
+            for run in _CHANGED.finditer(diff):
+                self.base.write(p + lo + run.start(), bytes(new[run.start():run.end()]))
 
 
 def _transaction(m, fn, *args):
@@ -156,8 +180,6 @@ def _release_descriptor(t, heap, d):
         _push(t, heap + 0x50, page)
 
 
-# --- nn::os ----------------------------------------------------------------------------------------
-
 def _cancel_state(t):
     """0x51882f0 (pthread_setcancelstate): nothing to do while no cancellation key exists."""
     if t.u32(t.main + CANCEL_KEY) != M32:
@@ -193,8 +215,6 @@ def _unlock(t, mutex):
         _refuse("mutex with waiters")
     t.put(mutex + 0x18, 4, 0)
 
-
-# --- the page heap ---------------------------------------------------------------------------------
 
 def _find_run(t, heap, n):
     """0x518bcf8: the free run for `n` pages: the first non-empty exact-or-larger list below 0xff;
@@ -318,7 +338,95 @@ def _page_alloc(t, heap, n):
     while page and (t.u8(page + 0x1A) == 1 or t.u64(page + 0x10) == M64):
         page = t.u64(page)
     if not page:
-        _refuse("new descriptor page")
+        page = _new_descriptor_page(t, heap)
+    d = _take_descriptor(t, heap, page)
+    k = ((start - heap) & M64) >> 12
+    run = t.u64(t.u64(heap + 8) + 8 * k) if k < t.u64(heap) else 0
+    if not run or t.u64(run + 0x20) != size:
+        run = _find_run(t, heap, n)     # the run moved (a new descriptor page came off its start)
+        if not run:
+            _refuse("no free run after a new descriptor page")
+        if t.u64(run + 0x20) == n:
+            if t.u8(heap + 0x2C):
+                _refuse("heap commits pages")
+            i = _run_list(n)
+            _unlink(t, run)
+            _bitmap_clear_if_empty(t, heap, i)
+            t.put(run + 0x14, 4, 0); t.put(run + 0x28, 4, 0); t.put(run + 0x13, 1, 1)
+            _release_descriptor(t, heap, d)
+            return run
+    return _carve(t, heap, run, n, d)
+
+
+def _new_descriptor_page(t, heap):
+    """0x518dc64: a descriptor page off the start of the free run in the lowest non-empty list (the
+    smallest run, lowest address on ties, in the shared list); it describes itself (state 3) and joins
+    the list at +0x50. A one-page run gives its descriptor to the page and its slot back (0x518a93c
+    may then compact its old page)."""
+    i = None
+    for w in range(4):
+        bits = t.u64(heap + 0x860 + 8 * w)
+        if bits:
+            i = ((bits & -bits).bit_length() - 1) | (w << 6)
+            break
+    if i is None:
+        _refuse("no free run for a descriptor page")
+    run = t.u64(heap + 0x60 + 8 * i)
+    if not run:
+        _refuse("abort: free run bitmap out of step")
+    if i == 0xFF:
+        cur = run
+        while cur:
+            size, other = t.u64(cur + 0x20), t.u64(run + 0x20)
+            if size < other or (size == other and t.u64(cur + 0x18) < t.u64(run + 0x18)):
+                run = cur
+            cur = t.u64(cur)
+    page = t.u64(run + 0x18)
+    if t.u8(heap + 0x2C):
+        _refuse("heap commits a descriptor page")
+    t.put(page + 0x18, 2, 0x23)
+    t.put(page + 8, 8, 0); t.put(page + 0x10, 8, 0x1FFFFFFF)
+    t.put(page + 0x1A, 1, 0); t.put(page, 8, 0); t.put(page + 0x48, 8, 0)
+    t.write(page + 0x20, bytes(0x28))
+    pages = t.u64(run + 0x20)
+    if pages == 1:
+        _unlink(t, run)
+        _bitmap_clear_if_empty(t, heap, 0)
+        t.write(page + 0x20, t.read(run, 0x70))     # the run's descriptor becomes the page's own
+        t.put(run + 0x13, 1, 0)
+        t.put(page + 0x20, 8, 0); t.put(page + 0x28, 8, 0)
+        _table_span(t, heap, page + 0x20)
+        t.put(page + 0x33, 1, 3)
+        _release_descriptor(t, heap, run)
+        _compact(t, heap, run & ~0xFFF & M64, 0)
+        _push(t, heap + 0x50, page)
+        return page
+    t.put(page + 0x34, 4, 0); t.put(page + 0x38, 8, page); t.put(page + 0x40, 8, 1)
+    t.put(page + 0x33, 1, 3)
+    if pages <= 0x100:
+        _unlink(t, run)
+        _bitmap_clear_if_empty(t, heap, pages - 1)
+    slot = _table_slot(t, heap, page)
+    t.put(slot, 8, 0)
+    t.put(slot + 8 * t.u64(run + 0x20) - 8, 8, 0)
+    start = page + PAGE
+    slot = _table_slot(t, heap, start)
+    t.put(slot, 8, run)
+    t.put(slot + 8 * pages - 0x10, 8, run)
+    t.put(run + 0x18, 8, start); t.put(run + 0x20, 8, pages - 1)
+    t.put(page + 0x32, 1, 0)
+    slot = _table_slot(t, heap, page)
+    t.put(slot, 8, page + 0x20)
+    t.put(slot + 8 * t.u64(page + 0x40) - 8, 8, page + 0x20)
+    if pages - 1 <= 0xFF:
+        _push(t, heap + 0x60 + 8 * (pages - 2), run)
+        _bitmap_set(t, heap, pages - 2)
+    _push(t, heap + 0x50, page)
+    return page
+
+
+def _take_descriptor(t, heap, page):
+    """A descriptor slot off `page` (the highest free bit); a page left full moves to the list at +0x58."""
     used = t.u64(page + 0x10)
     i = 64 - ((~used) & M64).bit_length()
     t.put(page + 0x10, 8, used | ((1 << 63) >> i))
@@ -329,56 +437,179 @@ def _page_alloc(t, heap, n):
     if free == 0:
         _unlink(t, page)
         _push(t, heap + 0x58, page)
+    return d
+
+
+def _table_span(t, heap, d):
+    """The page -> span table names `d` at its two ends (a free run) or on every page (a class span)."""
+    slot = _table_slot(t, heap, t.u64(d + 0x18))
+    if t.u8(d + 0x12) == 0:
+        t.put(slot, 8, d)
+        t.put(slot + 8 * t.u64(d + 0x20) - 8, 8, d)
+    else:
+        for j in range(t.u64(d + 0x20)):
+            t.put(slot + 8 * j, 8, d)
+
+
+def _move_descriptor(t, heap, old, new):
+    """Descriptor `new` becomes a copy of `old` in its list and in the table; `old` is left in state 0."""
+    t.write(new, t.read(old, 0x70))
+    t.put(old + 0x13, 1, 0)
+    nx = t.u64(old)
+    if nx:
+        t.put(new, 8, nx); t.put(nx + 8, 8, new); t.put(old, 8, 0)
+    else:
+        t.put(new, 8, 0)
+    pv = t.u64(old + 8)
+    if pv:
+        t.put(new + 8, 8, pv); t.put(pv, 8, new); t.put(old + 8, 8, 0)
+    else:
+        t.put(new + 8, 8, 0)
+    _table_span(t, heap, new)
+
+
+def _compact(t, heap, page, fill):
+    """0x518a93c(heap, page, fill): a first descriptor page (+0x1a 1) takes in free-run descriptors from
+    other pages while it has free slots (any with `fill`, else 0x11 or more), lowest list first; a page
+    emptied that way (or `page` itself when it is not a first page) with all 0x23 slots free and on a
+    list moves its own span's descriptor to another page and goes back to the heap as a free run."""
+    if t.u8(page + 0x1A) == 1:
+        while True:
+            count = t.u16(page + 0x18)
+            if (fill & 1 and count == 0) or (not fill & 1 and count < 0x11):
+                return
+            d = None
+            for i in range(0x100):
+                if not t.u64(heap + 0x860 + 8 * (i >> 6)) >> (i & 63) & 1:
+                    continue
+                cur = t.u64(heap + 0x60 + 8 * i)
+                while cur and cur & ~0xFFF & M64 == page:
+                    cur = t.u64(cur)
+                if cur:
+                    d = cur
+                    break
+            if d is None:
+                return
+            source = d & ~0xFFF & M64
+            _move_descriptor(t, heap, d, _take_descriptor(t, heap, page))
+            _release_descriptor(t, heap, d)
+            page = source
+            if t.u8(page + 0x1A) != 1:
+                break
+    if t.u16(page + 0x18) != 0x23 or not (t.u64(page) or t.u64(page + 8)):
+        return
+    table = t.u64(heap + 8)
+    meta = t.u64(table)
+    first = t.u64(table + ((((t.u64(meta + 0x18) + (t.u64(meta + 0x20) << 12)) - heap) & M64) >> 9
+                           & 0x7FFFFFFFFFFFF8)) & ~0xFFF & M64
+    count = t.u16(first + 0x18)
+    target = first
+    if count <= 0x10:
+        target = t.u64(heap + 0x50)
+        while target and (target == page or not t.u16(target + 0x18)):
+            target = t.u64(target)
+        if not target:
+            if not count:
+                return
+            target = first
+    new = _take_descriptor(t, heap, target)
+    _move_descriptor(t, heap, page + 0x20, new)
+    _unlink(t, page)
+    _free_span(t, heap, new)
+
+
+def _absorb_after(t, heap, x, y):
+    """Free run `x` takes in the free run `y` that follows it; y's descriptor goes back to its page."""
+    table = t.u64(heap + 8)
+    k = ((t.u64(y + 0x18) - heap) & M64) >> 12
+    merged = (t.u64(x + 0x20) + t.u64(y + 0x20)) & M64
+    t.put(table + 8 * k, 8, 0)
+    t.put(table + 8 * (k + t.u64(y + 0x20)) - 8, 8, 0)
+    _release_descriptor(t, heap, y)
+    slot = _table_slot(t, heap, t.u64(x + 0x18))
+    old = t.u64(x + 0x20)
+    if old != 1:
+        t.put(slot + 8 * old - 8, 8, 0)
+    t.put(slot + 8 * merged - 8, 8, x)
+    t.put(x + 0x20, 8, merged)
+
+
+def _absorb_before(t, heap, x, y):
+    """Free run `x` takes in the free run `y` before it and starts where `y` started."""
+    table = t.u64(heap + 8)
+    start = t.u64(y + 0x18)
     k = ((start - heap) & M64) >> 12
-    run = t.u64(t.u64(heap + 8) + 8 * k) if k < t.u64(heap) else 0
-    if not run or t.u64(run + 0x20) != size:
-        _refuse("free run moved")
-    return _carve(t, heap, run, n, d)
+    merged = (t.u64(x + 0x20) + t.u64(y + 0x20)) & M64
+    t.put(table + 8 * k, 8, 0)
+    t.put(table + 8 * (k + t.u64(y + 0x20)) - 8, 8, 0)
+    _release_descriptor(t, heap, y)
+    slot = _table_slot(t, heap, t.u64(x + 0x18))
+    t.put(slot, 8, 0)
+    t.put(slot + 8 * t.u64(x + 0x20) - 8, 8, 0)
+    slot = _table_slot(t, heap, start)
+    t.put(slot, 8, x)
+    t.put(slot + 8 * merged - 8, 8, x)
+    t.put(x + 0x18, 8, start); t.put(x + 0x20, 8, merged)
+
+
+def _take_run(t, heap, run):
+    """A free run leaves its list (+0x60 + 8 * list); an emptied list clears its bitmap bit."""
+    i = _run_list(t.u64(run + 0x20))
+    _unlink(t, run)
+    _bitmap_clear_if_empty(t, heap, i)
+
+
+def _put_run(t, heap, run):
+    i = _run_list(t.u64(run + 0x20))
+    _push(t, heap + 0x60 + 8 * i, run)
+    _bitmap_set(t, heap, i)
 
 
 def _coalesce(t, heap, span):
-    """0x518ccec: free run `span` joins the lists, merged with a following free run under 0x100
-    pages; a free run before it is not reproduced."""
+    """0x518ccec: free run `span` merges with free neighbours. A neighbour of 0x100 pages or more
+    survives the merge and keeps its place in the shared list; otherwise the earlier run survives and
+    the result is pushed on its list. Returns the surviving run."""
     start, total, table = t.u64(span + 0x18), t.u64(heap), t.u64(heap + 8)
     k = ((start - heap - 1) & M64) >> 12
     before = t.u64(table + 8 * k) if k < total else 0
-    pages = t.u64(span + 0x20)
-    k = ((start + (pages << 12) - heap) & M64) >> 12
-    after = t.u64(t.u64(heap + 8) + 8 * k) if k < total else 0
-    if before and t.u8(before + 0x13) == 2:
-        _refuse("merge with the run before")
-    if after and t.u8(after + 0x13) == 2:
-        n = t.u64(after + 0x20)
-        if n >= 0x100:
-            _refuse("merge with a large run after")
-        _unlink(t, after)
-        _bitmap_clear_if_empty(t, heap, n - 1)
-        a_start, a_pages = t.u64(after + 0x18), t.u64(after + 0x20)
-        k = ((a_start - heap) & M64) >> 12
-        s_start, s_pages = t.u64(span + 0x18), t.u64(span + 0x20)
-        t.put(t.u64(heap + 8) + 8 * k, 8, 0)
-        merged = (a_pages + s_pages) & M64
-        t.put(t.u64(heap + 8) + 8 * (k + t.u64(after + 0x20)) - 8, 8, 0)
-        _release_descriptor(t, heap, after)
-        first = t.u64(span + 0x18)
-        slot = _table_slot(t, heap, first)
-        if first == s_start:
-            old = t.u64(span + 0x20)
-            if old != 1:
-                t.put(slot + 8 * old - 8, 8, 0)
-            t.put(slot + 8 * merged - 8, 8, span)
-        else:
-            t.put(slot, 8, 0)
-            t.put(slot + 8 * t.u64(span + 0x20) - 8, 8, 0)
-            slot = _table_slot(t, heap, s_start)
-            t.put(slot, 8, span)
-            t.put(slot + 8 * merged - 8, 8, span)
-            t.put(span + 0x18, 8, s_start)
-        t.put(span + 0x20, 8, merged)
-        pages = t.u64(span + 0x20)
-    i = _run_list(pages)
-    _push(t, heap + 0x60 + 8 * i, span)
-    _bitmap_set(t, heap, i)
+    k = ((start + (t.u64(span + 0x20) << 12) - heap) & M64) >> 12
+    after = t.u64(table + 8 * k) if k < total else 0
+    if not (before and t.u8(before + 0x13) == 2):
+        before = 0
+    if not (after and t.u8(after + 0x13) == 2):
+        after = 0
+    if before and after:
+        if t.u64(before + 0x20) >= 0x100:
+            _take_run(t, heap, after)
+            _absorb_after(t, heap, before, span)
+            _absorb_after(t, heap, before, after)
+            return before
+        _take_run(t, heap, before)
+        if t.u64(after + 0x20) >= 0x100:
+            _absorb_after(t, heap, before, span)
+            _absorb_before(t, heap, after, before)
+            return after
+        _take_run(t, heap, after)
+        _absorb_after(t, heap, before, span)
+        _absorb_after(t, heap, before, after)
+        _put_run(t, heap, before)
+        return before
+    if before:
+        if t.u64(before + 0x20) >= 0x100:
+            _absorb_after(t, heap, before, span)
+            return before
+        _take_run(t, heap, before)
+        _absorb_after(t, heap, before, span)
+        _put_run(t, heap, before)
+        return before
+    if after:
+        if t.u64(after + 0x20) >= 0x100:
+            _absorb_before(t, heap, after, span)
+            return after
+        _take_run(t, heap, after)
+        _absorb_after(t, heap, span, after)
+    _put_run(t, heap, span)
+    return span
 
 
 def _free_span(t, heap, span):
@@ -390,8 +621,6 @@ def _free_span(t, heap, span):
         _refuse("heap decommits pages")
     _coalesce(t, heap, span)
 
-
-# --- spans of small objects ------------------------------------------------------------------------
 
 def _take_objects(t, span, tc, most):
     """0x518ec30: up to `most` objects off a span's raw free list, relinked under the cache's key.
@@ -565,8 +794,6 @@ def _release(t, heap, tc, chain):
     _unlock(t, heap + 0x30)
 
 
-# --- the thread cache ------------------------------------------------------------------------------
-
 def _large(t, tc, size):
     """0x5189fc8: whole pages from the heap under its lock."""
     if size >= t.u64(tc + 0x48) >> 2:
@@ -683,8 +910,6 @@ def _tc_free(t, tc, p):
     return 0
 
 
-# --- making a thread's cache ----------------------------------------------------------------------
-
 RANDOM_LOCK = 0x5B13248         # SDK data: nn::os::Mutex over the generator below
 RANDOM_READY = 0x5BD9430        # SDK data: u8, bit 0 once the generator is seeded
 RANDOM_STATE = 0x5BD9434        # SDK data: TinyMT32 state, 4 u32
@@ -725,10 +950,18 @@ def _random(t, dst, n):
 
 def _heap_object(t, heap, cls):
     """0x518e0f8(heap, cls, 0, 1): one object for the allocator's own use, off the first partial span
-    of `cls` in state 3 (plain free links); an emptied span leaves the list."""
+    of `cls` in state 3 (plain free links), else off a new span made in state 3 (0x518e300); an
+    emptied span leaves the list."""
     cinfo = _cinfo(t)
     s = t.u64(heap + 0x880 + 8 * cls)
-    while s:
+    fresh = False
+    while True:
+        if not s:
+            if fresh:
+                _refuse("abort: new allocator span holds nothing")
+            s = _new_span(t, heap, cls, 0)
+            t.put(s + 0x13, 1, 3)
+            fresh = True
         if t.u8(s + 0x13) != 3:
             s = t.u64(s)
             continue
@@ -757,7 +990,6 @@ def _heap_object(t, heap, cls):
         if t.u64(s + 0x28) == 0:
             _unlink(t, s)
         return p
-    _refuse("allocator object needs a new span")
 
 
 def _construct_cache(t, tc, heap, flags):
@@ -863,8 +1095,6 @@ def thread_cache_free(m, tc, p, *_):
     return _transaction(m, _tc_free, tc, p)
 
 
-# --- the game's side -------------------------------------------------------------------------------
-
 def _guarded(m):
     """The allocator pair behind the guarded static 0x4740f88; its first construction is not
     reproduced."""
@@ -934,8 +1164,6 @@ def counted_free(m, this, p, size, align, *_):
     m.put(this + 0x38, 8, 0 if old < n else old - n)
     return r
 
-
-# --- objects made on the heap ----------------------------------------------------------------------
 
 def _scope_push(t, owner):
     """Push `owner` on the thread's allocator-scope stack (TLS slot [0x4765a30], count +0x80, at most
@@ -1010,3 +1238,66 @@ def make_fa19f8(m, owner, pa, pb, *_):
     vtable [0x46e2728] (+0x10, +0x838, +0x888, +0x8e0 at +0, +0x20, +0x28, +0x40), +8 the owner, +0x10
     itself, u32 +0x18 0x80720, +0x710..+0x720 cleared."""
     return _transaction(m, _make_fa19f8, owner, pa, pb)
+
+
+def _allocator_free(m, alloc, block, size):
+    if m.vcall(alloc, 0xF8) & 1 and m.s(m.call(m.main + 0xB4E600) + 0x12C8, 4) >= 1:
+        m.call_void(m.main + 0xB48FE8, alloc, block, size, 4)
+    else:
+        m.vcall_void(alloc, 0x18, block, size, 4)
+
+
+def _dealloc(m, alloc, block, size, align):
+    """Give a block back to an allocator: 0xb48fe8 when vf 0xf8 defers frees and the thread block's
+    +0x12c8 is positive, else vf 0x18. Returns the callee's result."""
+    if m.vcall(alloc, 0xF8) & 1 and m.s(m.call(m.main + 0xB4E600) + 0x12C8, 4) >= 1:
+        return _tail(m, m.main + 0xB48FE8, alloc, block, size, align)
+    return _vtail(m, alloc, 0x18, block, size, align)
+
+
+# The allocator's size classes between 0x221 and 0xaa0 (the constants compared in 0xee5860).
+_SIZE_CLASSES = (0x240, 0x260, 0x270, 0x280, 0x2A0, 0x2D0, 0x2E0, 0x300, 0x330, 0x360, 0x380, 0x3B0, 0x400,
+                 0x450, 0x490, 0x4C0, 0x550, 0x600, 0x660, 0x6D0, 0x800, 0x990, 0xAA0)
+
+
+@lifted(0xEE5860)
+def size_class(m, size, align, *_):
+    """The allocation size for `size` at alignment `align` (clamped to 0x10..0x1000): rounded up to the
+    alignment, then above 0x1e0 to the first size class the alignment divides, else to a page."""
+    M = 0xFFFFFFFFFFFFFFFF
+    a = align if align < 0x1000 else 0x1000
+    a = a if a > 0x10 else 0x10
+    r = size % a
+    n = ((a - r if r else 0) + size) & M
+    if a == 0x1000 or n < 0x1E1:
+        return n
+    if n == 0x1F0:
+        return 0x200
+    if n < 0x221:
+        return n
+    for c in _SIZE_CLASSES:
+        if n <= c and c % a == 0:
+            return c
+    return ((0x1000 - (n & 0xFFF) if n & 0xFFF else 0) + n) & M
+
+
+@lifted(0xB4E600)
+def thread_block(m, *_):
+    """The calling thread's 0x12d0-byte block in TLS slot u32 0x4759408, allocated zeroed through the
+    allocator at 0x4759430 (vf 0x10) on first use."""
+    if m.u8(m.main + 0x4759410) & 1 == 0:
+        raise UnliftedCall("static 0x4759408 not built")
+    slot = m.u32(m.main + 0x4759408)
+    if m.call(m.main + 0x343DA20, slot) == 0:
+        if m.u8(m.main + 0x4759438) & 1 == 0:
+            raise UnliftedCall("static 0x4759430 not built")
+        block = m.vcall(m.u64(m.main + 0x4759430), 0x10, 0x12D0, 8)
+        m.write(block, bytes(0x12D0))
+        m.call_void(m.main + 0x343DA30, m.u32(m.main + 0x4759408), block)
+    return m.call(m.main + 0x343DA20, m.u32(m.main + 0x4759408))
+
+
+def _need_free(m, alloc, first):
+    if m.u64(first):
+        a = m.u64(alloc)
+        _need(m, m.u64(m.u64(a) + 0xF8)); _need(m, m.u64(m.u64(a) + 0x18)); _need(m, m.main + 0xB48FE8)

@@ -5,6 +5,8 @@ data folder's `plugins/` (enabled in Settings) or named in POKELDN_PLUGINS (os.p
 folders, always loaded), or an installed package under the `pokeldn.plugins` entry point group.
 Plugins run with the program's full access; none is loaded unless enabled. docs/plugins.md.
 """
+from __future__ import annotations
+
 import importlib.util
 import json
 import os
@@ -16,11 +18,16 @@ from importlib import metadata
 from pathlib import Path
 from typing import Callable
 
-from pokeldn.app.catalog import Field, Game, Tool   # noqa: F401  (re-exported for plugins)
+def __getattr__(name):
+    if name in ("Field", "Game", "Tool"):
+        from pokeldn.app import catalog
+        return getattr(catalog, name)
+    raise AttributeError(name)
+
 
 # docs/plugins.md, Versions: a removal or a change of meaning raises the major, an addition the level.
 API_VERSION = 1                    # the major this pokeldn serves
-API_LEVEL = 4                      # 1.4 the bank; docs/plugins.md, Versions
+API_LEVEL = 5                      # 1.5 language packs; docs/plugins.md, Versions
 API_OLDEST = 1                     # an older major is refused
 DEPRECATED: dict[int, str] = {}    # a served major due for removal -> the release that drops it
 ENTRY_POINT_GROUP = "pokeldn.plugins"
@@ -39,6 +46,8 @@ class Plugin:
     icon: str = ""                        # an image file in the folder
     api: tuple | None = (API_VERSION, 0)   # (major, level) from plugin.toml; None when unreadable
     module: str = "plugin"
+    locale: str = ""
+    translations: dict = field(default_factory=dict)
     entry_point: object = None
     error: str = ""                       # why it did not load; empty once registered
     loaded: bool = False
@@ -192,6 +201,13 @@ def _read_folder(path: Path) -> Plugin:
     plugin.icon = str(path / icon) if icon and (path / icon).is_file() and "/" not in icon else ""
     plugin.module = str(meta.get("module", "plugin"))
     plugin.api = parse_api(meta.get("api"))
+    if "locale" in meta or "strings" in meta:
+        from pokeldn.app.i18n import read_pack
+        try:
+            plugin.translations = read_pack(meta, lambda name: (path / name).read_bytes())
+            plugin.locale = meta["locale"]
+        except ValueError as error:
+            plugin.error = str(error)
     return plugin
 
 
@@ -225,6 +241,8 @@ def _register(plugin: Plugin) -> None:
     state, message = compatibility(plugin.api)
     if state in ("newer", "older"):
         raise RuntimeError(message)
+    if plugin.locale:
+        return
     if plugin.entry_point is not None:
         module = plugin.entry_point.load()
     else:

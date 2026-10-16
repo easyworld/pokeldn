@@ -24,7 +24,7 @@ if os.path.isdir(BUNDLED_LDN):
     sys.path.insert(0, BUNDLED_LDN)
 
 import trio
-import ldn
+from pokeldn.ldn import api as ldn
 from pokeldn.host_support import open_output
 from pokeldn import pokemon as pokemon_service
 from pokeldn.ldn import pia3, pia4, station9, station4

@@ -18,8 +18,9 @@ class Settings:
     keys: str = str(Path.home() / ".switch" / "prod.keys")
     received: str = str(RECEIVED)
     radio_port: str = ""
-    radio: str = ""         # a plugin radio's scheme (pokeldn.plugins); empty: the board
+    radio: str = ""         # external radio scheme (pokeldn.ldn.radios); empty: the board
     plugins: list = field(default_factory=list)   # plugin ids turned on
+    app_language: str = "zh-Hans"   # built-in Chinese, or a plugin id; empty selects English
     baud: int = 921600
     capture: bool = True
     board_trace: bool = False
@@ -92,4 +93,12 @@ def load() -> Settings:
     known = Settings.__dataclass_fields__
     if data.get("ot") == "PkCamp":   # the default before POKELDN
         data["ot"] = Settings.ot
+    # Before API 1.5, this fork used the translated label as the positional offer's key.
+    # Keep the saved offer when upgrading to upstream's language-independent identity.
+    tools = data.get("tool_values", {})
+    for key in ("frlg-trade-host", "frlg-trade-join"):
+        entry = tools.get(key) if isinstance(tools, dict) else None
+        values = entry.get("values") if isinstance(entry, dict) else None
+        if isinstance(values, dict) and "#用于交换的宝可梦" in values:
+            values.setdefault("#Pokemon to offer", values.pop("#用于交换的宝可梦"))
     return Settings(**{k: v for k, v in data.items() if k in known})

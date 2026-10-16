@@ -185,7 +185,7 @@ popup.cancel(asked)                     # no use for the answer any more: the po
 
 更新会替换插件文件夹。设置、缓存和需要长期保存的内容应放在 `register` 提供的 `api.data`，或工具脚本调用 `pokeldn.plugins.data_folder("my-plugin")` 获得的目录中：它位于应用数据目录的 `plugin-data/<id>`，更新时保留，只有用户要求时才随插件移除。
 
-`help=` 在输入框下显示说明，`default=` 填充默认值，`hidden=True` 将其移到高级页。内置工具的字段及 `Field` 其他选项见 `pokeldn/app/catalog.py`。工具的 `fixed` 参数可包含 `{ot}`、`{tid}`、`{sid}`、`{language}`、`{gender}`（设置中的训练家）、`{received}`（已接收文件夹）及 `{stamp}`（启动时间）。
+`help=` 在输入框下显示说明，`default=` 填充默认值，`hidden=True` 将其移到高级页。内置工具的字段及 `Field` 其他选项见 `pokeldn/app/catalog.py`。工具的 `fixed` 参数可包含 `{ot}`、`{tid}`、`{sid}`、`{language}`、`{gender}`（设置中的训练家）、`{received}`（已接收文件夹）及 `{stamp}`（启动时间）。 API 1.5 新增 `Field.identity`，为标签会被翻译的位置参数提供稳定的设置键值。
 
 <a id="a-game-of-its-own"></a>
 
@@ -273,6 +273,43 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 
 <a id="the-plugin-test-kit"></a>
 
+<a id="language-packs-15"></a>
+
+## 语言包（1.5）
+
+语言包是只含数据的文件夹插件。`name` 是“设置 → 应用语言”中显示的名称，`locale` 是语言标签，保存的选择以插件 `id` 标识。
+
+```toml
+id = "community-zh-hans"
+name = "简体中文"
+version = "1.0.0"
+api = "1.5"
+locale = "zh-Hans"
+strings = "strings.toml"
+```
+
+`strings.toml` 与 `plugin.toml` 位于同一目录。带点的键名必须加引号，以便 TOML 将其读为扁平表：
+
+```toml
+"bank.bank_676c47" = "宝可梦银行"
+```
+
+文件只含文本值，无需 Python 模块或 `register` 函数。安装、签名、作者密钥、移除及 `updates` 与其他插件使用同一套处理流程。无效 TOML、非文本值及无效格式语法会在安装前被拒绝；已安装语言包损坏时，显示加载错误并回退到英语。
+
+在“插件”页面安装语言包，然后在“设置 → 应用语言”中选择并重启 pokeldn。选择语言包会启用对应插件，英语始终可选。语言包缺失、禁用或被移除时使用英语；本中文版还提供内置简体中文。训练家语言仍单独决定生成宝可梦的语言。
+
+每次查找都有内联英语默认值。缺失键值使用默认文本，未使用的键值没有影响。`{value0}` 等具名占位符可在翻译中调整位置，但必须保留名称、转换标志及格式说明；`{{` 和 `}}` 表示字面量大括号。占位符无法格式化时，该次查找回退到英语默认值。
+
+```bash
+python scripts/extract_strings.py
+python scripts/extract_strings.py --check
+python scripts/pack_plugin.py examples/plugins/pseudo -o pseudo.pokeplugin
+```
+
+提取器按键名排序写入 `pokeldn/app/data/strings.en.toml`。测试检查模板与源码一致，并拒绝同一键出现两种英语默认值。文字改动时键名保持不变。可将模板复制到独立插件仓库并翻译其值，省略的键无需维护。`examples/plugins/pseudo` 中的部分伪语言用方括号包围部分字符串，其余用于验证回退。示例不包含在桌面包中。
+
+查找范围包括桌面控件、对话框、本地错误、工具目录的标签与帮助，以及游戏机操作说明。参考 Markdown、PKHeX 和游戏模块提供的数据、第三方插件文字及上游异常信息保留其来源语言；本中文版另外维护中文文档与 PKHeX 中文数据展示。会话日志、无线脚本输出及 `[done]` 协议行保持原文本。
+
 ## Plugin Test Kit
 
 使用 `scripts/pack_plugin.py` 打包的 `examples/plugins/test_kit` 提供：
@@ -307,6 +344,7 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 | 1.2 | `pokeldn.popup` |
 | 1.3 | 程序接口：生成器、礼物文件、PKHeX 和开发板 |
 | 1.4 | 银行导入、记录、目的地、提供记录和交换完成处理 |
+| 1.5 | 语言包插件和字符串查找 |
 
 <a id="the-api-version-1"></a>
 
@@ -318,7 +356,7 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 | `api.add_game(game, icon="")` | 添加游戏分组及工具 |
 | `api.add_radio(scheme, install, label="")` | 添加无线适配器 |
 | `api.folder` | 插件文件夹（`Path`），Python 包则为 None |
-| `api.version`、`api.level` | 当前 API 主版本和级别，`1` 和 `4` |
+| `api.version`、`api.level` | 当前 API 主版本和级别，`1` 和 `5` |
 | `api.data` | 更新时保留的目录，首次使用时创建（1.1） |
 | `pokeldn.plugins.data_folder(id)` | 从工具脚本访问同一目录（1.1） |
 | `Tool`、`Field`、`Game` | 应用目录类型，从 `pokeldn.plugins` 导入 |
@@ -333,13 +371,14 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 
 <a id="the-program-surface-13-bank-added-in-14"></a>
 
-## 程序接口（1.3，银行功能于 1.4 加入）
+## 程序接口（1.3，银行功能于 1.4 加入，语言包于 1.5 加入）
 
 插件或基于 pokeldn 源码的独立程序（触摸屏前端、脚本）可使用与应用相同的代码生成礼物和宝可梦、管理开发板。API 主版本 1 内，这些名称保持含义不变；`tests/test_plugin_surface.py` 逐项验证解析。
 
 | 名称 | 含义 |
 |---|---|
 | `python -m pokeldn --list`、`python -m pokeldn TOOL -- ARGS` | 列出工具键值，或使用设置中的训练家和 `--` 后参数运行工具 |
+| `pokeldn.app.i18n.t(key, default, **fmt)`、`select(plugin_id)` | 使用内联英语默认值及具名格式参数查找字符串；按插件 ID 选择启用的语言包，空 ID 选择英语（1.5） |
 | `pokeldn.app.catalog.GAMES` | 内置游戏，每个 `Game` 的 `.tools` 保存 `Tool`：`bin/` 下脚本及字段；应用传入的参数名保持不变 |
 | `pokeldn.pokemon.SERVICE.species(game)`、`.names(game, kind)` | 游戏种类及 `moves`、`items`、`bag`、`held`、`balls`，以 `{"id", "name"}` 列表返回 |
 | `pokeldn.pokemon.SERVICE.options(game, species, trainer)` | 对应种类可以使用的形态、性格、特性、道具和精灵球 |

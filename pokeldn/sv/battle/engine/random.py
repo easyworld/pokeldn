@@ -1,6 +1,7 @@
 """The round's random numbers: one xoroshiro128+ (state +8 and +0x10, seed +0x18, draws +0x20) seeded
 with the RaidPoint's randSeed (docs/sv_raid.md, The battle's random numbers)."""
 
+from pokeldn.sv.battle.engine.calls import M32, _tail
 from pokeldn.sv.battle.machine import lifted
 
 M64 = 0xFFFFFFFFFFFFFFFF
@@ -44,3 +45,8 @@ def chance(m, rand, percent, *_):
             break
     m.put(rand + 8, 8, s0); m.put(rand + 0x10, 8, s1)
     return int(out & 0x7F < percent & 0xFFFFFFFF)
+
+
+@lifted(0x11421F0)
+def random_below(m, o, n, *_):
+    return _tail(m, m.main + 0x11440F0, m.call(m.main + 0x11440E8, m.u64(o + 0x10)), n & M32)

@@ -272,7 +272,7 @@ def main_ip(args, offer, exchange, record):
 
 
 def main_radio(args, offer, exchange, record):
-    import ldn
+    from pokeldn.ldn import api as ldn
 
     if needs_root():
         print("[pla] joining needs the raw radio; re-run under sudo, or set POKELDN_RADIO")
@@ -343,14 +343,14 @@ def main_radio(args, offer, exchange, record):
 
 async def seat(args, keys_file, target, phy, offer, exchange, record):
     """-> the session, or None if the association did not complete within --connect-timeout."""
-    import ldn
+    from pokeldn.ldn import api as ldn, radios
 
     keys = pla.session_keys(target.ssid)
     param = ldn.ConnectNetworkParam()
     param.keys, param.network, param.password = keys_file, target, pla.PASSPHRASE
     param.name, param.app_version = args.name.encode(), target.app_version
     param.phyname, param.ifname = phy, args.ifname
-    with trio.move_on_after(args.connect_timeout) as scope:
+    with trio.move_on_after(radios.join_timeout(args.connect_timeout)) as scope:
         async with ldn.connect(param) as network:
             scope.deadline = float("inf")
             host = list(getattr(network.info(), "participants", []) or [])[0]

@@ -1,0 +1,138 @@
+"""Reward editor state reaches the launcher and its serialized RaidPoint."""
+import asyncio
+import struct
+from types import SimpleNamespace
+
+import pytest
+
+pytest.importorskip("flet")
+
+import flet as ft
+
+from gui.views import rewards
+from gui import theme as t
+from gui.views.widgets import PixelActivity
+from pokeldn import pokemon
+from pokeldn.app.catalog import GAMES
+from pokeldn.app.command import build, problems
+from pokeldn.app.settings import Settings
+from pokeldn.sv import raid, raid_encounter
+import sv_host
+
+
+@pytest.fixture
+def picker(monkeypatch):
+    monkeypatch.setattr(rewards, "NamePicker", lambda app, game, kind, value, on_change, **kw:
+                        SimpleNamespace(control=ft.Dropdown(value=value,
+                            on_select=lambda e: on_change(e.control.value))))
+    monkeypatch.setattr(ft.Control, "update", lambda self: None)
+    saved = []
+    view = rewards.RewardPicker(None, "sv", [], saved.append)
+    view.saved = saved
+    return view
+
+
+def select(picker, template):
+    picker.templates.value = template
+    picker.templates.on_select(SimpleNamespace(control=picker.templates))
+
+
+def quantity(picker, text):
+    picker.quantity.value = text
+    picker.quantity.on_change(SimpleNamespace(control=picker.quantity))
+
+
+def launch(rows):
+    tool = next(t for game in GAMES for t in game.tools if t.key == "sv-raid-host")
+    values = {"--raid-pokemon": {"file": "host.pk9"}, "--raid-seed": "000F34C3", "--raid-reward": rows}
+    return tool, values
+
+
+@pytest.mark.parametrize("template", ["training", "shards", "herba", "treasure", "balls"])
+def test_a_bundle_survives_saving_and_reaches_the_scripted_console(picker, monkeypatch, tmp_path, template):
+    from test_sv_raid import run_raid_host, lobby_rows
+    select(picker, template)
+    quantity(picker, "999")
+    restored = rewards.RewardPicker(None, "sv", picker.saved[-1], lambda rows: None)
+    assert restored.templates.value == template and restored.quantity.value == "999"
+    tool, values = launch(restored.value)
+    assert not problems(tool, values)
+    parsed = sv_host.build_parser().parse_args(build(tool, values, {}, Settings()))
+    bag = pokemon.SERVICE.names("sv", "bag")
+    console, _ = run_raid_host(monkeypatch, tmp_path, rewards=parsed.raid_reward, bag=bag)
+    first = lobby_rows(console)
+    plain = raid.payload_of(first[10]["data"] + first[11]["data"])
+    point = plain[raid.RAIDPOINT:]
+    sent = [struct.unpack_from("<4I", point, 0xE4 + 16 * n) for n in range(45)]
+    assert sent[:len(restored.value)] == [(int(row["item_id"]), 999, 0, 0) for row in restored.value]
+    assert all(row == (0, 0, 0, 0) for row in sent[len(restored.value):])
+
+
+@pytest.mark.parametrize("text", ["", "0", "1000", "-1", "abc", "²", "９"])
+def test_invalid_bulk_quantity_blocks_launch_and_keeps_the_item_controls(picker, text):
+    select(picker, "shards")
+    item_rows = list(picker.rows.controls)
+    quantity(picker, text)
+    tool, values = launch(picker.saved[-1])
+    assert problems(tool, values)
+    assert picker.problem.visible
+    for field in [picker.quantity, *picker.quantities]:
+        field.before_update()
+        assert field.height == t.CONTROL_HEIGHT and field.error is None
+        assert field.border[ft.ControlState.DEFAULT].side.color == t.RED
+    assert all(a is b for a, b in zip(item_rows, picker.rows.controls))
+    assert all(row["quantity"] == text for row in picker.saved[-1])
+    quantity(picker, "1")
+    assert not problems(tool, launch(picker.saved[-1])[1])
+    assert not picker.problem.visible
+    assert all(f.border[ft.ControlState.DEFAULT].side.color != t.RED for f in picker.quantities)
+
+
+def test_individual_edits_and_removal_keep_template_controls_in_sync(picker):
+    select(picker, "herba")
+    field = picker.quantities[0]
+    field.value = "7"
+    field.on_change(SimpleNamespace(control=field))
+    assert picker.templates.value == "custom" and not picker.template_quantity_control.visible
+    restored = rewards.RewardPicker(None, "sv", picker.saved[-1], lambda rows: None)
+    assert restored.templates.value == "custom"
+    picker._add(None)
+    assert picker.templates.value == "custom"
+    picker._remove(len(picker.value) - 1)
+    assert picker.templates.value == "custom" and not picker.template_quantity_control.visible
+    for _ in range(len(picker.value)):
+        picker._remove(0)
+    assert picker.templates.value == "seed" and picker.saved[-1] == []
+    select(picker, "training")
+    select(picker, "seed")
+    tool, values = launch(picker.saved[-1])
+    parsed = sv_host.build_parser().parse_args(build(tool, values, {}, Settings()))
+    assert not parsed.raid_reward
+    found = raid_encounter.generate(parsed.raid_seed)
+    assert any(raid.raid_point(found)[0xE4:0x3B4])
+
+
+@pytest.mark.parametrize("item", ["bad", "²", "", None])
+def test_an_incomplete_saved_item_can_be_opened_and_corrected(picker, item):
+    restored = rewards.RewardPicker(None, "sv", [{"item_id": item, "quantity": "1"}], picker.saved.append)
+    assert restored.templates.value == "custom"
+    tool, values = launch(restored.value)
+    assert problems(tool, values)
+    restored.rows.controls[0].controls[1].controls[1].on_select(SimpleNamespace(control=ft.Dropdown(value="50")))
+    assert not problems(tool, launch(picker.saved[-1])[1])
+
+
+def test_the_activity_only_swallows_the_unmounted_control_race(monkeypatch):
+    async def wake(_):
+        pass
+    monkeypatch.setattr(asyncio, "sleep", wake)
+    activity = PixelActivity()
+    def detached():
+        raise RuntimeError("PixelActivity must be added to the page first")
+    activity.update = detached
+    asyncio.run(activity._animate())
+    def broken():
+        raise RuntimeError("unexpected update failure")
+    activity.update = broken
+    with pytest.raises(RuntimeError, match="unexpected update failure"):
+        asyncio.run(activity._animate())

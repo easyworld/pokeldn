@@ -1,3 +1,4 @@
+from gui.localization import translate
 import os
 import re
 from dataclasses import dataclass, field
@@ -5,9 +6,9 @@ from dataclasses import dataclass, field
 import flet as ft
 
 from gui import theme as t
-from gui.localization import translate
 from gui.views.widgets import MarkdownDocument
 from pokeldn.app.paths import ROOT
+from pokeldn.app.i18n import t as tr
 
 DOCS = os.path.join(ROOT, "docs")
 GUIDE = os.path.join(ROOT, "gui", "guide.md")
@@ -67,9 +68,9 @@ class DocsView:
                                   expand=True)
         self.control = ft.Row([
             t.panel(ft.Column([
-                t.panel_header('文档', t.icon_button("external-link",
+                t.panel_header(tr('docs.docs_7af023', 'Docs'), t.icon_button("external-link",
                                                      lambda e: self.app.page.run_task(self.app.open_url, SITE),
-                                                     '打开文档网站')),
+                                                     tr('docs.open_the_docs_website_a6f6df', 'Open the docs website'))),
                 t.fade(self.nav),
             ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
             t.surface(t.fade(self.scroll), radius=20, expand=True),
@@ -95,8 +96,8 @@ class DocsView:
             self.control.update()
 
     def render_nav(self) -> None:
-        rows = [self.row('入门指南', "guide", 0)]
-        rows.append(ft.Container(t.text('文档', 11, t.FAINT, weight=ft.FontWeight.W_600),
+        rows = [self.row(tr('docs.start_here_2adc96', 'Start here'), "guide", 0)]
+        rows.append(ft.Container(t.text(tr('docs.documentation_c20592', 'Documentation'), 11, t.FAINT, weight=ft.FontWeight.W_600),
                                  padding=ft.Padding(10, 14, 8, 4)))
 
         def walk(items, depth):
@@ -111,7 +112,7 @@ class DocsView:
         active = file == self.file
         expanded = file in self.open_parents
         return ft.Container(ft.Row([
-            t.text(translate(title), 13, t.TEXT if active else (t.MUTED if depth else t.SOFT),
+            t.text(title, 13, t.TEXT if active else (t.MUTED if depth else t.SOFT),
                    weight=ft.FontWeight.W_600 if depth == 0 else None, expand=True),
             t.pixel_icon("chevron-down" if expanded else "chevron-right",
                     color=t.FAINT) if folder else ft.Container(),

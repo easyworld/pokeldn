@@ -1,11 +1,14 @@
 """The bank: every Pokemon a trade brought in, and the way to trade one into another game
 [pokeldn.app.bank, docs/gui.md, The bank]."""
+
+from gui.localization import summary_text, import_note
+from gui.localization import SERVICE, translate
+from pokeldn.app.i18n import t as tr
 import os
 import threading
 
 import flet as ft
 
-from gui.localization import SERVICE, summary as pokemon_summary, summary_text, translate, import_note
 from gui import drop, theme as t
 from gui.views.games import tool_role
 from gui.views.sprites import MINI, SIZE, Sprite
@@ -47,11 +50,11 @@ class BankView:
         self.note = t.text("", 12, t.MUTED)
         self.control = ft.Row([
             t.panel(ft.Column([
-                t.panel_header("宝可梦银行",
-                              t.icon_button("plus", self._pick, "导入宝可梦文件或游戏存档"),
+                t.panel_header(tr('bank.bank_676c47', 'Bank'),
+                               t.icon_button("plus", self._pick, tr('bank.import_a_pokemon_file_or_a_game_save_da7f8c', 'Import a Pokemon file or a game save')),
                                t.icon_button("folder", lambda e: open_folder(str(self._folder())),
-                                             "打开宝可梦银行文件夹"),
-                               t.icon_button("refresh", lambda e: self.refresh(), "刷新")),
+                                             tr('bank.open_the_bank_folder_438a67', 'Open the bank folder')),
+                               t.icon_button("refresh", lambda e: self.refresh(), tr('bank.refresh_0e9161', 'Refresh'))),
                 t.fade(self.boxes),
             ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
             drop.target(ft.Container(t.fade(ft.ListView(
@@ -59,7 +62,7 @@ class BankView:
                 spacing=12, padding=ft.Padding(0, 0, 0, 24), expand=True)), expand=True, border_radius=16),
                 self._import, expand=True),
             t.panel(ft.Column([
-                t.panel_header("宝可梦"),
+                t.panel_header(tr('bank.pokemon_224642', 'Pokemon')),
                 ft.Container(ft.Column([self.detail, self.note], spacing=8, expand=True),
                              padding=ft.Padding(18, 8, 18, 18), expand=True),
             ], spacing=0, expand=True), width=t.SESSION_WIDTH),
@@ -96,7 +99,7 @@ class BankView:
 
     def render_boxes(self) -> None:
         counts = {key: sum(e.game == key for e in self.items) for key in NAMES}
-        rows = [self._box(ALL, "全部宝可梦", len(self.items), t.pixel_icon("package", color=t.MUTED))]
+        rows = [self._box(ALL, tr('bank.all_pokemon_fe268d', 'All Pokemon'), len(self.items), t.pixel_icon("package", color=t.MUTED))]
         rows += [self._box(key, NAMES[key], counts[key], game_icon(key, 28)) for key in NAMES if counts[key]]
         self.boxes.controls = rows
 
@@ -117,10 +120,11 @@ class BankView:
 
     def render_grid(self) -> None:
         shown = [e for e in self.items if self.shown in (ALL, e.game)]
-        where = "在银行中" if self.shown == ALL else f"来自{NAMES[self.shown]}"
-        self.heading.value = (f"{where}：{len(shown)} 只宝可梦" if shown else
-                              "银行为空。各游戏交换接收的宝可梦都会保存在此处。"
-                              + (" 将宝可梦文件或游戏存档拖到此处即可导入。" if drop.AVAILABLE else ""))
+        where = tr('bank.in_the_bank_f69744', 'in the bank') if self.shown == ALL else tr('bank.from_7f2df4', 'from {value0}', value0=NAMES[self.shown])
+        self.heading.value = (tr('bank.pokemon_3a4d02', '{value0} Pokemon {value1}', value0=len(shown), value1=where) if shown else
+                              tr('bank.the_bank_is_empty_every_pokemon_a_trade_brings_in_lands_e05ff4', 'The bank is empty. Every Pokemon a trade brings in lands here, from any game.')
+                              + (tr('bank.drop_a_pokemon_file_or_a_game_save_here_to_import_what__7adc95', ' Drop a Pokemon file or a game save here to import what it holds.')
+                                 if drop.AVAILABLE else ""))
         self.grid.controls = [self._tile(e) for e in shown]
 
     def _tile(self, entry: bank.Entry) -> ft.Control:
@@ -168,17 +172,17 @@ class BankView:
     def render_detail(self) -> None:
         entry = self._entry()
         if entry is None:
-            self.detail.controls = [t.text("选择一只宝可梦，查看可传送的游戏。", 13, t.MUTED)]
+            self.detail.controls = [t.text(tr('bank.pick_a_pokemon_to_see_where_it_can_go_3b278b', 'Pick a Pokemon to see where it can go.'), 13, t.MUTED)]
             return
         parts = summary_text(entry.summary).split(" · ")
         head = 3 if len(parts) > 2 and parts[2] == "异色" else 2
         about = ft.Column([
             t.text(" · ".join(parts[:head]), 15, weight=ft.FontWeight.W_600),
             t.text(" · ".join(parts[head:]), 12, t.MUTED),
-            ft.Row([game_icon(entry.game), t.text(f"当前游戏：{NAMES[entry.game]}", 12, t.SOFT)], spacing=6),
-            t.text(f"存入时间：{entry.when}", 12, t.FAINT),
-            t.badge("合法", t.GREEN, "checkbox-on") if entry.legal else
-            t.badge("PKHeX 检查未通过", t.AMBER, "warning-diamond"),
+            ft.Row([game_icon(entry.game), t.text(tr('bank.in_bb2233', 'In {value0}', value0=NAMES[entry.game]), 12, t.SOFT)], spacing=6),
+            t.text(tr('bank.banked_faf7b7', 'Banked {value0}', value0=entry.when), 12, t.FAINT),
+            t.badge(tr('bank.legal_4787ea', 'Legal'), t.GREEN, "checkbox-on") if entry.legal else
+            t.badge(tr('bank.pkhex_finds_it_not_legal_58cc49', 'PKHeX finds it not legal'), t.AMBER, "warning-diamond"),
             *([t.badge(translate(warning), t.AMBER, "warning-diamond")]
               if (warning := pokemon.HOME_TRACKER_WARNINGS.get(entry.home_tracker)) else []),
         ], spacing=4, expand=True)
@@ -186,35 +190,34 @@ class BankView:
                            spacing=14, vertical_alignment=ft.CrossAxisAlignment.START)]
         queued = bank.queued(self.app.settings, entry.id)
         if queued:
-            tools = {tool.key: f"{NAMES[g.key]} {tool.name}" for g in GAMES for tool in g.tools}
-            controls.append(t.section("等待交换", ft.Column([
-                t.text(f"已加入 {', '.join(tools.get(k, k) for k in queued)} 的队列，"
-                       "完成交换后将从银行移出。", 12, t.MUTED),
-                ft.Row([t.secondary_button("打开交换功能", lambda e: self._open(queued[0]), "play"),
-                        t.secondary_button("移出队列", lambda e: self._dequeue(entry), "close")],
+            tools = {tool.key: tr('bank._54ef3b', '{value0} {value1}', value0=NAMES[g.key], value1=tool.name) for g in GAMES for tool in g.tools}
+            controls.append(t.section(tr('bank.waiting_to_trade_4a46c7', 'Waiting to trade'), ft.Column([
+                t.text(tr('bank.queued_in_it_leaves_the_bank_when_that_trade_completes_e6f058', 'Queued in {value0}. It leaves the bank when that trade completes.', value0=', '.join((tools.get(k, k) for k in queued))), 12, t.MUTED),
+                ft.Row([t.secondary_button(tr('bank.open_the_trade_fdac5d', 'Open the trade'), lambda e: self._open(queued[0]), "play"),
+                        t.secondary_button(tr('bank.take_it_out_5a1e31', 'Take it out'), lambda e: self._dequeue(entry), "close")],
                        spacing=8, wrap=True),
             ], spacing=10)))
         else:
-            controls.append(t.section("传送到游戏", self._routes(entry)))
+            controls.append(t.section(tr('bank.send_it_to_a_game_da82fb', 'Send it to a game'), self._routes(entry)))
         controls.append(ft.Row([
-            *([] if queued else [t.secondary_button("编辑", lambda e: self._edit(entry), "edit")]),
-            t.secondary_button("导出", lambda e: self.app.page.run_task(self._export, entry), "upload"),
-            t.secondary_button("移除", lambda e: self._remove(entry), "trash"),
+            *([] if queued else [t.secondary_button(tr('bank.edit_464c4f', 'Edit'), lambda e: self._edit(entry), "edit")]),
+            t.secondary_button(tr('bank.export_366489', 'Export'), lambda e: self.app.page.run_task(self._export, entry), "upload"),
+            t.secondary_button(tr('bank.remove_c3812f', 'Remove'), lambda e: self._remove(entry), "trash"),
         ], spacing=8, wrap=True))
         self.detail.controls = controls
 
     def _routes(self, entry: bank.Entry) -> ft.Control:
         routes = self.routes.get(entry.id)
         if routes is None:
-            return t.badge("PKHeX 正在检查各个游戏…", t.BLUE, "refresh")
+            return t.badge(tr('bank.pkhex_is_checking_each_game_8c9f63', 'PKHeX is checking each game...'), t.BLUE, "refresh")
         rows = []
         for key in NAMES:
             route = routes.get(key, {"ok": False, "reason": ""})
             ok, chosen = route["ok"], key == self.target
             lines = translate(route["reason"]).split("\n")
             warning = pokemon.HOME_TRACKER_WARNINGS.get(route.get("home_tracker", "")) if ok else None
-            why = lines[0] + (f"（另有 {len(lines) - 1} 项原因）" if len(lines) > 1 else "") if not ok else (
-                "当前游戏" if key == entry.game else translate(warning) if warning else "按照 HOME 的规则传送")
+            why = lines[0] + (tr('bank.more_86f3b0', ' (+{value0} more)', value0=len(lines) - 1) if len(lines) > 1 else "") if not ok else (
+                tr('bank.its_own_game_6e5aee', 'Its own game') if key == entry.game else translate(warning) if warning else tr('bank.moves_as_home_would_move_it_5731e1', 'Moves as HOME would move it'))
             rows.append(ft.Container(ft.Row([
                 game_icon(key, 24),
                 ft.Column([t.text(NAMES[key], 13, t.TEXT if ok else t.FAINT, weight=ft.FontWeight.W_600),
@@ -222,7 +225,7 @@ class BankView:
                                   overflow=ft.TextOverflow.ELLIPSIS)], spacing=0, expand=True),
                 t.pixel_icon("chevron-right", color=t.BLUE) if chosen else ft.Container(),
             ], spacing=10), padding=ft.Padding(8, 6, 8, 6), border_radius=10,
-                bgcolor=t.SELECTED if chosen else None, tooltip=None if ok else translate(route["reason"]),
+                bgcolor=t.SELECTED if chosen else None, tooltip=None if ok else route["reason"],
                 on_click=(lambda e, k=key: self._choose(k)) if ok else None))
         body = [ft.Column(rows, spacing=2)]
         if self.target:
@@ -230,7 +233,7 @@ class BankView:
                                 "arrows-horizontal", filled=n == 0, disabled=self.working,
                                 tooltip=tool_role(tool))
                        for n, (tool, field) in enumerate(trade_tools(self.target))]
-            body.append(t.text(f"将其加入{NAMES[self.target]}的交换队列：", 12, t.MUTED))
+            body.append(t.text(tr('bank.queue_it_for_a_trade_a3f68e', 'Queue it for a {value0} trade:', value0=NAMES[self.target]), 12, t.MUTED))
             body.append(ft.Row(buttons, spacing=8, wrap=True))
         return ft.Column(body, spacing=10)
 
@@ -241,7 +244,7 @@ class BankView:
 
     def _send(self, entry: bank.Entry, tool, field) -> None:
         self.working = True
-        self._say(f"正在传送到{NAMES[self.target]}…", t.BLUE)
+        self._say(tr('bank.moving_it_to_38b799', 'Moving it to {value0}...', value0=NAMES[self.target]), t.BLUE)
         self.render_detail()
         self.detail.update()
         game = self.target
@@ -249,7 +252,6 @@ class BankView:
         def work():
             try:
                 item = bank.offer(entry, game, self.app.settings.trainer(game))
-                item["summary"] = pokemon_summary(SERVICE.check(game, item["file"]))
                 problem = bank.enqueue(self.app.settings, tool, field, item)
             except (OSError, pokemon.BuilderError) as error:
                 problem = str(error)
@@ -257,7 +259,7 @@ class BankView:
             def done():
                 self.working = False
                 if problem:
-                    self._say(translate(problem), t.RED)
+                    self._say(problem, t.RED)
                     self.render_detail()
                     self.detail.update()
                     return
@@ -276,7 +278,7 @@ class BankView:
         self.control.update()
 
     def _edit(self, entry: bank.Entry) -> None:
-        self._say("正在读取…", t.BLUE)
+        self._say(tr('bank.reading_it_dda821', 'Reading it...'), t.BLUE)
 
         def work():
             try:
@@ -288,7 +290,7 @@ class BankView:
                 info, moves, items, problem = {}, [], [], str(error)
 
             def done():
-                self._say(translate(problem), t.RED)
+                self._say(problem, t.RED)
                 if not problem:
                     EditDialog(self, entry, info, moves, items).show()
             self.app.ui(done)
@@ -298,11 +300,11 @@ class BankView:
         self.routes.pop(entry.id, None)
         self.refresh()
         self.select(entry.id)
-        self._say("已保存。PKHeX 将重新检查可传送的游戏。", t.MUTED)
+        self._say(tr('bank.saved_pkhex_checks_again_where_it_can_go_e19eb7', 'Saved. PKHeX checks again where it can go.'), t.MUTED)
 
     async def _export(self, entry: bank.Entry) -> None:
         extension = os.path.splitext(entry.path)[1][1:]
-        path = await self.app.picker.save_file(dialog_title="导出宝可梦", file_name=os.path.basename(entry.path),
+        path = await self.app.picker.save_file(dialog_title=tr('bank.export_pokemon_0cfbf8', 'Export Pokemon'), file_name=os.path.basename(entry.path),
                                                file_type=ft.FilePickerFileType.CUSTOM,
                                                allowed_extensions=[extension])
         if not path:
@@ -311,7 +313,7 @@ class BankView:
         try:
             with open(path, "wb") as out:
                 out.write(bank.data(entry))
-            self._say(f"已导出到 {path}", t.MUTED)
+            self._say(tr('bank.exported_to_58eb1e', 'Exported to {value0}', value0=path), t.MUTED)
         except OSError as error:
             self._say(str(error), t.RED)
 
@@ -323,16 +325,15 @@ class BankView:
             self.refresh()
 
         self.app.page.show_dialog(t.dialog(
-            title=t.text("移除这只宝可梦？", 18),
-            content=t.text(f"{summary_text(entry.summary).split(' · ')[0]} 将从此电脑的银行中删除。"
-                           "如需保留文件，请先导出。", 13, t.MUTED, width=380),
-            actions=[t.button("取消", lambda e: self.app.page.pop_dialog(), filled=False),
-                     t.button("移除", done, color=t.RED)]))
+            title=t.text(tr('bank.remove_this_pokemon_81b928', 'Remove this Pokemon?'), 18),
+            content=t.text(tr('bank.is_deleted_from_the_bank_on_this_computer_export_it_fir_c61b92', '{value0} is deleted from the bank on this computer. Export it first to keep a file.', value0=entry.summary.split(' · ')[0]), 13, t.MUTED, width=380),
+            actions=[t.button(tr('bank.cancel_19766e', 'Cancel'), lambda e: self.app.page.pop_dialog(), filled=False),
+                     t.button(tr('bank.remove_c3812f', 'Remove'), done, color=t.RED)]))
 
     # Importing
 
     async def _pick(self, e) -> None:
-        files = await self.app.picker.pick_files(dialog_title='导入宝可梦', allow_multiple=True)
+        files = await self.app.picker.pick_files(dialog_title=tr('bank.import_pokemon_eed048', 'Import Pokemon'), allow_multiple=True)
         self._import([file.path for file in files or () if file.path])
 
     def _import(self, paths: list[str]) -> None:
@@ -346,12 +347,12 @@ class BankView:
             done, failed = [], []
             for n, path in enumerate(paths, 1):
                 self.app.ui(lambda n=n, path=path: self._say(
-                    f"正在读取 {os.path.basename(path)}" + (f"（{n} / {len(paths)}）" if len(paths) > 1 else "")
+                    tr('bank.reading_f1029d', 'Reading {value0}', value0=os.path.basename(path)) + (tr('bank.of_91ec22', ' ({value0} of {value1})', value0=n, value1=len(paths)) if len(paths) > 1 else "")
                     + "...", t.BLUE))
                 try:
                     done.append(bank.import_file(path, trainers))
                 except (OSError, pokemon.BuilderError) as error:
-                    failed.append(f"{os.path.basename(path)}: {error}")
+                    failed.append(tr('bank._6a7768', '{value0}: {value1}', value0=os.path.basename(path), value1=error))
 
             def finish():
                 self.working = False
@@ -372,28 +373,28 @@ class BankView:
 class ImportDialog:
     """One row per Pokemon found, grouped by file: its sprite, where it was, and whether it was banked."""
 
-    STATES = {"banked": ('已存入', "check", t.GREEN), "already": ('已在银行中', "copy", t.MUTED),
-              "refused": ('未导入', "warning-diamond", t.AMBER)}
+    STATES = {"banked": (tr('bank.banked_c89116', 'Banked'), "check", t.GREEN), "already": (tr('bank.already_in_the_bank_0dd815', 'Already in the bank'), "copy", t.MUTED),
+              "refused": (tr('bank.not_imported_a37f7e', 'Not imported'), "warning-diamond", t.AMBER)}
 
     def __init__(self, app, done: list[bank.Imported], failed: list[str]):
         self.app = app
         counts = {state: sum(r.count(state) for r in done) for state in self.STATES}
-        summary = [t.chip(f"{counts[s]} 只{label}", icon, color)
+        summary = [t.chip(tr('bank._54ef3b', '{value0} {value1}', value0=counts[s], value1=label.lower()), icon, color)
                    for s, (label, icon, color) in self.STATES.items() if counts[s] and s != "banked"]
         if failed:
-            summary.append(t.chip(f"{len(failed)} 个文件无法读取", "close", t.RED))
+            summary.append(t.chip(tr('bank.file_unreadable_0fd8f4', '{value0} file{value1} unreadable', value0=len(failed), value1='s' if len(failed) > 1 else ''), "close", t.RED))
         groups: list[ft.Control] = [self._file(result) for result in done]
         groups += [self._unreadable(line) for line in failed]
         self.dialog = t.dialog(
-            title=t.text(f"已存入 {counts['banked']} 只宝可梦" if counts["banked"] else '没有新宝可梦可存入', 18),
+            title=t.text(tr('bank.pokemon_banked_b85a56', '{value0} Pokemon banked', value0=counts['banked']) if counts["banked"] else tr('bank.nothing_new_to_bank_566ae1', 'Nothing new to bank'), 18),
             content=ft.Column([
                 *([ft.Row(summary, spacing=6, wrap=True, run_spacing=6)] if summary else []),
                 ft.Column(groups, spacing=18, scroll=ft.ScrollMode.AUTO, tight=True,
                           horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
                           height=None if sum(len(r.pokemon) for r in done) + len(failed) < 6 else 440),
-                t.text('PKHeX 会检查每只宝可梦，不修改原文件。', 12, t.FAINT),
+                t.text(tr('bank.pkhex_checks_every_pokemon_your_files_are_not_changed_da3f29', 'PKHeX checks every Pokemon. Your files are not changed.'), 12, t.FAINT),
             ], spacing=16, tight=True, width=520),
-            actions=[t.button('关闭', lambda e: app.page.pop_dialog())])
+            actions=[t.button(tr('bank.close_7d9eb7', 'Close'), lambda e: app.page.pop_dialog())])
 
     def show(self) -> None:
         self.app.page.show_dialog(self.dialog)
@@ -402,24 +403,24 @@ class ImportDialog:
         head = ft.Row([t.pixel_icon("save" if result.save else "file", size=18, color=t.MUTED),
                        t.text(result.name, 13, weight=ft.FontWeight.W_600, expand=True,
                               max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
-                       t.text(translate(result.save).replace(", ", " · "), 12, t.FAINT)],
+                       t.text(result.save.replace(", ", " · "), 12, t.FAINT)],
                       spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         rows = [self._pokemon(p) for p in result.pokemon] or [
-            ft.Container(t.text('此文件中没有宝可梦。', 12, t.MUTED), padding=12)]
+            ft.Container(t.text(tr('bank.no_pokemon_in_this_file_bf95cd', 'No Pokemon in this file.'), 12, t.MUTED), padding=12)]
         return ft.Column([head, ft.Container(ft.Column(rows, spacing=2), bgcolor=t.CARD, border_radius=14,
                                              padding=ft.Padding(6, 6, 12, 6))], spacing=8, tight=True,
                          horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
     def _pokemon(self, found: bank.ImportedPokemon) -> ft.Control:
         label, icon, color = self.STATES[found.state]
-        about = [t.text(translate(found.species) or '未知宝可梦', 13, t.TEXT if found.state != "refused" else t.SOFT,
+        about = [t.text(found.species or tr('bank.unknown_pokemon_40e13e', 'Unknown Pokemon'), 13, t.TEXT if found.state != "refused" else t.SOFT,
                         weight=ft.FontWeight.W_600)]
         if found.where:
-            about.append(t.text(translate(found.where), 11, t.FAINT))
+            about.append(t.text(found.where, 11, t.FAINT))
         if found.detail:
             about.append(t.text(import_note(found.detail), 11, t.AMBER if found.state == "refused" else t.MUTED,
                                 max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, tooltip=import_note(found.detail)))
-        status = [ft.Container(game_icon(found.game, 18), tooltip=f"保存为{NAMES[found.game]}的宝可梦")
+        status = [ft.Container(game_icon(found.game, 18), tooltip=tr('bank.kept_as_a_pokemon_8c187f', 'Kept as a {value0} Pokemon', value0=NAMES[found.game]))
                   ] if found.game and found.state != "refused" else []
         status.append(t.chip(label, icon, color))
         return ft.Container(ft.Row([
@@ -435,7 +436,7 @@ class ImportDialog:
         return ft.Column([
             ft.Row([t.pixel_icon("file", size=18, color=t.MUTED), t.text(name, 13, weight=ft.FontWeight.W_600)],
                    spacing=8),
-            ft.Container(t.badge(translate(why), t.RED, "close"), bgcolor=t.CARD, border_radius=14, padding=14),
+            ft.Container(t.badge(why, t.RED, "close"), bgcolor=t.CARD, border_radius=14, padding=14),
         ], spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
 
@@ -451,27 +452,27 @@ class EditDialog:
         self.nickname = t.field(value=info["nickname"], hint=info["species"], expand=True,
                                 limit=10 if entry.game == "frlg" else 12)
         self.level = t.field(value=str(info["level"]), mono=True, width=90, digits=True, limit=3)
-        move_options = [(NONE, "无")] + [(str(n["id"]), n["name"]) for n in moves]
+        move_options = [(NONE, tr('bank.none_dc937b', 'None'))] + [(str(n["id"]), n["name"]) for n in moves]
         known = (list(info["move_ids"]) + [0] * 4)[:4]
         self.moves = [t.dropdown(move_options, str(m) if m else NONE, enable_filter=True, editable=True,
                                  menu_height=320) for m in known]
-        self.item = t.dropdown([(NONE, "不携带")] + [(str(n["id"]), n["name"]) for n in items],
+        self.item = t.dropdown([(NONE, tr('bank.nothing_67e1bc', 'Nothing'))] + [(str(n["id"]), n["name"]) for n in items],
                                str(info["held_item_id"]) if info["held_item_id"] else NONE,
                                enable_filter=True, editable=True, menu_height=320)
         self.message = t.text("", 12, t.MUTED)
-        self.save = t.button("保存", self._save, "save")
+        self.save = t.button(tr('bank.save_1509f5', 'Save'), self._save, "save")
         self.dialog = t.dialog(
-            title=t.text(f"编辑 {info['species']}", 18),
+            title=t.text(tr('bank.edit_44b87f', 'Edit {value0}', value0=info['species']), 18),
             content=ft.Column([
-                ft.Row([t.labeled_control("昵称", self.nickname, expand=True),
-                        t.labeled_control("等级", self.level)], spacing=10),
-                t.labeled_control("招式", ft.Column([ft.Row(self.moves[:2], spacing=6),
+                ft.Row([t.labeled_control(tr('bank.nickname_d720f6', 'Nickname'), self.nickname, expand=True),
+                        t.labeled_control(tr('bank.level_170930', 'Level'), self.level)], spacing=10),
+                t.labeled_control(tr('bank.moves_26c84a', 'Moves'), ft.Column([ft.Row(self.moves[:2], spacing=6),
                                                       ft.Row(self.moves[2:], spacing=6)], spacing=6)),
-                t.labeled_control("携带道具", self.item),
-                t.text("仅编辑游戏中允许玩家修改的项目。PKHeX 会检查每次修改；导致宝可梦不合法的修改将被拒绝。", 12, t.FAINT),
+                t.labeled_control(tr('bank.held_item_6af4a4', 'Held item'), self.item),
+                t.text(tr('bank.only_what_the_game_itself_lets_a_player_change_pkhex_ch_363411', 'Only what the game itself lets a player change. PKHeX checks every edit; one that would make it not legal is refused.'), 12, t.FAINT),
                 self.message,
             ], spacing=14, tight=True, width=420),
-            actions=[t.button("取消", lambda e: view.app.page.pop_dialog(), filled=False), self.save])
+            actions=[t.button(tr('bank.cancel_19766e', 'Cancel'), lambda e: view.app.page.pop_dialog(), filled=False), self.save])
 
     def show(self) -> None:
         self.view.app.page.show_dialog(self.dialog)
@@ -483,14 +484,14 @@ class EditDialog:
             fields["nickname"] = nickname
         level = self.level.value.strip()
         if not level.isdigit() or not info["level"] <= int(level) <= 100:
-            return f"等级必须在 {info['level']} 到 100 之间。"
+            return tr('bank.the_level_goes_from_to_100_f53f78', 'The level goes from {value0} to 100.', value0=info['level'])
         if int(level) != info["level"]:
             fields["level"] = int(level)
         moves = [int(box.value) for box in self.moves if box.value and box.value != NONE]
         if not moves:
-            return "至少需要一个招式。"
+            return tr('bank.it_needs_at_least_one_move_7a18ff', 'It needs at least one move.')
         if len(set(moves)) < len(moves):
-            return "招式不能重复。"
+            return tr('bank.a_move_appears_twice_d477e7', 'A move appears twice.')
         if moves != list(info["move_ids"]):
             fields["moves"] = moves
         item = 0 if self.item.value in (None, NONE) else int(self.item.value)
@@ -511,7 +512,7 @@ class EditDialog:
             self.view.app.page.pop_dialog()
             return
         self.save.disabled = True
-        self._say("PKHeX 正在检查…", t.BLUE)
+        self._say(tr('bank.pkhex_is_checking_it_e51442', 'PKHeX is checking it...'), t.BLUE)
 
         def work():
             try:
@@ -523,7 +524,7 @@ class EditDialog:
             def done():
                 if problem:
                     self.save.disabled = False
-                    self._say(f"未保存：{translate(problem)}", t.RED)
+                    self._say(tr('bank.not_saved_0c5892', 'Not saved: {value0}', value0=problem), t.RED)
                     return
                 self.view.app.page.pop_dialog()
                 self.view.edited(self.entry)

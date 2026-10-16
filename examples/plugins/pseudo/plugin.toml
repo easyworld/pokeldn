@@ -1,0 +1,7 @@
+id = "pseudo-language"
+name = "Bracketed English (preview)"
+version = "1.0.0"
+api = "1.5"
+locale = "en-XA"
+strings = "strings.toml"
+description = "A partial language pack for checking translation and English fallback."

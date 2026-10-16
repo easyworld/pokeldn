@@ -1,0 +1,2041 @@
+{
+ "source": {
+  "game": "Scarlet 4.0.0 RomFS: world/data/raid/raid_trainer_01..03, world/data/trainer/trdata, avalon/data/personal_array"
+ },
+ "pools": {
+  "raid_trainer_01": [
+   {
+    "trid": "raid_assist_NPC_1",
+    "name_label": "TRNAME_RAID_ASSIST_01",
+    "npc_preset": 0,
+    "trainer_type": "backpacker",
+    "species": 58,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     52,
+     43,
+     44
+    ],
+    "tera": 9,
+    "gender": 1,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_2",
+    "name_label": "TRNAME_RAID_ASSIST_02",
+    "npc_preset": 1,
+    "trainer_type": "tanpan",
+    "species": 418,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     453,
+     44,
+     55
+    ],
+    "tera": 10,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_3",
+    "name_label": "TRNAME_RAID_ASSIST_03",
+    "npc_preset": 2,
+    "trainer_type": "mountain",
+    "species": 672,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     33,
+     22,
+     74
+    ],
+    "tera": 11,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_4",
+    "name_label": "TRNAME_RAID_ASSIST_04",
+    "npc_preset": 3,
+    "trainer_type": "worker",
+    "species": 81,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     84,
+     86,
+     129
+    ],
+    "tera": 12,
+    "gender": 2,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_5",
+    "name_label": "TRNAME_RAID_ASSIST_05",
+    "npc_preset": 4,
+    "trainer_type": "youthm",
+    "species": 819,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     33,
+     111,
+     205
+    ],
+    "tera": 0,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_6",
+    "name_label": "TRNAME_RAID_ASSIST_06",
+    "npc_preset": 5,
+    "trainer_type": "sch_middle_m",
+    "species": 397,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     17,
+     98,
+     45
+    ],
+    "tera": 2,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_7",
+    "name_label": "TRNAME_RAID_ASSIST_07",
+    "npc_preset": 6,
+    "trainer_type": "karate",
+    "species": 739,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     249,
+     61,
+     526
+    ],
+    "tera": 11,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_8",
+    "name_label": "TRNAME_RAID_ASSIST_08",
+    "npc_preset": 7,
+    "trainer_type": "model",
+    "species": 425,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     16,
+     506,
+     371
+    ],
+    "tera": 7,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_9",
+    "name_label": "TRNAME_RAID_ASSIST_09",
+    "npc_preset": 8,
+    "trainer_type": "musician",
+    "species": 434,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     44,
+     491,
+     103
+    ],
+    "tera": 16,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_10",
+    "name_label": "TRNAME_RAID_ASSIST_10",
+    "npc_preset": 9,
+    "trainer_type": "sch_young_f",
+    "species": 281,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     93,
+     347,
+     574
+    ],
+    "tera": 13,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_11",
+    "name_label": "TRNAME_RAID_ASSIST_11",
+    "npc_preset": 10,
+    "trainer_type": "researcher",
+    "species": 624,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     232,
+     10,
+     184
+    ],
+    "tera": 8,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_12",
+    "name_label": "TRNAME_RAID_ASSIST_12",
+    "npc_preset": 11,
+    "trainer_type": "waitress",
+    "species": 702,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     577,
+     570,
+     204
+    ],
+    "tera": 17,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_13",
+    "name_label": "TRNAME_RAID_ASSIST_13",
+    "npc_preset": 12,
+    "trainer_type": "sch_infant_m",
+    "species": 402,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     450,
+     47,
+     332
+    ],
+    "tera": 17,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_14",
+    "name_label": "TRNAME_RAID_ASSIST_14",
+    "npc_preset": 13,
+    "trainer_type": "sch_middle_m",
+    "species": 744,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     88,
+     44,
+     43
+    ],
+    "tera": 5,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_15",
+    "name_label": "TRNAME_RAID_ASSIST_15",
+    "npc_preset": 14,
+    "trainer_type": "sch_senior_m",
+    "species": 551,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     328,
+     184,
+     44
+    ],
+    "tera": 4,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_16",
+    "name_label": "TRNAME_RAID_ASSIST_16",
+    "npc_preset": 15,
+    "trainer_type": "ol",
+    "species": 361,
+    "form": 0,
+    "level": 16,
+    "ability_number": 1,
+    "moves": [
+     181,
+     420,
+     44
+    ],
+    "tera": 14,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   }
+  ],
+  "raid_trainer_02": [
+   {
+    "trid": "raid_assist_NPC_17",
+    "name_label": "TRNAME_RAID_ASSIST_01",
+    "npc_preset": 0,
+    "trainer_type": "backpacker",
+    "species": 323,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     172,
+     523,
+     281
+    ],
+    "tera": 9,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_18",
+    "name_label": "TRNAME_RAID_ASSIST_02",
+    "npc_preset": 1,
+    "trainer_type": "tanpan",
+    "species": 419,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     352,
+     453,
+     45
+    ],
+    "tera": 10,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_19",
+    "name_label": "TRNAME_RAID_ASSIST_03",
+    "npc_preset": 2,
+    "trainer_type": "mountain",
+    "species": 673,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     532,
+     263,
+     74
+    ],
+    "tera": 11,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_20",
+    "name_label": "TRNAME_RAID_ASSIST_04",
+    "npc_preset": 3,
+    "trainer_type": "worker",
+    "species": 82,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     319,
+     351,
+     161
+    ],
+    "tera": 12,
+    "gender": 2,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_21",
+    "name_label": "TRNAME_RAID_ASSIST_05",
+    "npc_preset": 4,
+    "trainer_type": "youthm",
+    "species": 820,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     263,
+     44,
+     39
+    ],
+    "tera": 0,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_22",
+    "name_label": "TRNAME_RAID_ASSIST_06",
+    "npc_preset": 5,
+    "trainer_type": "sch_middle_m",
+    "species": 334,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     332,
+     225,
+     297
+    ],
+    "tera": 2,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_23",
+    "name_label": "TRNAME_RAID_ASSIST_07",
+    "npc_preset": 6,
+    "trainer_type": "karate",
+    "species": 57,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     67,
+     889,
+     43
+    ],
+    "tera": 11,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_24",
+    "name_label": "TRNAME_RAID_ASSIST_08",
+    "npc_preset": 7,
+    "trainer_type": "model",
+    "species": 426,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     506,
+     403,
+     261
+    ],
+    "tera": 7,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_25",
+    "name_label": "TRNAME_RAID_ASSIST_09",
+    "npc_preset": 8,
+    "trainer_type": "musician",
+    "species": 215,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     168,
+     420,
+     43
+    ],
+    "tera": 14,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_26",
+    "name_label": "TRNAME_RAID_ASSIST_10",
+    "npc_preset": 9,
+    "trainer_type": "sch_young_f",
+    "species": 97,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     428,
+     7,
+     9
+    ],
+    "tera": 13,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_27",
+    "name_label": "TRNAME_RAID_ASSIST_11",
+    "npc_preset": 10,
+    "trainer_type": "researcher",
+    "species": 437,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     360,
+     60,
+     319
+    ],
+    "tera": 8,
+    "gender": 2,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_28",
+    "name_label": "TRNAME_RAID_ASSIST_12",
+    "npc_preset": 11,
+    "trainer_type": "waitress",
+    "species": 700,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     584,
+     98,
+     204
+    ],
+    "tera": 17,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_29",
+    "name_label": "TRNAME_RAID_ASSIST_13",
+    "npc_preset": 12,
+    "trainer_type": "sch_infant_m",
+    "species": 123,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     210,
+     332,
+     43
+    ],
+    "tera": 17,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_30",
+    "name_label": "TRNAME_RAID_ASSIST_14",
+    "npc_preset": 13,
+    "trainer_type": "sch_middle_m",
+    "species": 745,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     317,
+     709,
+     43
+    ],
+    "tera": 5,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_31",
+    "name_label": "TRNAME_RAID_ASSIST_15",
+    "npc_preset": 14,
+    "trainer_type": "sch_senior_m",
+    "species": 844,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     523,
+     28,
+     342
+    ],
+    "tera": 4,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_32",
+    "name_label": "TRNAME_RAID_ASSIST_16",
+    "npc_preset": 15,
+    "trainer_type": "ol",
+    "species": 362,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     423,
+     44,
+     184
+    ],
+    "tera": 14,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_33",
+    "name_label": "TRNAME_RAID_ASSIST_17",
+    "npc_preset": 16,
+    "trainer_type": "ol",
+    "species": 148,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     225,
+     219,
+     21
+    ],
+    "tera": 15,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_34",
+    "name_label": "TRNAME_RAID_ASSIST_18",
+    "npc_preset": 17,
+    "trainer_type": "ol",
+    "species": 454,
+    "form": 0,
+    "level": 40,
+    "ability_number": 1,
+    "moves": [
+     474,
+     67,
+     40
+    ],
+    "tera": 3,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   }
+  ],
+  "raid_trainer_03": [
+   {
+    "trid": "raid_assist_NPC_35",
+    "name_label": "TRNAME_RAID_ASSIST_01",
+    "npc_preset": 0,
+    "trainer_type": "backpacker",
+    "species": 59,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     53,
+     44,
+     43
+    ],
+    "tera": 9,
+    "gender": 1,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_36",
+    "name_label": "TRNAME_RAID_ASSIST_02",
+    "npc_preset": 1,
+    "trainer_type": "tanpan",
+    "species": 748,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     57,
+     398,
+     886
+    ],
+    "tera": 10,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_37",
+    "name_label": "TRNAME_RAID_ASSIST_03",
+    "npc_preset": 2,
+    "trainer_type": "mountain",
+    "species": 930,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     412,
+     219,
+     414
+    ],
+    "tera": 11,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_38",
+    "name_label": "TRNAME_RAID_ASSIST_04",
+    "npc_preset": 3,
+    "trainer_type": "worker",
+    "species": 939,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     435,
+     341,
+     113
+    ],
+    "tera": 12,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_39",
+    "name_label": "TRNAME_RAID_ASSIST_05",
+    "npc_preset": 4,
+    "trainer_type": "youthm",
+    "species": 982,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     887,
+     137,
+     529
+    ],
+    "tera": 0,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_40",
+    "name_label": "TRNAME_RAID_ASSIST_06",
+    "npc_preset": 5,
+    "trainer_type": "sch_middle_m",
+    "species": 398,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     413,
+     263,
+     297
+    ],
+    "tera": 2,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_41",
+    "name_label": "TRNAME_RAID_ASSIST_07",
+    "npc_preset": 6,
+    "trainer_type": "karate",
+    "species": 128,
+    "form": 1,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     873,
+     526,
+     372
+    ],
+    "tera": 11,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_42",
+    "name_label": "TRNAME_RAID_ASSIST_08",
+    "npc_preset": 7,
+    "trainer_type": "model",
+    "species": 426,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     247,
+     403,
+     261
+    ],
+    "tera": 7,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_43",
+    "name_label": "TRNAME_RAID_ASSIST_09",
+    "npc_preset": 8,
+    "trainer_type": "musician",
+    "species": 197,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     399,
+     86,
+     94
+    ],
+    "tera": 16,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_44",
+    "name_label": "TRNAME_RAID_ASSIST_10",
+    "npc_preset": 9,
+    "trainer_type": "sch_young_f",
+    "species": 282,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     473,
+     605,
+     791
+    ],
+    "tera": 13,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_45",
+    "name_label": "TRNAME_RAID_ASSIST_11",
+    "npc_preset": 10,
+    "trainer_type": "researcher",
+    "species": 823,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     442,
+     65,
+     184
+    ],
+    "tera": 8,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_46",
+    "name_label": "TRNAME_RAID_ASSIST_12",
+    "npc_preset": 11,
+    "trainer_type": "waitress",
+    "species": 700,
+    "form": 0,
+    "level": 80,
+    "ability_number": 4,
+    "moves": [
+     585,
+     98,
+     204
+    ],
+    "tera": 17,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_47",
+    "name_label": "TRNAME_RAID_ASSIST_13",
+    "npc_preset": 12,
+    "trainer_type": "sch_infant_m",
+    "species": 214,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     224,
+     280,
+     339
+    ],
+    "tera": 6,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_48",
+    "name_label": "TRNAME_RAID_ASSIST_14",
+    "npc_preset": 13,
+    "trainer_type": "sch_middle_m",
+    "species": 934,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     157,
+     317,
+     484
+    ],
+    "tera": 5,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_49",
+    "name_label": "TRNAME_RAID_ASSIST_15",
+    "npc_preset": 14,
+    "trainer_type": "sch_senior_m",
+    "species": 750,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     667,
+     249,
+     67
+    ],
+    "tera": 4,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_50",
+    "name_label": "TRNAME_RAID_ASSIST_16",
+    "npc_preset": 15,
+    "trainer_type": "ol",
+    "species": 461,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     400,
+     8,
+     43
+    ],
+    "tera": 14,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_51",
+    "name_label": "TRNAME_RAID_ASSIST_17",
+    "npc_preset": 16,
+    "trainer_type": "ol",
+    "species": 612,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     337,
+     263,
+     184
+    ],
+    "tera": null,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   },
+   {
+    "trid": "raid_assist_NPC_52",
+    "name_label": "TRNAME_RAID_ASSIST_18",
+    "npc_preset": 17,
+    "trainer_type": "ol",
+    "species": 980,
+    "form": 0,
+    "level": 80,
+    "ability_number": 1,
+    "moves": [
+     398,
+     707,
+     92
+    ],
+    "tera": null,
+    "gender": 0,
+    "nature": 0,
+    "ball": 4,
+    "held_item": 0,
+    "ivs": [
+     31,
+     10,
+     31,
+     31,
+     10,
+     31
+    ],
+    "evs": [
+     252,
+     0,
+     128,
+     0,
+     0,
+     128
+    ],
+    "shiny": 1,
+    "scale_type": 6,
+    "scale": 128
+   }
+  ]
+ }
+}

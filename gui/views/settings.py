@@ -1,3 +1,4 @@
+from gui.localization import SERVICE, translate
 import copy
 import os
 import threading
@@ -5,18 +6,26 @@ import threading
 import flet as ft
 
 from gui import theme as t
-from gui.localization import SERVICE
 from gui.app import keys_found
-from pokeldn import __version__, pokemon
+from pokeldn import __version__, pokemon, plugins
 from pokeldn.app.paths import SESSION
 from pokeldn.app.sprites import CACHE
-from pokeldn.app.settings import LANGUAGES, switch_ids_valid
+from pokeldn.app.settings import switch_ids_valid
 from pokeldn.app import storage
 from gui.views.widgets import PathField, open_folder
+from pokeldn.app.i18n import t as tr
 
-LINKS = (('文档', "https://decryptu.github.io/pokeldn/"),
-         ("GitHub", "https://github.com/Decryptu/pokeldn"),
-         ("Discord", "https://discord.gg/PyvaVYnpXC"))
+LANGUAGES = (("9", "简体中文"), ("10", "繁体中文"), ("2", tr("settings.language_english", "English")),
+             ("3", tr("settings.language_french", "French")),
+             ("5", tr("settings.language_german", "German")),
+             ("4", tr("settings.language_italian", "Italian")),
+             ("7", tr("settings.language_spanish", "Spanish")),
+             ("1", tr("settings.language_japanese", "Japanese")),
+             ("8", tr("settings.language_korean", "Korean")))
+
+LINKS = ((tr('settings.documentation_c20592', 'Documentation'), "https://decryptu.github.io/pokeldn/"),
+         (tr('settings.github_f911e4', 'GitHub'), "https://github.com/Decryptu/pokeldn"),
+         (tr('settings.discord_053bc6', 'Discord'), "https://discord.gg/PyvaVYnpXC"))
 
 
 class SettingsView:
@@ -25,11 +34,11 @@ class SettingsView:
         self.keys_state = ft.Container()
         self.sprite_state = t.text("", 12, t.MUTED)
         self.update_state = t.text("", 12, t.MUTED)
-        self.storage_state = t.text('正在检查本地文件…', 12, t.MUTED)
+        self.storage_state = t.text(tr('settings.checking_local_files_77c76c', 'Checking local files...'), 12, t.MUTED)
         self.storage_result = t.text("", 12, t.MUTED, visible=False)
         self.storage_inventory = storage.Inventory()
         self.storage_work = False
-        self.clear_button = t.button('清理本地文件', self._clear_local, "folder", filled=False,
+        self.clear_button = t.button(tr('settings.clear_local_files_2f0392', 'Clear local files'), self._clear_local, "folder", filled=False,
                                      disabled=True)
         self.shown = self.asked = False
         app.update_listeners.append(self._update_shown)
@@ -58,7 +67,7 @@ class SettingsView:
         keys = PathField(self.app.picker, home, s.keys, "file", ("keys",), self._keys)
         received = PathField(self.app.picker, home, s.received, "dir", on_change=lambda v: self.save("received", v))
         self._keys(s.keys, update=False)
-        speed = t.dropdown([("921600", '921600（默认）'), ("1500000", '1500000（更快，需要优质数据线）')],
+        speed = t.dropdown([("921600", tr('settings.921600_default_1702d5', '921600 (default)')), ("1500000", tr('settings.1500000_faster_needs_a_good_cable_f5b9b7', '1500000 (faster, needs a good cable)'))],
                            str(s.baud), on_select=lambda e: self.save("baud", int(e.control.value)))
 
         def number(name, label, valid, size):
@@ -72,29 +81,29 @@ class SettingsView:
             return ft.Column([t.text(label, 11, t.MUTED),
                               t.field(value=str(getattr(s, name)), mono=True, digits=True, limit=size,
                                       on_change=store)],
-                             spacing=4, expand=True)
+                             spacing=4, expand=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
         gba = lambda v: 0 <= v <= 65535   # noqa: E731
         trainer = ft.Column([
             ft.Row([
-                ft.Column([t.text('姓名', 11, t.MUTED),
+                ft.Column([t.text(tr('settings.name_dcd1d5', 'Name'), 11, t.MUTED),
                            t.field(value=s.ot, limit=12, on_change=lambda e: self.save("ot", e.control.value[:12]))],
-                          spacing=4, expand=True),
-                ft.Column([t.text("性别", 11, t.MUTED),
-                           t.dropdown([("0", "男"), ("1", "女")], str(s.gender),
+                          spacing=4, expand=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Column([t.text(tr('settings.gender_a04630', 'Gender'), 11, t.MUTED),
+                           t.dropdown([("0", tr('settings.male_03f8c1', 'Male')), ("1", tr('settings.female_e8cca8', 'Female'))], str(s.gender),
                                       on_select=lambda e: self.save("gender", int(e.control.value)))],
-                          spacing=4, expand=True),
-                ft.Column([t.text("语言", 11, t.MUTED),
+                          spacing=4, expand=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Column([t.text(tr('settings.language_a4fe65', 'Language'), 11, t.MUTED),
                            t.dropdown(list(LANGUAGES), str(s.language),
                                       on_select=lambda e: self.save("language", int(e.control.value)))],
-                          spacing=4, expand=True),
-            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
+                          spacing=4, expand=True, alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ], spacing=10, intrinsic_height=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH),
             ft.Row([
-                number("tid", "ID（火红／叶绿）", gba, 5),
-                number("sid", '里 ID', gba, 5),
-                number("switch_tid", "ID（Switch 游戏）", lambda v: switch_ids_valid(v, s.switch_sid), 6),
-                number("switch_sid", '里 ID', lambda v: switch_ids_valid(s.switch_tid, v), 4),
-            ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
+                number("tid", tr('settings.id_firered_and_leafgreen_d6b2c2', 'ID, FireRed and LeafGreen'), gba, 5),
+                number("sid", tr('settings.secret_id_795924', 'Secret ID'), gba, 5),
+                number("switch_tid", tr('settings.id_switch_games_296c3a', 'ID, Switch games'), lambda v: switch_ids_valid(v, s.switch_sid), 6),
+                number("switch_sid", tr('settings.secret_id_795924', 'Secret ID'), lambda v: switch_ids_valid(s.switch_tid, v), 4),
+            ], spacing=10, intrinsic_height=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH),
         ], spacing=10)
 
         def switch(name, label, help_):
@@ -109,54 +118,62 @@ class SettingsView:
                                 padding=ft.Padding(4, 8, 0, 0))
 
         advanced = [
-            t.card('串口波特率', speed, '电脑与开发板的通信速率。除非指南另有要求，请保留默认值。'),
-            switch("board_trace", '记录开发板串口通信',
-                   '在会话记录中加入开发板计数器和每条串口消息。仅在排查无线通信问题时按要求启用。'),
-            t.card("HOME 追踪码", t.dropdown([("empty", "留空（默认）"), ("made", "生成追踪码")],
-                                            s.home_tracker, on_select=lambda e: self._home_tracker(e.control.value)),
-                   "设置银行与宝可梦生成器如何处理跨游戏传送或神秘礼物宝可梦的 HOME 追踪码。"
-                   "留空时 PKHeX 会提示缺少追踪码；自行生成的追踪码会被 HOME 拒绝。"),
-            t.card('宝可梦图像', ft.Row([t.button('清除缓存', self._clear_sprites, "refresh",
+            t.card(tr('settings.serial_speed_1ed128', 'Serial speed'), speed, tr('settings.how_fast_the_computer_talks_to_the_board_keep_the_defau_4942ca', 'How fast the computer talks to the board. Keep the default unless a guide says otherwise.')),
+            switch("board_trace", tr('settings.record_the_board_s_serial_traffic_e599a1', "Record the board's serial traffic"),
+                   tr('settings.adds_the_board_s_counters_and_every_serial_message_to_t_615de0', "Adds the board's counters and every serial message to the session record. Only for radio problems someone asked you to report.")),
+            t.card(tr('settings.home_tracker_2e98ab', 'HOME tracker'), t.dropdown([("empty", tr('settings.leave_it_empty_default_3eca45', 'Leave it empty (default)')), ("made", tr('settings.make_one_495c86', 'Make one'))],
+                                              s.home_tracker, on_select=lambda e: self._home_tracker(e.control.value)),
+                   tr('settings.what_the_bank_the_pokemon_builder_and_mystery_gift_simu_2ba22b', 'What the bank, the Pokemon builder and Mystery Gift - Simulated put in the HOME tracker of a Pokemon moved to another game or received from a Mystery Gift. PKHeX flags an empty one; HOME refuses a made one.')),
+            t.card(tr('settings.pokemon_sprites_bba928', 'Pokemon sprites'), ft.Row([t.button(tr('settings.clear_the_cache_883bc1', 'Clear the cache'), self._clear_sprites, "refresh",
                                                         filled=False), self.sprite_state], spacing=10),
-                   '像素图像来自 PokeAPI，首次下载后缓存在此电脑上。没有图像也能使用应用。',
+                   tr('settings.pixel_art_sprites_come_from_pokeapi_and_are_kept_on_thi_a49320', 'Pixel-art sprites come from PokeAPI and are kept on this computer after the first download. The app works without them.'),
                    trailing=t.switch(s.sprites, lambda e: self.save("sprites", e.control.value))),
         ]
         self.column.controls = [
             ft.Container(ft.Row([t.pixel_icon("gear", size=24, color=t.RED),
-                                 t.text('设置', 22, weight=ft.FontWeight.W_600)], spacing=10),
+                                 t.text(tr('settings.settings_74a883', 'Settings'), 22, weight=ft.FontWeight.W_600)], spacing=10),
                          padding=ft.Padding(4, 12, 0, 0)),
-            section('基础设置'),
-            t.card('Switch 密钥', ft.Column([keys.control, self.keys_state], spacing=8),
-                   '从自己的游戏机导出的 prod.keys，用于与游戏通信，仅保存在此电脑上。'),
-            t.card('原始训练家', trainer,
-                   "生成宝可梦时使用的原始训练家。填写自己的姓名、性别和 ID 即可将其设为自己的宝可梦，交换后可保留亲密度。火红／叶绿显示五位 ID，Switch 游戏显示六位 ID。首次启动时随机生成 ID。"),
-            t.card('已接收的宝可梦', ft.Row([ft.Container(received.control, expand=True),
+            section(tr('settings.your_setup_d0e2ca', 'Your setup')),
+            t.card(tr('settings.app_language_b8352b', 'App language'), t.dropdown(
+                [("zh-Hans", "简体中文"), ("", tr('settings.english_ba118b', 'English')), *((p.id, p.name) for p in plugins.discover() if p.locale and not p.error)],
+                s.app_language, on_select=lambda e: self._language(e.control.value)),
+                tr('settings.community_language_packs_restart_pokeldn_to_apply_this__f11c09', 'Community language packs. Restart pokeldn to apply this choice.')),
+            t.card(tr('settings.switch_keys_f1b42d', 'Switch keys'), ft.Column([keys.control, self.keys_state], spacing=8),
+                   tr('settings.prod_keys_dumped_from_your_own_console_needed_to_talk_t_26673c', 'prod.keys dumped from your own console. Needed to talk to the games; it never leaves this computer.')),
+            t.card(tr('settings.your_trainer_d70afb', 'Your trainer'), trainer,
+                   tr('settings.the_original_trainer_of_every_pokemon_the_app_builds_fo_3e4326', 'The original trainer of every Pokemon the app builds for you. Put your own name, gender and IDs to make them yours, so a traded Pokemon keeps its friendship: FireRed and LeafGreen show a five-digit ID, the Switch games a six-digit one. The IDs were drawn at random on first launch.')),
+            t.card(tr('settings.received_pokemon_1d657d', 'Received Pokemon'), ft.Row([ft.Container(received.control, expand=True),
                                                t.icon_button("external-link",
                                                              lambda e: open_folder(os.path.expanduser(s.received)),
-                                                             '打开文件夹')]),
-                   '保存游戏机发送过来的宝可梦的位置。'),
-            section('存储'),
-            t.card('本地文件', ft.Column([
+                                                             tr('settings.open_it_acfe1b', 'Open it'))]),
+                   tr('settings.where_the_pokemon_a_console_sends_you_are_saved_29cb57', 'Where the Pokemon a console sends you are saved.')),
+            section(tr('settings.storage_a69c4d', 'Storage')),
+            t.card(tr('settings.local_files_3eb956', 'Local files'), ft.Column([
                 self.storage_state,
                 ft.Row([self.clear_button], spacing=10),
                 self.storage_result,
             ], spacing=8),
-                   '清理会话记录、日志、临时交换文件及未使用的已生成宝可梦。保留已接收的宝可梦、已选择的交换文件、密钥、固件和设置。'),
-            section('问题报告'),
-            t.card('记录每次会话', ft.Row([t.button('打开记录文件夹', lambda e: open_folder(
+                   tr('settings.free_space_used_by_session_records_logs_temporary_offer_f7ffba', 'Free space used by session records, logs, temporary offers and unused built Pokemon. Your received Pokemon, selected offers, keys, firmware and settings are kept.')),
+            section(tr('settings.bug_reports_aa0e58', 'Bug reports')),
+            t.card(tr('settings.record_every_session_f5f9d8', 'Record every session'), ft.Row([t.button(tr('settings.open_the_records_6fade1', 'Open the records'), lambda e: open_folder(
                 str(SESSION / "captures")), "folder", filled=False)]),
-                   '为每次会话保存简要记录。发生错误时，请将最新记录附在问题报告中。',
+                   tr('settings.keeps_a_small_record_of_each_session_when_something_fai_b8e93e', 'Keeps a small record of each session. When something fails, attach the latest file to your report.'),
                    trailing=t.switch(s.capture, lambda e: self.save("capture", e.control.value))),
-            ft.Row([t.link_button('隐藏高级设置' if self.show_advanced else '显示高级设置',
+            ft.Row([t.link_button(tr('settings.hide_advanced_settings_82557c', 'Hide advanced settings') if self.show_advanced else tr('settings.show_advanced_settings_c0d5bf', 'Show advanced settings'),
                                   self._toggle_advanced)]),
             *(advanced if self.show_advanced else []),
-            t.card('更新', ft.Row([t.button('立即检查', self._check_update, "refresh", filled=False),
+            t.card(tr('settings.updates_22e2ba', 'Updates'), ft.Row([t.button(tr('settings.check_now_2937cf', 'Check now'), self._check_update, "refresh", filled=False),
                                       self.update_state], spacing=10),
-                   "应用启动时向 GitHub 查询 pokeldn 新版本，并向已安装插件各自的更新地址查询插件新版本。不发送个人或游戏信息。",
+                   tr('settings.asks_github_for_a_newer_pokeldn_when_the_app_starts_and_b07880', "Asks GitHub for a newer pokeldn when the app starts, and each installed plugin's own address for a newer version of it. Nothing about you or your games is sent."),
                    trailing=t.switch(s.check_updates, lambda e: self.save("check_updates", e.control.value))),
-            t.card(f'关于 pokeldn {__version__}', ft.Row([link(label, url) for label, url in LINKS], spacing=4),
-                   'pokeldn 使用 AGPLv3 许可，宝可梦由 PKHeX.Core（GPLv3）检查。'),
+            t.card(tr('settings.about_pokeldn_7bfa4b', 'About pokeldn {value0}', value0=__version__), ft.Row([link(label, url) for label, url in LINKS], spacing=4),
+                   tr('settings.pokeldn_is_agplv3_pokemon_are_checked_with_pkhex_core_g_689838', 'pokeldn is AGPLv3. Pokemon are checked with PKHeX.Core (GPLv3).')),
         ]
+
+    def _language(self, plugin_id: str) -> None:
+        if plugin_id and plugin_id != "zh-Hans" and plugin_id not in self.app.settings.plugins:
+            self.save("plugins", [*self.app.settings.plugins, plugin_id])
+        self.save("app_language", plugin_id)
 
     def _home_tracker(self, value: str) -> None:
         self.save("home_tracker", value)
@@ -176,10 +193,10 @@ class SettingsView:
     def _update_text(self) -> None:
         release, state = self.app.update, self.app.update_state
         self.update_state.value = {
-            "checking": '正在检查…',
-            "current": f'当前已是最新版本（{__version__}）。',
-            "offline": 'GitHub 未响应，请检查网络连接。',
-            "available": f'pokeldn {release.version} 已发布。' if release else "",
+            "checking": tr('settings.checking_2e5f79', 'Checking...'),
+            "current": f"You have the latest version ({__version__}).",
+            "offline": tr('settings.github_did_not_answer_check_your_connection_c1e29b', 'GitHub did not answer. Check your connection.'),
+            "available": f"pokeldn {release.version} is available." if release else "",
         }.get(state, "")
         self.update_state.color = t.GREEN if state == "available" else t.MUTED
 
@@ -192,7 +209,7 @@ class SettingsView:
         self.asked = False
 
     def _clear_sprites(self, e) -> None:
-        self.sprite_state.value = f'{CACHE.clear()} 个文件已删除'
+        self.sprite_state.value = tr('settings.files_removed_78e092', '{value0} files removed', value0=CACHE.clear())
         self.sprite_state.update()
 
     def _storage_refresh(self, inventory=None) -> None:
@@ -200,7 +217,7 @@ class SettingsView:
             return
         self.storage_work = True
         self.clear_button.disabled = True
-        self.storage_state.value = '正在清理本地文件…' if inventory is not None else '正在检查本地文件…'
+        self.storage_state.value = tr('settings.clearing_local_files_a2d4fd', 'Clearing local files...') if inventory is not None else tr('settings.checking_local_files_77c76c', 'Checking local files...')
         if self.shown:
             self.app.ui(self.control.update)
         settings = copy.deepcopy(self.app.settings)
@@ -224,18 +241,18 @@ class SettingsView:
         self.storage_inventory = inventory
         count = len(inventory.files)
         self.clear_button.disabled = not count
-        self.storage_state.value = (f'{storage.size_text(inventory.size)} 可释放 · {count} 个文件'
-                                    if count else '没有可清理的本地文件。')
+        self.storage_state.value = (tr('settings.can_be_freed_files_57c49a', '{value0} can be freed · {value1} files', value0=storage.size_text(inventory.size), value1=count)
+                                    if count else tr('settings.no_local_files_to_clear_9fe2b9', 'No local files to clear.'))
         if inventory.errors:
-            self.storage_state.value += '部分文件夹无法读取。'
+            self.storage_state.value += tr('settings.some_folders_could_not_be_read_a6ffe1', ' Some folders could not be read.')
         if result is not None:
-            self.storage_result.value = f'已释放 {storage.size_text(result.size)} · {result.files} 个文件已删除。'
+            self.storage_result.value = tr('settings.freed_files_removed_abb414', 'Freed {value0} · {value1} files removed.', value0=storage.size_text(result.size), value1=result.files)
             if result.errors:
-                self.storage_result.value += f' {result.errors} 个文件无法删除，请重试。'
+                self.storage_result.value += tr('settings.files_could_not_be_removed_try_again_0e7489', ' {value0} files could not be removed; try again.', value0=result.errors)
             if result.skipped:
-                self.storage_result.value += '正在使用或检查后已修改的文件予以保留。'
+                self.storage_result.value += tr('settings.files_in_use_or_changed_since_the_check_were_kept_b24a31', ' Files in use or changed since the check were kept.')
         if error:
-            self.storage_result.value = f'无法清理本地文件：{error}'
+            self.storage_result.value = tr('settings.could_not_clear_local_files_7e6283', 'Could not clear local files: {value0}', value0=error)
         self.storage_result.visible = bool(self.storage_result.value)
         if self.shown:
             self.control.update()
@@ -244,7 +261,7 @@ class SettingsView:
         if self.storage_work:
             return
         if self.app.busy:
-            self.storage_result.value = '请先完成当前运行或开发板检查，再清理本地文件。'
+            self.storage_result.value = tr('settings.finish_the_current_run_or_board_check_before_clearing_l_0e8d2c', 'Finish the current run or board check before clearing local files.')
             self.storage_result.visible = True
             self.storage_result.update()
             return
@@ -259,7 +276,7 @@ class SettingsView:
         def clear(e):
             close(e)
             if self.app.busy or self.storage_work:
-                self.storage_result.value = '请先完成当前运行或开发板检查，再清理本地文件。'
+                self.storage_result.value = tr('settings.finish_the_current_run_or_board_check_before_clearing_l_0e8d2c', 'Finish the current run or board check before clearing local files.')
                 self.storage_result.visible = True
                 self.storage_result.update()
                 return
@@ -267,10 +284,10 @@ class SettingsView:
             self._storage_refresh(inventory)
 
         self.app.page.show_dialog(t.dialog(
-            title=t.text('清理本地文件？', 17, weight=ft.FontWeight.W_600),
+            title=t.text(tr('settings.clear_local_files_5d39aa', 'Clear local files?'), 17, weight=ft.FontWeight.W_600),
             content=ft.Container(t.text(
-                f'删除 {len(inventory.files)} 个文件，约可释放 {storage.size_text(inventory.size)}。将删除已保存的会话记录、日志、临时交换文件和未使用的已生成宝可梦。请先保存问题报告需要的记录。保留已接收的宝可梦、已选择的交换文件、密钥、固件和设置。', 13, t.MUTED), width=460),
-            actions=[t.secondary_button('取消', close), t.button('清理文件', clear)],
+                tr('settings.remove_files_and_free_about_this_deletes_saved_session__3f93fe', 'Remove {value0} files and free about {value1}. This deletes saved session records, logs, temporary offers and unused built Pokemon. Save any records needed for a bug report first. Your received Pokemon, selected offers, keys, firmware and settings are kept.', value0=len(inventory.files), value1=storage.size_text(inventory.size)), 13, t.MUTED), width=460),
+            actions=[t.secondary_button(tr('settings.cancel_19766e', 'Cancel'), close), t.button(tr('settings.clear_files_a16c81', 'Clear files'), clear)],
         ))
 
     def _keys(self, value: str, update: bool = True) -> None:
@@ -279,6 +296,6 @@ class SettingsView:
         self.keys_state.content = ft.Row([
             t.pixel_icon("checkbox-on" if ok else "warning-diamond",
                     color=t.GREEN if ok else t.RED),
-            t.text('已找到' if ok else '此路径下没有文件', 12, t.GREEN if ok else t.RED)], spacing=6)
+            t.text(tr('settings.found_b0ee31', 'Found') if ok else tr('settings.no_file_at_this_path_f6f154', 'No file at this path'), 12, t.GREEN if ok else t.RED)], spacing=6)
         if update:
             self.keys_state.update()

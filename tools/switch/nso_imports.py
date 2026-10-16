@@ -4,32 +4,12 @@
 Calls into another module go through GOT slots filled by JUMP_SLOT or GLOB_DAT relocations;
 nso_relocs.py reads only the RELATIVE ones.
 """
-import struct, sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from nso_relocs import mod0, dynamic
+import os
+import sys
 
-R_GLOB_DAT, R_JUMP_SLOT = 1025, 1026
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-
-def imports(img):
-    """-> list of (got_slot, symbol_name)."""
-    _, dyn = mod0(img)
-    t = dynamic(img, dyn)
-    symtab, strtab, syment = t.get(6), t.get(5), t.get(11, 24)
-    out = []
-    ranges = [(t.get(7), t.get(8), t.get(9, 24)), (t.get(23), t.get(2), 24)]
-    for rela, sz, ent in ranges:
-        if not rela or not sz:
-            continue
-        for o in range(rela, rela + sz, ent):
-            off, info, add = struct.unpack_from("<QQq", img, o)
-            rtype, sym = info & 0xFFFFFFFF, info >> 32
-            if rtype not in (R_GLOB_DAT, R_JUMP_SLOT) or not sym:
-                continue
-            name_off = struct.unpack_from("<I", img, symtab + sym * syment)[0]
-            end = img.find(b"\0", strtab + name_off)
-            out.append((off, img[strtab + name_off:end].decode("utf-8", "replace")))
-    return out
+from pokeldn.switch.nso import R_GLOB_DAT, R_JUMP_SLOT, dynamic, imports, mod0  # noqa: E402,F401
 
 
 if __name__ == "__main__":

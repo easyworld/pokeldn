@@ -1,5 +1,7 @@
 """The battler object (one per Pokemon in battle): field getters and flag bits."""
 
+from pokeldn.sv.battle.engine.calls import M32, _tail, _vtail
+from pokeldn.sv.battle.engine.containers import battler
 from pokeldn.sv.battle.machine import UnliftedCall, lifted
 
 
@@ -392,3 +394,376 @@ def set_out_reason(m, b, a, c, *_):
     """For a battler out of the battle (vf 0x200): +0x7c and the u32 at +0x78."""
     if m.vcall(b, 0x200) & 1:
         m.put(b + 0x7C, 1, a); m.put(b + 0x78, 4, c)
+
+
+@lifted(0x2D3BAB4)
+def value_402_406(m, o, *_):
+    p = m.u64(o + 0x700)
+    return m.u16(o + 0x406) if p and m.u32(p + 0xB8) else m.u16(o + 0x402)
+
+
+@lifted(0x2D3D8D8)
+def set_slot_pair(m, b, i, pair, *_):
+    """Store a 16-byte pair at +0x80 + 16i and clear byte +0x390 + i; slots below 6 run vf 0x608 first."""
+    k = i & 0xFFFF
+    if k <= 5:
+        m.vcall_void(b, 0x608, i, pair)
+    m.write(b + 0x80 + 16 * k, m.read(pair, 16))
+    m.put(b + 0x390 + k, 1, 0)
+
+
+@lifted(0x11484E4)
+def battler_508(m, o, ident, arg, *_):
+    """Tail call of vf 0x508 on battler `ident` with `arg`."""
+    b = m.call(m.main + 0xF21C94, m.u64(m.u64(o + 0x10) + 0x30), ident)
+    m.vcall_void(b, 0x508, arg & 0xFFFFFFFF)
+
+
+@lifted(0x16EEB98)
+def unruled_460(m, o, pokecon, b, *_):
+    """vf 0x460 of the battler when flag bit 2 of +0x499 is clear, +0x30 is below 2 and the battler's
+    rule value (setup map) is absent, 0 or above 4 (signed: a negative value gives 0); else 0."""
+    s = m.u64(o + 0x38)
+    if m.u8(s + 0x499) >> 2 & 1 or m.u32(s + 0x30) > 1:
+        return 0
+    setup = m.u64(pokecon + 0x290)
+    p = m.call(m.main + 0x10E2DD4, m.u64(m.u64(setup + 8) + 0x50), m.vcall(b, 0x98) & 0xFFFFFFFF)
+    if p:
+        v = m.s(p, 4)
+        if v <= 4 and v != 0:  # cmp #4; ccmp #0, le at 0x16eebec: signed
+            return 0
+    return m.vcall(b, 0x460)
+
+
+@lifted(0x1360524)
+def battler_618(m, o, ident, arg, *_):
+    """Tail call of vf 0x618 on battler `ident` with `arg`."""
+    b = m.call(m.main + 0xF21C94, m.u64(m.u64(o + 0x10) + 0x30), ident)
+    m.vcall_void(b, 0x618, arg & 0xFFFFFFFF)
+
+
+@lifted(0x2D1F884)
+def has_type_715(m, b, *_):
+    """Whether the type byte at +0x715 (when +0x714 is set) is one of the battler's two types (+0x40a,
+    +0x40b), after vf 0x220 (0x19) and vf 0x4d0 (0x17) mask them; 0x12 is no type (0x3c630a0 maps 0..0x12
+    to itself)."""
+    if m.u8(b + 0x714) == 0:
+        return 0
+    c = m.vcall(b, 0x220, 0x19) & 1
+    t1, t2 = m.u8(b + 0x40A), m.u8(b + 0x40B)
+    r = m.vcall(b, 0x4D0, 0x17) & 1
+    a = t1 == 0x12 or (c and t1 == 2)
+    z = t2 == 0x12 or (c and t2 == 2)
+    if r:
+        if a and z:
+            t1 = t2 = 0x12
+        elif a:
+            t1 = t2
+        elif z:
+            t2 = t1
+    elif a:
+        t2 = 0 if z else t2
+        t1 = t2
+    elif z:
+        t2 = t1
+    k = m.u8(b + 0x715)
+    t = k if k <= 0x12 else 0x12
+    return int(t == t1 or t == t2)
+
+
+@lifted(0x288D134)
+def battler_1c8(m, o, ident, a, b, *_):
+    """Tail call of vf 0x1c8 (a, b) on battler `ident`, nothing when there is none."""
+    t = m.call(m.main + 0xF21C94, m.u64(m.u64(o + 0x10) + 0x30), ident)
+    if t == 0:
+        return 0
+    return _tail(m, m.u64(m.u64(t) + 0x1C8), t, a & 0xFFFFFFFF, b & 0xFFFFFFFF)
+
+
+@lifted(0x14807D0)
+def reset_32_flags(m, b, *_):
+    """Clear the u32 at +0x49a and run vf 0x500 for 0..31."""
+    m.put(b + 0x49A, 4, 0)
+    for i in range(32):
+        m.vcall_void(b, 0x500, i)
+
+
+@lifted(0x15C04B0)
+def has_battler(m, o, ident, *_):
+    """Whether the u32-keyed battler map at o+0x140 holds a nonzero battler for `ident`."""
+    from pokeldn.sv.battle.engine.containers import find
+    node = find(m, o + 0x140, ident & 0xFFFFFFFF, 4)
+    return int(node != 0 and m.u64(node + 0x18) != 0)
+
+
+@lifted(0x283D610)
+def battler_by_id(m, o, ident, *_):
+    """Tail call of 0xf21c94 on [[o+8]+0x30]."""
+    return m.call(m.main + 0xF21C94, m.u64(m.u64(o + 8) + 0x30), ident)
+
+
+@lifted(0x1373610)
+def refresh_716(m, o, a, b, *_):
+    """0x13736d8, then when the type chain of [o+0x48]+0x28 (vf 0) holds the static 0x46dcd58: +0x716 =
+    0xbf44f4 of [[o+0x48]+0x48]+0x70."""
+    m.call_void(m.main + 0x13736D8, o, a & 1, b & 1)
+    p = m.u64(o + 0x48)
+    t = m.vcall(p + 0x28, 0)
+    guard = m.u64(m.main + 0x46DCD50)
+    if m.u8(guard) & 1 == 0 and m.call(m.main + 0x343CF10, guard) & 0xFFFFFFFF:
+        m.put(m.u64(m.main + 0x46DCD58), 8, m.call(m.main + 0x19F5520))
+        m.call_void(m.main + 0x343CF20, guard)
+    want = m.u64(m.main + 0x46DCD58)
+    while t:
+        if t == want:
+            v = m.call(m.main + 0xBF44F4, m.u64(m.u64(p + 0x48) + 0x70))
+            m.put(o + 0x716, 2, v)
+            return v
+        t = m.u64(t)
+    return 0
+
+
+@lifted(0x14A08A4)
+def bump_counter(m, o, ident, key, *_):
+    """vf 0x780(key, vf 0x778(key) + 1) on the battler `ident`; a count of 0xff wraps to -1."""
+    from pokeldn.sv.battle.engine.containers import battler
+    b = battler(m, m.u64(m.u64(o + 0x10) + 0x30), ident)
+    v = m.vcall(b, 0x778, key & 0xFFFFFFFF) & 0xFF
+    return _vtail(m, b, 0x780, key & 0xFFFFFFFF, 0xFFFFFFFF if v == 0xFF else v + 1)
+
+
+@lifted(0x136075C)
+def battler_to_1360c00(m, o, ident, *_):
+    from pokeldn.sv.battle.engine.containers import battler
+    b = battler(m, m.u64(m.u64(o + 0x10) + 0x30), ident)
+    return _tail(m, m.main + 0x1360C00, m.u64(o + 0x18), b)
+
+
+def _main_battler(m, o, ident):
+    return battler(m, m.u64(m.u64(o + 0x10) + 0x30), ident)
+
+
+@lifted(0x1143AB8)
+def battler_set_5a0(m, o, ident, i, v, *_):
+    b = _main_battler(m, o, ident)
+    return _vtail(m, b, 0x530, i & 0xFFFFFFFF, v & 0xFFFFFFFF)
+
+
+@lifted(0x183F194)
+def battler_4f8(m, o, ident, a, b2, *_):
+    b = _main_battler(m, o, ident)
+    return _vtail(m, b, 0x4F8, a & 0xFFFFFFFF, b2)
+
+
+@lifted(0x288CE48)
+def battler_398(m, o, ident, *_):
+    return _vtail(m, _main_battler(m, o, ident), 0x398)
+
+
+@lifted(0x14375B4)
+def battler_4a0(m, o, ident, *_):
+    b = _main_battler(m, o, ident)
+    if b == 0:
+        return
+    return _vtail(m, b, 0x4A0)
+
+
+@lifted(0x1381400)
+def has_id(m, o, ident, *_): return int(m.call(m.main + 0x1381420, o, ident) & 0xFF != 10)
+
+
+@lifted(0x113F4F8)
+def settle_state(m, o, *_):
+    r = m.call(m.main + 0x113F5B8, m.call(m.main + 0x114E480, o))
+    if r & 1:
+        return r
+    if m.call(m.main + 0x113F630, m.call(m.main + 0x113F5B0, m.call(m.main + 0x1482534, o))) & 1 == 0:
+        e = m.call(m.main + 0x113F5B0, m.call(m.main + 0x1482534, o))
+        r = m.call(m.main + 0x113F5C8, e, 0)
+        if r & 0xFF == 0:
+            return r
+    a = m.call(m.main + 0x114E480, o)
+    flag = m.call(m.main + 0x114E550, a, m.call(m.main + 0x1482534, o)) & 1
+    x = m.call(m.main + 0x1143584, o)
+    m.call_void(m.main + (0x1148C58 if flag else 0x114C994), x)
+    m.call_void(m.main + 0x113F5F0, o)
+    p = m.call(m.main + 0x113DE70, m.call(m.main + 0x113DE68, o))
+    m.put(p, 1, 2)   # tail call to 0x113fa5c, a byte store returning its pointer
+    return p
+
+
+@lifted(0x2D1F784)
+def has_type_2d1f784(m, b, t, *_):
+    t &= 0xFF
+    if t == 0x12:
+        return 0
+    r = m.vcall(b, 0x220, 0x19) & 1
+    c1, c2 = m.u8(b + 0x40A), m.u8(b + 0x40B)
+    a = c1 == 0x12 or (r and c1 == 2)
+    z = c2 == 0x12 or (r and c2 == 2)
+    if m.vcall(b, 0x4D0, 0x17) & 1:
+        if not a:
+            if z:
+                c2 = c1
+        elif not z:
+            c1 = c2
+        else:
+            c1 = c2 = 0x12
+    elif a:
+        c1 = c2 = 0 if z else c2
+    elif z:
+        c2 = c1
+    return int(c1 == t or c2 == t)
+
+
+@lifted(0x2D3B780)
+def bump_490(m, b, *_):
+    """Raise the byte counter behind slots 0x490 (get) and 0x498 (set) by one, unless it is 0xff."""
+    v = m.vcall(b, 0x490)
+    if ~v & 0xFF == 0:
+        return
+    return _vtail(m, b, 0x498, (v + 1) & 0xFFFFFFFF)
+
+
+@lifted(0x171A850)
+def battler_1c0(m, o, ident, a, b, *_):
+    bt = _main_battler(m, o, ident)
+    if bt == 0:
+        return
+    return _vtail(m, bt, 0x1C0, a & 0xFFFFFFFF, b & 0xFFFFFFFF)
+
+
+@lifted(0x13736D8)
+def refresh_battle_stats(m, b, reset, scale, *_):
+    """reset: +0x40a/+0x40b from vf 0x350/0x358, +0x410 = 0, +0x40c = 0x12. Always +0x40d from the
+    core's vf 0x130. scale: the u16 stats +0x400..+0x408 = core vf 0x70(1..5) * byte +0x3f6.. / 10."""
+    if reset & 1:
+        m.put(b + 0x40A, 1, m.vcall(b, 0x350))
+        m.put(b + 0x40B, 1, m.vcall(b, 0x358))
+        m.put(b + 0x410, 4, 0)
+        m.put(b + 0x40C, 1, 0x12)
+    m.put(b + 0x40D, 1, m.vcall(m.u64(b + 0x48), 0x130))
+    if scale & 1:
+        for i in range(5):
+            v = m.vcall(m.u64(b + 0x48), 0x70, i + 1) & 0xFFFF
+            m.put(b + 0x400 + 2 * i, 2, (v * m.u8(b + 0x3F6 + i) & 0xFFFFFFFF) // 10)
+
+
+@lifted(0x14806D0)
+def apply_five_flags(m, b, flags, *_):
+    """For each non-zero byte k of flags +4..+8, vf 0x370(k - 3, byte)."""
+    vals = [m.u8(flags + 4 + k) for k in range(5)]
+    if not any(vals):
+        return b
+    r = b
+    for k, v in enumerate(vals):
+        if v:
+            r = _vtail(m, b, 0x370, k + 1, v)
+    return r
+
+
+@lifted(0xF79790)
+def battler_checked(m, o, ident, *_):
+    """The battler with id `ident` (map o+0x140) when present (count, then at), else 0."""
+    return battler(m, o, ident)
+
+
+@lifted(0x2842E80)
+def battler_308(m, o, ident, *_):
+    """vf 0x308 of the battler with id `ident` (0xf79790 on [[o+8]+0x30])."""
+    b = m.call(m.main + 0xF79790, m.u64(m.u64(o + 8) + 0x30), ident)
+    return _vtail(m, b, 0x308)
+
+
+@lifted(0x114EB70)
+def note_718_in_side(m, o, b, *_):
+    """For a battler whose type list (+0x28 interface, vf 0) holds the static 0x46d3f08: store its u16
+    +0x718 at +6 of the entry holding its id among the six 0x10-byte entries from +0x10 of its side's
+    0x60-byte row ([[o+0x10]+0x250]; side from the setup map, 0..4)."""
+    node = m.vcall(b + 0x28, 0)
+    if m.u8(m.u64(m.main + 0x46D3F00)) & 1 == 0:
+        raise UnliftedCall("static 0x46d3f08 not built")
+    static = m.u64(m.main + 0x46D3F08)
+    while node != static:
+        if node == 0:
+            return
+        node = m.u64(node)
+    ident = m.vcall(b, 0x98) & 0xFFFFFFFF
+    v = m.u16(b + 0x718)
+    p = m.call(m.main + 0x10E2DD4, m.u64(m.u64(m.u64(m.u64(o + 0x10) + 0x290) + 8) + 0x50), ident)
+    side = 0
+    if p:
+        side = m.s(p, 4)
+        if side >= 5:
+            side = 0
+        if side & 0xFF > 4:
+            return
+        side &= 0xFF
+    row = m.u64(m.u64(o + 0x10) + 0x250) + side * 0x60
+    for k in range(1, 7):
+        if m.u32(row + 0x10 * k) == ident:
+            m.put(row + 0x10 * k + 6, 2, v)
+            return
+
+
+@lifted(0x2844800)
+def not_flagged_and_not_308(m, o, ident, *_):
+    """1 unless 0x28422f0 holds for {0x283d610(o), 1} or battler `ident`'s vf 0x308 (0x2842e80) does."""
+    with m.frame(0x10) as p:
+        m.put(p, 8, m.call(m.main + 0x283D610, o, ident))
+        m.put(p + 8, 1, 1)
+        if m.call(m.main + 0x28422F0, o, p) & 1:
+            return 0
+    return (m.call(m.main + 0x2842E80, o, ident & 0xFFFFFFFF) ^ 1) & 1
+
+
+def _battler_of(m, o, ident):
+    return m.call(m.main + 0xF21C94, m.u64(m.u64(o + 8) + 0x30), ident)
+
+
+@lifted(0x1142484)
+def battler_vf_4e0(m, o, ident, v, *_):
+    b = m.call(m.main + 0xF21C94, m.u64(m.u64(o + 0x10) + 0x30), ident)
+    return _tail(m, m.u64(m.u64(b) + 0x4E0), b, v)
+
+
+@lifted(0x1360558)
+def is_type_7f(m, o, b, *_):
+    """Whether b's vf 0xf8 is 0x7f or event 0xec lists 0x7f among its (count 0x7c) u16 values."""
+    if m.vcall(b, 0xF8) & 0xFFFF == 0x7F:
+        return 1
+    with m.frame(0x10) as f:
+        out = f + 0xC
+        n = m.call(m.main + 0x114F6FC, m.call(m.main + 0x1146E90, o), m.vcall(b, 0x98) & M32, out) & 0xFF
+        for i in range(n):
+            if m.u16(out + 2 * i) == 0x7F:
+                return 1
+    return 0
+
+
+@lifted(0x2D3B81C)
+def add_byte(m, b, v, *_):
+    """Add v to the byte set at b+0x3c2 (count +0x3c1, at most 30) once."""
+    n = m.u8(b + 0x3C1)
+    if any(m.u8(b + 0x3C2 + i) == v & M32 for i in range(n)):
+        return b
+    if n and n - 1 > 0x1C:
+        return b
+    m.put(b + 0x3C2 + n, 1, v); m.put(b + 0x3C1, 1, n + 1)
+    return b
+
+
+@lifted(0x2D3DBC4)
+def reset_turn_record(m, b, v, *_):
+    """u16 +0x48a = v, +0x488 = 0, byte +0x6e = 1, the 0x125 bytes from +0x5cc zeroed."""
+    m.put(b + 0x48A, 2, v); m.put(b + 0x488, 2, 0); m.put(b + 0x6E, 1, 1)
+    m.write(b + 0x5CC, bytes(0x125))
+    return b + 0x5CC
+
+
+@lifted(0x114E550)
+def first_turn_flag(m, o, b, *_):
+    """0 under rule 0x49b bit 0, else whether u32 [[b+0x70]+0xcc] is 0."""
+    if m.u8(m.u64(o + 0x38) + 0x49B) & 1:
+        return 0
+    return int(m.u32(m.u64(b + 0x70) + 0xCC) == 0)

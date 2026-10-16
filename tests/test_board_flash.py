@@ -232,3 +232,10 @@ def test_an_update_is_offered_only_for_a_newer_included_image(tmp_path, monkeypa
     assert board.image_info(image) == ("pokeldn_pad", included)
     assert board.update_for(installed, "pad", "ESP32-S3") == offered
     assert board.update_for(installed, "pad", "ESP32-C3") == ""    # the controller does not run on a C3
+
+
+@pytest.fixture(autouse=True)
+def english_hardware_errors():
+    # Hardware checks use the English error contract, independently of the app's default locale.
+    from pokeldn.app.i18n import select
+    select()

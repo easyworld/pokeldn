@@ -9,11 +9,11 @@ from typing import Callable
 import flet as ft
 
 from gui import drop, theme as t
-from gui.localization import translate_app_log
+from pokeldn.app.i18n import t as tr
 
 
 class PixelActivity(ft.Container):
-    def __init__(self, label: str = '加载中'):
+    def __init__(self, label: str = tr('widgets.loading_dc3808', 'Loading')):
         positions = [(6, 0), (12, 0), (12, 6), (12, 12), (6, 12), (0, 12), (0, 6), (0, 0)]
         self._pixels = [ft.Container(width=3, height=3, left=x, top=y, bgcolor=t.BLUE,
                                      opacity=1 if i == 0 else 0.2)
@@ -37,7 +37,13 @@ class PixelActivity(ft.Container):
             phase = (phase + 1) % len(self._pixels)
             for i, pixel in enumerate(self._pixels):
                 pixel.opacity = max(0.18, 1 - ((phase - i) % 8) * 0.22)
-            self.update()
+            try:
+                self.update()
+            except RuntimeError as error:
+                # An async list can replace its loading icon between the wake-up and update.
+                if "must be added to the page" not in str(error):
+                    raise
+                return
 
 
 class Check:
@@ -70,7 +76,7 @@ class CodeBlock:
         self.control = ft.Container(ft.Row([
             ft.Container(content if content is not None else self.text, expand=True,
                          padding=ft.Padding(0, 6, 0, 6)),
-            t.icon_button("copy", self._copy, '复制代码'),
+            t.icon_button("copy", self._copy, tr('widgets.copy_code_49a005', 'Copy code')),
         ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.START),
             bgcolor=t.BG, border_radius=10, padding=10)
 
@@ -162,7 +168,7 @@ class Log:
         color = t.RED if ("traceback" in lower or "error" in lower or "failed" in lower) else \
             t.GREEN if ("complete" in lower or "success" in lower) else \
             t.BLUE if line.startswith("[app]") else t.SOFT
-        return ft.Text(translate_app_log(line), size=11, color=color, font_family=t.MONO, selectable=True)
+        return ft.Text(line, size=11, color=color, font_family=t.MONO, selectable=True)
 
     def add(self, line: str) -> None:
         with self.lock:
@@ -206,7 +212,7 @@ class PathField:
         self.field = t.field(value=value, mono=True, expand=True,
                              on_change=lambda e: self._changed(e.control.value), **options)
         icon = "folder" if mode == "dir" else "file"
-        row = ft.Row([self.field, t.icon_button(icon, self._browse, '浏览')], spacing=6,
+        row = ft.Row([self.field, t.icon_button(icon, self._browse, tr('widgets.browse_3227aa', 'Browse'))], spacing=6,
                      vertical_alignment=ft.CrossAxisAlignment.CENTER)
         self.control = (drop.target(ft.Container(row, border_radius=t.CONTROL_RADIUS), self._dropped)
                         if droppable else row)
@@ -258,7 +264,7 @@ class DigitCode:
     box clears the previous one (page_key), a pasted code fills from the box it lands in. The value
     keeps a cleared box as a space; command.code_error refuses anything but the full code."""
 
-    focused: "DigitCode | None" = None     # the code whose box has the focus; page key events go to it
+    focused: 'DigitCode | None' = None     # the code whose box has the focus; page key events go to it
 
     def __init__(self, value: str, on_change: Callable[[str], None], length: int = 8):
         self.on_change, self.length = on_change, length

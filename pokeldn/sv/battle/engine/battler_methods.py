@@ -1,6 +1,7 @@
 """Battler methods reached through its vtable (main+0x44fbcb0): small getters, setters and the calls
 it hands to the Pokemon object it holds at +0x48."""
 
+from pokeldn.sv.battle.engine.calls import _tail
 from pokeldn.sv.battle.machine import lifted
 
 MOVE_SLOT, MOVE_COUNT = 0x16, 0x482
@@ -334,7 +335,7 @@ for _addr, _slot, _off in ((0x2D3BD60, 0xC0, 0x414), (0x2D3BDB4, 0xC8, 0x415),
 
 @lifted(0x287A554)
 def marker(m, *_):
-    from pokeldn.sv.battle.engine.getters import static_46d3f08
+    from pokeldn.sv.battle.engine.statics import static_46d3f08
     return static_46d3f08(m)
 
 
@@ -499,3 +500,40 @@ def slot_2a8_unless_0x13(m, b, record, *_):
     if m.u32(record + 0xBC) or m.vcall(b, 0x220, 0x13) & 1:
         return 0
     return m.vcall(b, 0x2A8)
+
+
+def _pokemon_tail(target):
+    """A tail call of `target` on the Pokemon record [[o+0x48]+0x70], other arguments passed through."""
+    def fn(m, o, *rest):
+        return _tail(m, m.main + target, m.u64(m.u64(o + 0x48) + 0x70), *rest[:7])
+    return fn
+
+
+for _addr, _target in ((0x287A7C8, 0xDEE950), (0x287A9B4, 0xD974E0), (0x287A93C, 0x121C054)):
+    lifted(_addr)(_pokemon_tail(_target))
+
+
+def _record_tail(target, deref=True):
+    """A battler method that tail-calls `target` with its core (+0x48), or with the core's record
+    accessor (+0x70) when `deref`, passing the caller's other arguments through."""
+    def fn(m, b, *rest):
+        core = m.u64(b + 0x48)
+        return _tail(m, m.main + target, m.u64(core + 0x70) if deref else core, *rest[:6])
+    return fn
+
+
+for _addr, _target, _deref in ((0x287A8A8, 0xBEC030, True), (0x287A8B4, 0xD97B78, True),
+                               (0x287A728, 0xE14B64, True), (0x287A734, 0xD97F14, False)):
+    lifted(_addr)(_record_tail(_target, _deref))
+
+
+# Stat getters on the record [pp+0x70] by index 0..5 (jump table 0x3c62c8c).
+_STAT_OF = (0xD97F74, 0xD982BC, 0xD98604, 0xD9894C, 0xD98FDC, 0xD98C94)
+
+
+@lifted(0xD97F14)
+def stat_of(m, pp, i, *_):
+    i &= 0xFF
+    if i > 5:
+        return 0
+    return _tail(m, m.main + _STAT_OF[i], m.u64(pp + 0x70))

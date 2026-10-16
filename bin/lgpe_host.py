@@ -165,7 +165,7 @@ async def find_console_channel(keys, phy, scene, seconds, channels=(1, 6, 11), d
     """The channel of a searching console's own network under `scene`, or None within `seconds`.
     A searching console joins only a host on its own channel (docs/lgpe_session.md, The link code)."""
     import trio
-    import ldn
+    from pokeldn.ldn import api as ldn
     deadline = trio.current_time() + seconds
     while trio.current_time() < deadline:
         for net in await ldn.scan(keys, phyname=phy, channels=list(channels), dwell_time=dwell):
@@ -177,7 +177,7 @@ async def find_console_channel(keys, phy, scene, seconds, channels=(1, 6, 11), d
 
 def console_channel(keys_path, phy, scene, seconds):
     import trio
-    import ldn
+    from pokeldn.ldn import api as ldn
     return trio.run(find_console_channel, ldn.load_keys(keys_path), phy, scene, seconds)
 
 

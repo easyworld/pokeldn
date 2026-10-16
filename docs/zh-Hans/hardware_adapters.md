@@ -12,6 +12,27 @@ Linux 主机可以作为 root 直接驱动支持 AP 的 Wi-Fi 卡，代替 [ESP3
 | 启动 AP 时出现类似虚拟机管理程序造成的 USB 断连 | USB 模式开关（见下文） |
 |沉默的主机| `accept_decrypted_ccmp` 未设置 |
 | `failed to get tx report from firmware` 在 `dmesg` |主机自行拆解|
+<a id="windows-usb-wi-fi-through-ldnrs"></a>
+
+## 通过 ldnrs 使用 Windows USB Wi-Fi
+
+Windows 可通过 [ldnrs 0.0.3](https://github.com/unlimitedcoder2/ldnrs/releases/tag/0.0.3) 使用外置 USB Wi-Fi 适配器。请另行安装 ldnrs，完成适配器向导并保持其守护进程运行。在 pokeldn 的“插件”页面，从“无线后端”中选择“USB Wi-Fi（Windows，ldnrs）”。Switch 密钥仍使用 pokeldn 设置中的文件。
+
+ldnrs 向导会将选定适配器绑定到 WinUSB，并下载所需的 Linux 驱动固件。WinUSB 接管期间，该适配器无法再提供普通 Windows Wi-Fi，请使用其他连接访问互联网。要恢复普通联网，请在设备管理器中恢复原驱动。兼容性取决于 ldnrs 中的驱动及固件；下方的 Linux 网卡测量不能证明 Windows 兼容性。
+
+在 PowerShell 中，先选择后端，再运行对应游戏的常规启动器：
+
+```powershell
+$env:POKELDN_RADIO = 'ldnrs:'
+python bin/swsh_gift_host.py --keys C:\Switch\prod.keys --species 25 --level 25
+```
+
+空参数选择本地管道 `\\.\pipe\ldnd`，冒号后也可指定其他本地管道。守护进程通过该本地管道接收选定的密钥，负责无线设备、LDN 关联与加密；pokeldn 通过既有的用户态 IPv4 协议栈传输以太网帧。扫描、加入、主持及广播更新使用[守护进程协议 7](https://github.com/unlimitedcoder2/ldnrs/blob/0.0.3/docs/daemon-protocol.md)。守护进程缺失、适配器未就绪或协议版本不符时会报错。
+
+守护进程允许关联过程耗时 70 秒，启动器至少允许 90 秒。上游的 [RTL8822BU 测量](https://github.com/unlimitedcoder2/ldnrs/blob/0.0.3/clients/python/ldnd/compat.py)显示，两次驱动重新配置各需约 14.5 秒。游戏握手在关联完成后开始。一个守护进程同时只能处理一场会话；会话结束时，pokeldn 关闭自身原始通道及网络，外部守护进程继续运行。数据包捕获仍保留游戏 UDP 流量，但 ESP32 计数器及随包库的 Wi-Fi 管理钩子不适用于此后端。
+
+离线检查会将扫描、加入与主持请求对照 ldnrs 0.0.3 Python 客户端生成的向量，并与脚本化守护进程通过原始以太网通道交换 UDP。目前尚未使用 Windows 适配器及零售版游戏机实测此后端。
+
 ## 测试卡
 
 |型号|类型 |司机 |测试主机上的结果 |

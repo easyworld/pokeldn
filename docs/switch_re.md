@@ -121,6 +121,9 @@ of the section counter. `tools/switch/bktr_read.py` composes both into one seeka
     ./.venv/bin/python tools/switch/bktr_read.py UPDATE.nsp --base BASE.nsp \
         --extract /Data/Managed/Metadata/global-metadata.dat
 
+The base is the Program NCA of the update's title with a CTR RomFS section: an XCI's update
+partition holds system titles' Program NCAs, and the first Program NCA found is one of those.
+
 ## Finding callers
 
 Scan the image words for `bl` (`100101` plus a signed 26-bit word offset) and the tail call `b`
@@ -142,7 +145,9 @@ cross-reference the slot (`tools/switch/nso_imports.py`), then count callers of 
 
 ## The tools
 
-Besides `xci_read.py`, `romfs_read.py`, `bktr_read.py` and `rtti_names.py` above, all offline:
+The readers are `pokeldn.switch` (containers and NCAs, RomFS, NSO, Trinity packs); the tools are
+command lines over it, and a program that needs a title's own files reads them through it from the
+user's dump. Besides `xci_read.py`, `romfs_read.py`, `bktr_read.py` and `rtti_names.py` above, all offline:
 
     tools/switch/nso_read.py     an NSO's three segments decompressed (pure-Python LZ4) at their
                                  memory offsets: a file offset is an address

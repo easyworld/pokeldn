@@ -1,6 +1,6 @@
 """The memory and call model the house engine runs on: the server state laid out as Scarlet 4.0.0 lays
 it out, addressed by u64, and the engine's functions keyed by the address of the game function each one
-reproduces (docs/sv_raid.md, The house engine). Every load and store truncates to its width.
+reproduces (docs/sv_raid.md, Reproducing a round). Every load and store truncates to its width.
 """
 
 import contextlib
@@ -68,13 +68,30 @@ class Machine:
             p = self.page(address); o = address & (PAGE - 1); k = min(len(data) - i, PAGE - o)
             p[o:o + k] = data[i:i + k]; address += k; i += k
 
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        cls._direct_read = cls.read is Machine.read
+        cls._direct_write = cls.write is Machine.write
+
+    _direct_read = _direct_write = True     # a field inside one page goes straight to it (same bytes)
+
     def u(self, address, size):
+        o = address & (PAGE - 1)
+        if self._direct_read and o + size <= PAGE:
+            return struct.unpack_from(FORMAT[size], self.page(address), o)[0]
         return struct.unpack(FORMAT[size], self.read(address, size))[0]
 
     def s(self, address, size):
+        o = address & (PAGE - 1)
+        if self._direct_read and o + size <= PAGE:
+            return struct.unpack_from(SIGNED[size], self.page(address), o)[0]
         return struct.unpack(SIGNED[size], self.read(address, size))[0]
 
     def put(self, address, size, value):
+        o = address & (PAGE - 1)
+        if self._direct_write and o + size <= PAGE:
+            struct.pack_into(FORMAT[size], self.page(address), o, value & MASK[size])
+            return
         self.write(address, struct.pack(FORMAT[size], value & MASK[size]))
 
     def u8(self, a): return self.u(a, 1)

@@ -1,0 +1,116 @@
+{
+"source": "Scarlet 4.0.0's own server code under unicorn on the rme10 session (the host's bootstrap, slot 0): the recorded station messages up to cut, then stations answering every odd message but 5 and 0x37 sent from answer_from on, after answer seconds (requests with a command of the two commands moves when given), the clock in tick steps to end; the messages it sent each slot from cut on, in order",
+"cut": 416.5,
+"answer_from": 416.5,
+"end": 700.0,
+"tick": 10.0,
+"commands": [],
+"answer": 0.1,
+"unanswered": [
+5,
+55
+],
+"messages": [
+[
+0,
+0,
+20608
+],
+[
+1,
+20608,
+20608
+],
+[
+2,
+41216,
+20608
+],
+[
+3,
+61824,
+20608
+],
+[
+4,
+82432,
+20608
+],
+[
+0,
+103040,
+38
+],
+[
+1,
+103078,
+38
+],
+[
+2,
+103116,
+38
+],
+[
+3,
+103154,
+38
+],
+[
+4,
+103192,
+38
+],
+[
+0,
+103230,
+32
+],
+[
+1,
+103262,
+32
+],
+[
+2,
+103294,
+32
+],
+[
+3,
+103326,
+32
+],
+[
+4,
+103358,
+32
+],
+[
+0,
+103390,
+32
+],
+[
+1,
+103422,
+32
+],
+[
+2,
+103454,
+32
+],
+[
+3,
+103486,
+32
+],
+[
+4,
+103518,
+32
+]
+],
+"blob": "eNrt3DFuwkAQBdBZE0RFiWRImTKiRDTpcoHkUFwoUg6QIvfJEcDrbYyIMLEUMHpP8o5nd2RbgvovolWXOi91Ok0/s/h/L4crHa6qx+zx99Vnzs/N1xc+b+h5DHz/pc8b+v3HfTr10rL51iyfEe/Nb5liN8m7X235iNg2+7M8/53itfnH5XWS13anyutDPOX7dQAAAAAAAAAAAAAAAAAAAAAAAADwd4tS5Q/KH5Q/CAAAAAAAAAAAAAAAAAAAAAAAAHC/5A/27+UPdskfBAAAAAAAAAAAAAAAAAAAAAAAABgP+YP9e/mDXfIHAQAAAAAAAAAAAAAAAAAAAAAAAMZD/mD/Xv5gl/xBAAAAAAAAAAAAAAAAAAAAAAAAgPF4LnVZ6qn8wepmpzblbvXL1LXPt6V/vNHzPYAKQRo="
+}

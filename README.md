@@ -65,6 +65,7 @@ See [app setup](docs/gui.md), [first launch](docs/gui.md#first-launch),
 | FireRed/LeafGreen save backups and restores | [Save backup and restore](docs/frlg_gift.md#save-backup-and-restore) |
 | Controller and macros | [Controller](docs/gui.md#the-controller) |
 | Installing or writing plugins | [Plugins](docs/plugins.md) |
+| Windows USB Wi-Fi adapters | [ldnrs setup](docs/hardware_adapters.md#windows-usb-wi-fi-through-ldnrs) |
 | Boards, firmware and optional screens | [ESP32 radio](docs/hardware_esp32.md) |
 | Running and building the desktop app from source | [Desktop builds](docs/gui.md#run-from-source) |
 | Building the experimental Android USB host | [Android prototype](examples/android/README.md) |
@@ -84,7 +85,9 @@ by [MercuryEnigma](https://github.com/MercuryEnigma), itself a fork of
 Contributors to this repository (GitHub does not list contributors on a fork):
 
 - [Gr3nSkyDragon](https://github.com/Gr3nSkyDragon): ESP32-S3 firmware
-- [ismailhasannnnnn](https://github.com/ismailhasannnnnn): Scarlet/Violet Tera Raid hosting and joining
+- [ismailhasannnnnn](https://github.com/ismailhasannnnnn): Scarlet/Violet Tera Raid hosting and joining,
+  reverse engineering and reconstruction of the RaidPoint structure, including reward encoding and
+  raid bootstrap compression, and hosted raid reward templates
 - [easyworld](https://github.com/easyworld): ESP32 serial reconnects after a high-baud session
 - [capito27](https://github.com/capito27): Scarlet/Violet event Tera Raids, the raid finder's reward
   filter, its full seed search, its ranking by rewards and its size mark filter, and the Tera Raid
@@ -96,6 +99,8 @@ Contributors to this repository (GitHub does not list contributors on a fork):
 - [junkmailkeep](https://github.com/junkmailkeep): Mystery Gift sprites and form previews in the gift
   and trade editors
 
+- [unlimitedcoder2](https://github.com/unlimitedcoder2): [ldnrs](https://github.com/unlimitedcoder2/ldnrs),
+  the external Windows USB Wi-Fi daemon supported by the optional radio backend
 - [kinnay](https://github.com/kinnay): the [LDN library](https://github.com/kinnay/LDN) this builds on,
   and the [NintendoClients wiki](https://github.com/kinnay/NintendoClients/wiki)
 - [pokefirered](https://github.com/pret/pokefirered): decompilation of FireRed/LeafGreen, including

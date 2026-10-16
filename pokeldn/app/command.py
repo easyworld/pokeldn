@@ -231,9 +231,11 @@ def code_error(field: Field, value) -> str:
         if len(rows) > REWARD_ROWS:
             return f"A raid gives at most {REWARD_ROWS} rewards."
         for n, row in enumerate(rows, 1):
-            if not str(row.get("item_id", "")).isdigit() or not int(row["item_id"]):
+            item = str(row.get("item_id", ""))
+            quantity = str(row.get("quantity", ""))
+            if not item.isascii() or not item.isdigit() or not int(item):
                 return f"Choose an item for reward {n}."
-            if not str(row.get("quantity", "")).isdigit() or not 1 <= int(row["quantity"]) <= 999:
+            if not quantity.isascii() or not quantity.isdigit() or not 1 <= int(quantity) <= 999:
                 return f"Reward {n} needs a quantity from 1 to 999."
         return ""
     if field.kind == "code":

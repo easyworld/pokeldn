@@ -12,17 +12,18 @@ from serial.tools import list_ports
 
 from pokeldn.app.paths import ROOT
 from pokeldn.ldn import esp32
+from pokeldn.app.i18n import t as tr
 
 # USB-to-serial bridges found on ESP32 boards, by USB vendor and product id.
 BRIDGES = {
-    (0x10C4, 0xEA60): "Silicon Labs CP210x",
-    (0x1A86, 0x7523): "WCH CH340",
-    (0x1A86, 0x55D3): "WCH CH343",
-    (0x1A86, 0x55D4): "WCH CH9102",
-    (0x0403, 0x6001): "FTDI FT232R",
-    (0x0403, 0x6010): "FTDI FT2232",
-    (0x0403, 0x6015): "FTDI FT231X",
-    (0x303A, 0x1001): "Espressif USB (S3, C3, C6)",
+    (0x10C4, 0xEA60): 'Silicon Labs CP210x',
+    (0x1A86, 0x7523): 'WCH CH340',
+    (0x1A86, 0x55D3): 'WCH CH343',
+    (0x1A86, 0x55D4): 'WCH CH9102',
+    (0x0403, 0x6001): 'FTDI FT232R',
+    (0x0403, 0x6010): 'FTDI FT2232',
+    (0x0403, 0x6015): 'FTDI FT231X',
+    (0x303A, 0x1001): 'Espressif USB (S3, C3, C6)',
 }
 NATIVE_USB = (0x303A, 0x1001)
 # An S3 running the controller firmware is a HID controller with no serial port (firmware/pad/main/usb_s3.c).
@@ -33,9 +34,8 @@ DRIVERS = {
     "WCH CH340": "https://www.wch-ic.com/downloads/CH341SER_EXE.html",
 }
 DRIVER_STEPS = {   # Windows, docs/gui.md USB drivers
-    "Silicon Labs CP210x": "下载并解压 CP210x Universal Windows Driver 压缩包，右键单击 "
-                           "silabser.inf 并选择“安装”，然后拔出并重新连接开发板。",
-    "WCH CH340": "下载并运行 CH341SER.EXE，点击“安装”，然后拔出并重新连接开发板。",
+    "Silicon Labs CP210x": tr('board.download_the_cp210x_universal_windows_driver_zip_extrac_11f0ca', 'Download the CP210x Universal Windows Driver zip, extract it, right-click silabser.inf and choose Install, then unplug and replug the board.'),
+    "WCH CH340": tr('board.download_ch341ser_exe_run_it_and_press_install_then_unp_bba26a', 'Download CH341SER.EXE, run it and press Install, then unplug and replug the board.'),
 }
 
 FIRMWARE = os.path.join(ROOT, "gui", "firmware", "pokeldn-radio.bin")   # written by the release build
@@ -62,11 +62,9 @@ class Firmware:
 
 
 FIRMWARES = (
-    Firmware("radio", '无线', '开发板为交换、神秘礼物及“游戏”页中的所有工具提供无线通信。',
-             "globe", ("ESP32", "ESP32-S3", "ESP32-C3", "ESP32-C6"), '交换所需的无线设备'),
-    Firmware("pad", '手柄', '开发板作为 Switch 手柄，由电脑控制按键'
-             '并通过“手柄控制”页运行宏。', "joystick", ("ESP32-S3", "ESP32"),
-             'Switch 手柄'),
+    Firmware("radio", tr('board.wireless_da1d2f', 'Wireless'), tr('board.the_board_is_the_radio_for_trades_mystery_gift_and_ever_9d0251', 'The board is the radio for trades, Mystery Gift and every tool on the Games page.'), "globe", ("ESP32", "ESP32-S3", "ESP32-C3", "ESP32-C6"), tr('board.the_radio_for_trades_a18fb5', 'the radio for trades')),
+    Firmware("pad", tr('board.controller_31df66', 'Controller'), tr('board.the_board_is_a_controller_for_the_switch_this_computer__6feaec', 'The board is a controller for the Switch: this computer presses its buttons and plays macros from the Control page.'), "joystick", ("ESP32-S3", "ESP32"),
+             tr('board.a_controller_for_the_switch_889ffc', 'a controller for the Switch')),
 )
 FIRMWARE_BY_KIND = {f.kind: f for f in FIRMWARES}
 CHIP_NAMES = {"esp32": "ESP32", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3", "esp32c6": "ESP32-C6"}
@@ -186,8 +184,7 @@ def bridges_without_port(sysfs: str = "/sys/bus/usb/devices") -> list[str]:
 
 
 # Present devices with a Device Manager problem; a bridge with no driver has code 28 and no COM port.
-PROBLEM_DEVICES = ("Get-CimInstance Win32_PnPEntity -Filter 'ConfigManagerErrorCode <> 0' "
-                   "| ForEach-Object { $_.PNPDeviceID }")
+PROBLEM_DEVICES = ("Get-CimInstance Win32_PnPEntity -Filter 'ConfigManagerErrorCode <> 0' | ForEach-Object { $_.PNPDeviceID }")
 USB_ID = re.compile(r"VID_([0-9A-F]{4})&PID_([0-9A-F]{4})", re.I)
 
 
@@ -214,14 +211,13 @@ def controllers(platform: str = "", run=subprocess.run,
     platform = platform or sys.platform
     try:
         if platform == "darwin":
-            out = run(["ioreg", "-p", "IOUSB", "-l", "-w0"], capture_output=True, text=True, timeout=10).stdout
+            out = run(["ioreg", "-p", 'IOUSB', "-l", "-w0"], capture_output=True, text=True, timeout=10).stdout
             return sum(1 for block in (out or "").split("+-o ")
                        if re.search(rf'"idVendor" = {PAD_USB[0]}\b', block)
                        and re.search(rf'"idProduct" = {PAD_USB[1]}\b', block))
         if platform == "win32":
             out = run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                       "Get-CimInstance Win32_PnPEntity -Filter \"PNPDeviceID LIKE 'USB%'\" "
-                       "| ForEach-Object { $_.PNPDeviceID }"],
+                       'Get-CimInstance Win32_PnPEntity -Filter "PNPDeviceID LIKE \'USB%\'" | ForEach-Object { $_.PNPDeviceID }'],
                       capture_output=True, text=True, timeout=20,
                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
             return sum(1 for line in (out or "").splitlines()
@@ -307,7 +303,7 @@ def download_firmware(say=print, folder: str = os.path.dirname(FIRMWARE)) -> str
 
     releases = json.loads(_get(RELEASES, 1_000_000))
     if not isinstance(releases, list):
-        raise OSError("the firmware response holds no releases")
+        raise OSError(tr('board.the_firmware_response_holds_no_releases_98ae8a', 'the firmware response holds no releases'))
     known = [os.path.basename(f) for f in (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6, FIRMWARE_PAD,
                                            FIRMWARE_PAD_ESP32)]
     for release in releases:
@@ -320,7 +316,7 @@ def download_firmware(say=print, folder: str = os.path.dirname(FIRMWARE)) -> str
         names = [n for n in known if n in files]
         page = release.get("html_url", "")
         if any(not update.release_asset(page, files[n], n) for n in [*names, "SHA256SUMS"]):
-            raise OSError("the firmware files are not from the pokeldn release")
+            raise OSError(tr('board.the_firmware_files_are_not_from_the_pokeldn_release_e1240a', 'the firmware files are not from the pokeldn release'))
         sums = {name.lstrip("*"): digest.lower() for digest, name in
                 (line.split() for line in _get(files["SHA256SUMS"], 100_000).decode().splitlines()
                  if len(line.split()) == 2)}
@@ -329,7 +325,7 @@ def download_firmware(say=print, folder: str = os.path.dirname(FIRMWARE)) -> str
             say(f"[app] Downloading {name} from {release.get('tag_name')}.")
             images[name] = _get(files[name], IMAGE_BYTES)
             if hashlib.sha256(images[name]).hexdigest() != sums.get(name):
-                raise OSError(f"{name} does not match the release's SHA256SUMS; nothing was written")
+                raise OSError(tr('board.does_not_match_the_release_s_sha256sums_nothing_was_wri_6d1da2', "{value0} does not match the release's SHA256SUMS; nothing was written", value0=name))
         os.makedirs(folder, exist_ok=True)
         for name, data in images.items():
             path = os.path.join(folder, name)
@@ -337,7 +333,7 @@ def download_firmware(say=print, folder: str = os.path.dirname(FIRMWARE)) -> str
                 out.write(data)
             os.replace(path + ".part", path)
         return str(release.get("tag_name"))
-    raise OSError("No published release carries the firmware images")
+    raise OSError(tr('board.no_published_release_carries_the_firmware_images_e3fd9f', 'No published release carries the firmware images'))
 
 
 LOADER_SETTLE = 8.0   # seconds; see _connect
@@ -372,14 +368,13 @@ def flash(port: str, firmware: str = "", kind: str = "radio", from_loader: bool 
 
     with _connect(port, kind, from_loader) as chip:
         if chip.CHIP_NAME not in ("ESP32", "ESP32-S3", "ESP32-C3", "ESP32-C6"):
-            raise esptool.FatalError(f"{chip.CHIP_NAME} is not supported. Use an ESP32, ESP32-S3, ESP32-C3 or ESP32-C6.")
+            raise esptool.FatalError(tr('board.is_not_supported_use_an_esp32_esp32_s3_esp32_c3_or_esp3_9f0b35', '{value0} is not supported. Use an ESP32, ESP32-S3, ESP32-C3 or ESP32-C6.', value0=chip.CHIP_NAME))
         if kind == "pad" and chip.CHIP_NAME not in ("ESP32-S3", "ESP32"):
-            raise esptool.FatalError(f"The controller firmware needs an ESP32-S3 (its USB acts as a controller) or a "
-                                     f"classic ESP32 (Bluetooth Classic); an {chip.CHIP_NAME} can be neither.")
+            raise esptool.FatalError(tr('board.the_controller_firmware_needs_an_esp32_s3_its_usb_acts__5cef45', 'The controller firmware needs an ESP32-S3 (its USB acts as a controller) or a classic ESP32 (Bluetooth Classic); an {value0} can be neither.', value0=chip.CHIP_NAME))
         pad_image = FIRMWARE_PAD if chip.CHIP_NAME == "ESP32-S3" else FIRMWARE_PAD_ESP32
         path = firmware or (pad_image if kind == "pad" else bundled_firmware(chip.CHIP_NAME))
         if not os.path.isfile(path):
-            raise esptool.FatalError(f"Missing firmware for {chip.CHIP_NAME}: {path}")
+            raise esptool.FatalError(tr('board.missing_firmware_for_c62c63', 'Missing firmware for {value0}: {value1}', value0=chip.CHIP_NAME, value1=path))
         # esptool skips its image check on a merged ESP32 image's 0x1000 padding.
         # Validate the bootloader at the detected chip's offset before any erase or write.
         # docs/hardware_esp32.md, Building and flashing.
@@ -387,15 +382,15 @@ def flash(port: str, firmware: str = "", kind: str = "radio", from_loader: bool 
             source.seek(chip.BOOTLOADER_FLASH_OFFSET)
             data = source.read()
         if len(data) < 24 or data[0] != 0xE9 or int.from_bytes(data[12:14], "little") != chip.IMAGE_CHIP_ID:
-            raise esptool.FatalError(f"Merged firmware does not match {chip.CHIP_NAME}: {path}")
+            raise esptool.FatalError(tr('board.merged_firmware_does_not_match_941ee6', 'Merged firmware does not match {value0}: {value1}', value0=chip.CHIP_NAME, value1=path))
         try:
             image = LoadFirmwareImage(chip.CHIP_NAME, data)
         except (struct.error, RuntimeError, TypeError) as error:
-            raise esptool.FatalError(f"Invalid merged firmware: {path}") from error
+            raise esptool.FatalError(tr('board.invalid_merged_firmware_4c494b', 'Invalid merged firmware: {value0}', value0=path)) from error
         image.verify()
         if image.checksum != image.calculate_checksum() or (
                 image.append_digest and image.stored_digest != image.calc_digest):
-            raise esptool.FatalError(f"Firmware checksum does not match: {path}")
+            raise esptool.FatalError(tr('board.firmware_checksum_does_not_match_2d4963', 'Firmware checksum does not match: {value0}', value0=path))
         print(f"[app] Firmware for {chip.CHIP_NAME}: {path}", flush=True)
         # The pad owns the USB port once it runs: a reset over USB from the ROM loader it was put
         # in by `pad.py --download` leaves the chip in the loader; the watchdog boots the image.
@@ -408,13 +403,13 @@ def main() -> int:
     import argparse
     import esptool
 
-    parser = argparse.ArgumentParser(description="Flash pokeldn firmware for the connected chip.")
+    parser = argparse.ArgumentParser(description=tr('board.flash_pokeldn_firmware_for_the_connected_chip_6c0357', 'Flash pokeldn firmware for the connected chip.'))
     parser.add_argument("--port", required=True)
-    parser.add_argument("--firmware", default="", help="custom merged image; default: bundled firmware")
+    parser.add_argument("--firmware", default="", help=tr('board.custom_merged_image_default_bundled_firmware_8495cf', 'custom merged image; default: bundled firmware'))
     parser.add_argument("--kind", choices=("radio", "pad"), default="radio",
-                        help="radio: wireless trades; pad: the S3 as a Switch controller")
+                        help=tr('board.radio_wireless_trades_pad_the_s3_as_a_switch_controller_04c7e1', 'radio: wireless trades; pad: the S3 as a Switch controller'))
     parser.add_argument("--from-loader", action="store_true",
-                        help="the controller firmware already restarted the board into its ROM loader")
+                        help=tr('board.the_controller_firmware_already_restarted_the_board_int_fc7961', 'the controller firmware already restarted the board into its ROM loader'))
     args = parser.parse_args()
     try:
         flash(args.port, args.firmware, args.kind, args.from_loader)

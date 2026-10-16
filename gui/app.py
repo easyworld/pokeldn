@@ -1,3 +1,4 @@
+from gui.localization import SERVICE, translate
 import errno
 import os
 import sys
@@ -8,17 +9,17 @@ from dataclasses import dataclass
 import flet as ft
 import serial
 
-from gui import board
-from gui.localization import SERVICE
+from gui import board, theme
 from gui.popups import Dialogs
 from pokeldn import plugins, pokemon, popup
 from pokeldn.app import popups, settings, update
 from pokeldn.app.paths import SESSION
 from gui.views.widgets import on_ui
+from pokeldn.app.i18n import t as tr
 
-NO_FIRMWARE = '未检测到 pokeldn 固件'
-PORT_BUSY = '端口被占用或无权限'
-PORT_DENIED = '无端口访问权限'
+NO_FIRMWARE = 'No pokeldn firmware'
+PORT_BUSY = 'Port busy or not allowed'
+PORT_DENIED = 'Port not allowed'
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class App:
 
     def __init__(self, page: ft.Page):
         self.page = page
+        page.fonts = {**(getattr(page, "fonts", None) or {}), **theme.FONT_ASSETS}
         SESSION.mkdir(parents=True, exist_ok=True)
         self.settings = settings.load()
         pokemon.SERVICE.home_tracker = SERVICE.home_tracker = self.settings.home_tracker
@@ -87,10 +89,11 @@ class App:
         return self.storage_busy or self.board_busy or bool(self.process and self.process.running)
 
     def plugin_radio(self):
-        """The plugin radio Settings chose (pokeldn.plugins.Radio), or None for the board."""
+        """The selected external radio, or None for the board."""
         if not self.settings.radio:
             return None
-        return plugins.radio(self.settings.radio)
+        from pokeldn.ldn import radios
+        return radios.radio(self.settings.radio)
 
     def radio_port(self, present: list[board.Port] | None = None) -> str:
         """The chosen board if it is plugged in, else the only board present."""
@@ -108,56 +111,53 @@ class App:
         if not present:
             hidden = board.bridges_without_port() if sys.platform.startswith("linux") else []
             if hidden:
-                fix = ("Ubuntu 22.04 的盲文服务占用了 CH340 开发板：执行 sudo apt remove brltty，然后拔出并重新连接。"
-                       if "WCH CH340" in hidden else "请拔出并重新连接；内核日志（sudo dmesg）可查看原因。")
-                return BoardStatus("missing", '已找到开发板，但没有串口',
-                                   f"Linux 未给 {hidden[0]} 分配串口。{fix}")
+                fix = (tr('app.ubuntu_22_04_s_braille_service_takes_ch340_boards_sudo__4f946d', "Ubuntu 22.04's braille service takes CH340 boards: sudo apt remove brltty, then unplug and replug the board.") if "WCH CH340" in hidden else
+                       tr('app.unplug_and_replug_it_the_kernel_log_sudo_dmesg_says_why_c4306e', 'Unplug and replug it; the kernel log (sudo dmesg) says why.'))
+                return BoardStatus("missing", tr('app.board_found_without_a_serial_port_c0cd13', 'Board found without a serial port'),
+                                   tr('app.linux_gave_the_no_serial_port_5329c0', 'Linux gave the {value0} no serial port. {value1}', value0=hidden[0], value1=fix))
             if sys.platform == "win32" and self.hidden_bridges:
                 name = self.hidden_bridges[0]
-                steps = board.DRIVER_STEPS.get(name, '请安装对应驱动；开发板页面提供驱动链接。')
-                return BoardStatus("missing", '已找到开发板，但未安装驱动',
-                                   f"Windows 未安装 {name} 的驱动，因此没有 COM 端口。{steps}")
+                steps = board.DRIVER_STEPS.get(name, tr('app.install_its_driver_the_board_page_links_it_c226a3', 'Install its driver; the Board page links it.'))
+                return BoardStatus("missing", tr('app.board_found_without_a_driver_aea8c6', 'Board found without a driver'),
+                                   tr('app.windows_has_no_driver_for_the_so_it_has_no_com_port_10597e', 'Windows has no driver for the {value0}, so it has no COM port. {value1}', value0=name, value1=steps))
             if self.controllers:
-                return BoardStatus("controller", '开发板正在运行手柄固件',
-                                   '交换需要无线固件，请在“开发板”页安装。')
-            return BoardStatus("missing", '未连接开发板',
-                               '请使用 USB 数据线连接 ESP32。仅支持充电的线缆无法识别开发板。')
+                return BoardStatus("controller", tr('app.your_board_runs_the_controller_firmware_fec986', 'Your board runs the Controller firmware'),
+                                   tr('app.trades_need_the_wireless_firmware_install_it_from_the_b_c0721b', 'Trades need the Wireless firmware: install it from the Board page.'))
+            return BoardStatus("missing", tr('app.no_board_plugged_in_0ea8e5', 'No board plugged in'),
+                               tr('app.plug_the_esp32_in_with_a_usb_data_cable_charge_only_cab_baeb1f', 'Plug the ESP32 in with a USB data cable. Charge-only cables show nothing.'))
         port = device or self.radio_port(present)
         if not port:
-            return BoardStatus("choose", '连接了多个开发板',
-                               '打开“开发板”页，选择要使用的开发板。')
+            return BoardStatus("choose", tr('app.several_boards_plugged_in_997786', 'Several boards plugged in'),
+                               tr('app.open_the_board_page_and_pick_the_one_to_use_1dae63', 'Open the Board page and pick the one to use.'))
         found = next((p for p in present if p.device == port), None)
         if found is None:
-            return BoardStatus("missing", '开发板已断开', '请重新连接。', port)
+            return BoardStatus("missing", tr('app.board_unplugged_3ffbbb', 'Board unplugged'), tr('app.plug_it_back_in_b782dc', 'Plug it back in.'), port)
         ident = self.identities.get(port)
         if isinstance(ident, board.Identity):
             if ident.current:
                 version = f" v{ident.firmware_version}" if ident.firmware_version else ""
-                return BoardStatus("ready", '开发板已就绪', f"pokeldn 固件{version} 已响应。", port)
-            return BoardStatus("flash", '固件版本过旧',
-                               '请在“开发板”页更新固件。', port)
+                return BoardStatus("ready", tr('app.board_ready_222cfc', 'Board ready'), tr('app.pokeldn_firmware_answered_9123fd', 'pokeldn firmware{value0} answered.', value0=version), port)
+            return BoardStatus("flash", tr('app.firmware_out_of_date_bcafad', 'Firmware out of date'),
+                               tr('app.update_it_on_the_board_page_2ca281', 'Update it on the Board page.'), port)
         if isinstance(ident, board.PadIdentity):
-            return BoardStatus("controller", '开发板正在运行手柄固件',
-                               '交换需要无线固件，请在“开发板”页安装。', port)
+            return BoardStatus("controller", tr('app.your_board_runs_the_controller_firmware_fec986', 'Your board runs the Controller firmware'),
+                               tr('app.trades_need_the_wireless_firmware_install_it_from_the_b_c0721b', 'Trades need the Wireless firmware: install it from the Board page.'), port)
         if ident == PORT_DENIED:
             group = "uucp" if os.path.exists("/etc/arch-release") else "dialout"
-            fix = (f"将自己加入 {group} 用户组（sudo usermod -aG {group} $USER），然后注销并重新登录。"
-                   if sys.platform.startswith("linux") else '请拔出并重新连接开发板。')
-            return BoardStatus("denied", '无权访问开发板', fix, port)
+            fix = (tr('app.add_yourself_to_the_group_sudo_usermod_ag_user_then_log_b0f6cb', 'Add yourself to the {value0} group (sudo usermod -aG {value1} $USER), then log out and back in.', value0=group, value1=group) if sys.platform.startswith("linux") else tr('app.unplug_and_replug_the_board_5e9230', 'Unplug and replug the board.'))
+            return BoardStatus("denied", tr('app.no_permission_to_open_the_board_87f9dc', 'No permission to open the board'), fix, port)
         if ident == PORT_BUSY:
-            return BoardStatus("busy", '开发板端口被占用',
-                               '其他程序占用了端口。请关闭该程序，或拔出并重新连接开发板。',
+            return BoardStatus("busy", tr('app.board_port_busy_68939c', 'Board port busy'),
+                               tr('app.another_program_holds_the_port_close_it_or_unplug_and_r_6addae', 'Another program holds the port. Close it, or unplug and replug the board.'),
                                port)
         if ident == NO_FIRMWARE:
             if board.wrong_port(found, self.chips.get(port, "")):
-                return BoardStatus("wrong-port", '请使用开发板的另一个 USB 接口',
-                                   f"{self.chips[port]} 固件通过原生 USB 接口通信。请将"
-                                   '线缆连接到标有 USB 的接口，避开 COM 或 UART。', port)
-            return BoardStatus("flash", '开发板未安装 pokeldn 固件',
-                               '请在“开发板”页安装无线固件。如果刚刚安装完成，请按开发板的 '
-                               'RESET（RST）按钮。',
+                return BoardStatus("wrong-port", tr('app.use_the_board_s_other_usb_port_f8c42f', "Use the board's other USB port"),
+                                   tr('app.the_firmware_talks_over_the_native_usb_port_move_the_ca_a14e6b', 'The {value0} firmware talks over the native USB port. Move the cable to the port marked USB (not COM or UART).', value0=self.chips[port]), port)
+            return BoardStatus("flash", tr('app.no_pokeldn_firmware_on_the_board_bf42d9', 'No pokeldn firmware on the board'),
+                               tr('app.install_the_wireless_firmware_on_the_board_page_if_you__f58486', "Install the Wireless firmware on the Board page. If you just installed it, press the board's RESET (RST) button."),
                                port)
-        return BoardStatus("checking", '正在检查开发板', '正在查询开发板固件。', port)
+        return BoardStatus("checking", tr('app.checking_the_board_f7ce4a', 'Checking the board'), tr('app.asking_the_board_for_its_firmware_21d622', 'Asking the board for its firmware.'), port)
 
     def check_board(self, device: str, blink: bool = False, log=None) -> None:
         """Ask the board's firmware for its identity in the background; opening the port can restart it."""
@@ -170,21 +170,20 @@ class App:
             try:
                 ident = board.identify(device, blink=blink)
                 self.identities[device] = ident
-                say(f"[app] {ident.firmware}, protocol {ident.protocol}, chip revision "
-                    f"{ident.chip_revision}, MAC {ident.sta_mac}")
+                say(f'[app] {ident.firmware}, protocol {ident.protocol}, chip revision {ident.chip_revision}, MAC {ident.sta_mac}')
                 if not ident.current:
-                    say("[app] This firmware uses a different radio protocol. Update it on the Board page.")
+                    say('[app] This firmware uses a different radio protocol. Update it on the Board page.')
             except serial.SerialException as error:
                 # pyserial keeps the open's errno: EACCES is a missing group on Linux, not a busy port.
                 self.identities[device] = PORT_DENIED if error.errno == errno.EACCES else PORT_BUSY
-                say(f"[app] Could not open {device}: {error}")
+                say(f'[app] Could not open {device}: {error}')
             except Exception as error:
                 try:
                     self.identities[device] = board.identify_pad(device)
-                    say(f"[app] {device} runs the controller firmware.")
+                    say(f'[app] {device} runs the controller firmware.')
                 except Exception:
                     self.identities[device] = NO_FIRMWARE
-                    say(f"[app] No pokeldn firmware answered on {device} ({error}).")
+                    say(f'[app] No pokeldn firmware answered on {device} ({error}).')
                     self._probe_chip(device, say)
             finally:
                 self.board_busy = False
@@ -200,9 +199,9 @@ class App:
             return
         try:
             self.chips[device] = board.detect_chip(device)
-            say(f"[app] The chip on {device} is an {self.chips[device]}.")
+            say(f'[app] The chip on {device} is an {self.chips[device]}.')
         except Exception as error:
-            say(f"[app] Could not read the chip type on {device} ({error}).")
+            say(f'[app] Could not read the chip type on {device} ({error}).')
 
     def check_if_unknown(self, present: list[board.Port] | None = None) -> None:
         port = self.radio_port(present)
@@ -250,7 +249,7 @@ class App:
 
     async def copy(self, value: str) -> None:
         await self.clipboard.set(value)
-        self.page.show_dialog(ft.SnackBar(ft.Text('已复制'), duration=1500))
+        self.page.show_dialog(ft.SnackBar(ft.Text(tr('app.copied_8d525e', 'Copied')), duration=1500))
 
 
 def keys_found(path: str) -> bool:

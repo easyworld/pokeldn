@@ -274,6 +274,7 @@ class LiveTransport:
 
     def start(self, timeout=30, attempts=3, settle=1.5):
         """Join, retrying through radio busy, association timeouts and stale vifs."""
+        timeout = radios.join_timeout(timeout)
         errors = []
         for attempt in range(1, attempts + 1):
             free_radio({self.phyname}, self.log)
@@ -309,7 +310,7 @@ class LiveTransport:
     def _run_ldn(self):
         try:
             import trio
-            import ldn
+            from pokeldn.ldn import api as ldn
         except ImportError as e:                     # pragma: no cover
             self._err = f"missing dep for live mode: {e}"
             self._ready.set()
@@ -552,8 +553,7 @@ def list_phys():
 
 
 def board_radio():
-    """True when POKELDN_RADIO puts the LDN calls on the ESP32 board or a plugin's radio: no phy,
-    no vif, no iw (pokeldn.ldn.radios)."""
+    """True for a userspace radio: no kernel phy, vif or iw (pokeldn.ldn.radios)."""
     return radios.selected() is not None
 
 
@@ -771,6 +771,7 @@ class HostTransport:
             self.info(message)
         if preflight:
             preflight_host(self.phyname, self.log)
+        timeout = radios.join_timeout(timeout)
         errors = []
         for attempt in range(1, attempts + 1):
             free_radio({self.phyname}, self.log)
@@ -812,7 +813,7 @@ class HostTransport:
     def _run_host(self):
         try:
             import trio
-            import ldn
+            from pokeldn.ldn import api as ldn
         except ImportError as e:                        # pragma: no cover
             self._err = f"missing dep for host mode: {e}"
             self._ready.set()
@@ -848,11 +849,14 @@ class HostTransport:
                        else "LDN software")
             rx_mode = ("driver-decrypted retained-CCMP normalization"
                        if self.accept_decrypted_ccmp else "standard CCMP")
-            self.info(f"Wi-Fi compatibility active: TX={tx_mode}; RX={rx_mode}.")
+            if radios.selected() == "ldnrs":
+                self.info("USB Wi-Fi through ldnrs; the daemon manages wireless encryption.")
+            else:
+                self.info(f"Wi-Fi compatibility active: TX={tx_mode}; RX={rx_mode}.")
             self.info("Creating the LDN network (hosting)...")
             async with ldn.create_network(param) as network:
                 self._network = network
-                if self.tracer is not None:
+                if self.tracer is not None and radios.selected() != "ldnrs":
                     from pokeldn.ldn import ldntrace
                     ldntrace.attach(network, self.tracer, self.log)
                 info = network.info()

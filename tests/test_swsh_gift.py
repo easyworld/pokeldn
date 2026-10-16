@@ -1,6 +1,7 @@
 """The Wonder Card record and the beacon transport that carries it, pinned to what a retail Sword
 showed (docs/swsh_gift.md)."""
 import struct
+from pathlib import Path
 
 import pytest
 
@@ -224,7 +225,7 @@ def test_the_pokemon_home_group_holds_one_card_per_home_gift_and_pkhex_takes_eve
 
 @pytest.mark.skipif(not __import__("os").path.exists(SWORD_IMAGE),
                     reason="needs Sword's extracted main NSO")
-def test_the_app_sends_an_official_event_card_byte_for_byte_and_the_game_accepts_every_one(tmp_path, monkeypatch):
+def test_the_app_sends_an_official_event_with_a_date_and_the_game_accepts_every_one(tmp_path, monkeypatch):
     """Every shipped card passes the game's validator 0x010b5de0; one per group goes from the app's
     event mode through the launcher's PKHeX and validator checks to the bytes it would send."""
     import swsh_gift_host
@@ -249,7 +250,11 @@ def test_the_app_sends_an_official_event_card_byte_for_byte_and_the_game_accepts
         out = tmp_path / f"{event['key']}.bin"
         assert swsh_gift_host.main([*gift_builder.args(tool, value), "--image", SWORD_IMAGE,
                                     "--dump", str(out)]) == 0
-        assert out.read_bytes() == event["record"]
+        sent = out.read_bytes()
+        assert sent[8:wc8.CHECKSUM_AT] == event["record"][8:wc8.CHECKSUM_AT]
+        assert wc8.sealed(sent) and sent[:8] != bytes(8)
+        if event["record"][:8] != bytes(8):
+            assert sent == event["record"]
 
 
 def _receipt(runner, taken, record):
@@ -275,7 +280,7 @@ def _receipt(runner, taken, record):
 def test_a_shiny_galarian_bird_given_another_card_id_reaches_a_save_that_took_another_bird(tmp_path, monkeypatch):
     """The three 2022 shiny Galarian birds all carry card id 1, once per id: a save that took one
     refuses the others. From the app's event mode with card id 2, the launcher sends the official record
-    with only the id and the checksum changed; the game's validator and receipt check take it."""
+    with its date filled and its id and checksum changed; the game's validator and receipt check take it."""
     import swsh_gift_host
     from nso_run import Runner
     from pokeldn import pokemon
@@ -295,7 +300,8 @@ def test_a_shiny_galarian_bird_given_another_card_id_reaches_a_save_that_took_an
     assert swsh_gift_host.main([*gift_builder.args(tool, value), "--image", SWORD_IMAGE, "--dump", str(out)]) == 0
     sent, official = out.read_bytes(), events.by_key()[key]["record"]
     assert wc8.sealed(sent) and events.card_id(sent) == 2
-    assert [i for i in range(len(sent)) if sent[i] != official[i]] in ([8], [8, 0x2CC], [8, 0x2CD], [8, 0x2CC, 0x2CD])
+    assert [i for i in range(8, wc8.CHECKSUM_AT) if sent[i] != official[i]] == [8]
+    assert sent[:8] != bytes(8)
     pokemon.SERVICE.validate_gift(sent)
 
     runner = Runner(SWORD_IMAGE)
@@ -318,3 +324,31 @@ def test_the_event_list_loads_where_text_defaults_to_cp1252(monkeypatch):
     finally:
         events.load.cache_clear()
         events.by_key.cache_clear()
+
+
+@pytest.mark.parametrize("dated", [False, True], ids=["empty-date", "distributor-date"])
+def test_imported_event_gets_a_receipt_date_only_when_absent(tmp_path, monkeypatch, dated):
+    import swsh_gift_host
+    from pokeldn import gifts
+    from pokeldn.swsh import events, gift_file
+
+    raw = next(e["record"] for e in events.load() if e["record"][:8] == bytes(8))
+    if dated:
+        original = bytearray(raw)
+        original[:8] = wc8.pack_date(1539879960)
+        raw = wc8.seal(original)
+    source = tmp_path / "event.pokegift"
+    gifts.save(source, gift_file.from_record(raw))
+    monkeypatch.setattr(wc8.time, "time", lambda: 1609459200)  # 1 Jan 2021 UTC
+    monkeypatch.setattr(swsh_gift_host.pokemon.SERVICE, "validate_gift", lambda data: None)
+    output = tmp_path / "out.wc8"
+    assert swsh_gift_host.main(["--record", str(source), "--dump", str(output)]) == 0
+    sent = output.read_bytes()
+    assert wc8.unpack_date(sent) == ((2018, 10, 18, 16, 26, 0) if dated else (2021, 1, 1, 0, 0, 0))
+    assert sent[8:wc8.CHECKSUM_AT] == raw[8:wc8.CHECKSUM_AT]
+    assert wc8.sealed(sent)
+    assert beacon.reassemble([Path(str(output) + f".frag{i}").read_bytes() for i in range(3)]) == sent
+    exported = tmp_path / "export.pokegift"
+    assert swsh_gift_host.main(["--record", str(source), "--export-gift", str(exported)]) == 0
+    assert gift_file.record(gifts.load(exported)) == raw
+    assert gift_file.record(gifts.load(source)) == raw

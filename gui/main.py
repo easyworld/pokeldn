@@ -27,9 +27,12 @@ if len(sys.argv) == 6 and sys.argv[1] == "--apply-update":
 # soon as pokeldn.ldn is imported.
 os.environ.pop("POKELDN_RADIO", None)
 
+from pokeldn.app.i18n import select, t as tr  # noqa: E402
+from pokeldn.app.settings import load as load_settings  # noqa: E402
+select(load_settings().app_language)
+
 import flet as ft  # noqa: E402
 
-from gui.localization import translate
 from gui import drop, flet_client, screen, theme as t  # noqa: E402
 from gui.app import App  # noqa: E402
 from gui.views.widgets import page_key  # noqa: E402
@@ -38,22 +41,21 @@ from pokeldn.app import update  # noqa: E402
 from pokeldn.app.paths import ROOT  # noqa: E402
 
 PAGES = (
-    ("games", '游戏', "gamepad"),
-    ("board", '开发板', "cpu"),
-    ("bank", '银行', "package"),
-    ("gts", "GTS", "globe"),
-    ("controller", '手柄控制', "joystick"),
-    ("docs", '文档', "book-open"),
+    ("games", tr('main.games_d9dae7', 'Games'), "gamepad"),
+    ("board", tr('main.board_4816cb', 'Board'), "cpu"),
+    ("bank", tr('main.bank_676c47', 'Bank'), "package"),
+    ("gts", tr('main.gts_c530c8', 'GTS'), "globe"),
+    ("controller", tr('main.control_32d7e8', 'Control'), "joystick"),
+    ("docs", tr('main.docs_7af023', 'Docs'), "book-open"),
 )
-PLUGINS = ("plugins", "插件", "plug")
-SETTINGS = ("settings", '设置', "gear")
-UPDATE = ("update", '更新', "download")
+PLUGINS = ("plugins", tr('main.plugins_9514b7', 'Plugins'), "plug")
+SETTINGS = ("settings", tr('main.settings_74a883', 'Settings'), "gear")
+UPDATE = ("update", tr('main.update_c1c100', 'Update'), "download")
 
 
 def main(page: ft.Page) -> None:
     page.title = "pokeldn"
     page.theme_mode = ft.ThemeMode.DARK
-    # CanvasKit web previews cannot use the desktop host's installed fonts.
     page.theme = page.dark_theme = t.app_theme(system_fonts=not page.web)
     chinese = ft.Locale("zh", "CN", "Hans")
     page.locale_configuration = ft.LocaleConfiguration(supported_locales=[chinese], current_locale=chinese)
@@ -113,7 +115,7 @@ def main(page: ft.Page) -> None:
             width=56, padding=ft.Padding(0, 8, 0, 7), border_radius=12,
             bgcolor=ft.Colors.with_opacity(0.12, t.RED) if active else None,
             on_click=lambda e, k=key: navigate(k),
-            tooltip='插件有更新' if key == "plugins" and app.plugin_updates else label))
+            tooltip=tr('main.plugin_updates_1cc5ea', 'Plugin updates') if key == "plugins" and app.plugin_updates else label))
 
     def render_rail() -> None:
         rail.controls = [item(p) for p in PAGES]
@@ -202,28 +204,27 @@ def offer_update(app: App) -> None:
 
     def install(e):
         if app.busy:
-            note.value, note.color = "请先结束正在进行的会话、刷写或清理。", t.RED
+            note.value, note.color = tr('main.finish_the_running_session_flash_or_cleanup_first_4771cf', 'Finish the running session, flash or cleanup first.'), t.RED
             note.update()
             return
         app.page.pop_dialog()
         install_update(app, release, admin)
 
-    note = t.text(f"当前版本：{__version__}。"
-                  + ("pokeldn 将下载并校验更新，然后重启到新版本。" if not reason else
-                     "下载新版本，然后替换当前应用。" if release.download != release.page else
-                     "从发布页面下载适用于此电脑的新版本，然后替换当前应用"
-                     "。")
-                  + (f"{translate(reason)} " if reason and reason != "manual" else "")
-                  + (f"Windows 将请求管理员权限以修改 {root.parent}。" if admin else "")
-                  + "设置、密钥和已接收的宝可梦将保留在原位置。", 13, t.MUTED)
-    main = (t.button("立即更新", install, "download") if not reason else
-            t.button("下载", open_(release.download), "download"))
+    note = t.text(tr('main.you_have_c04a93', 'You have {value0}. ', value0=__version__)
+                  + (tr('main.pokeldn_downloads_it_checks_it_and_restarts_in_the_new__d1543b', 'pokeldn downloads it, checks it and restarts in the new version. ') if not reason else
+                     tr('main.download_the_new_version_then_replace_this_app_with_it_880281', 'Download the new version, then replace this app with it. ') if release.download != release.page else
+                     tr('main.download_the_new_version_for_your_computer_from_the_rel_47361e', 'Download the new version for your computer from the release page, then replace this app with it. '))
+                  + (f"{reason} " if reason and reason != "manual" else "")
+                  + (tr('main.windows_asks_for_permission_to_change_5b8fb6', 'Windows asks for permission to change {value0}. ', value0=root.parent) if admin else "")
+                  + tr('main.your_settings_keys_and_received_pokemon_stay_where_they_d5360a', 'Your settings, keys and received Pokemon stay where they are.'), 13, t.MUTED)
+    main = (t.button(tr('main.update_now_63bf04', 'Update now'), install, "download") if not reason else
+            t.button(tr('main.download_d6eafe', 'Download'), open_(release.download), "download"))
     app.page.show_dialog(t.dialog(
-        semantics_label="有可用更新",
-        title=t.text(f"pokeldn {release.version} 已发布", 17, weight=ft.FontWeight.W_600),
+        semantics_label=tr('main.update_available_ff8b55', 'Update available'),
+        title=t.text(tr('main.pokeldn_is_available_005454', 'pokeldn {value0} is available', value0=release.version), 17, weight=ft.FontWeight.W_600),
         content=ft.Container(note, width=460),
-        actions=[t.link_button("更新内容", open_(release.page)),
-                 t.secondary_button("稍后", close), main],
+        actions=[t.link_button(tr('main.what_s_new_135e91', "What's new"), open_(release.page)),
+                 t.secondary_button(tr('main.later_73b6e4', 'Later'), close), main],
     ))
     app.page.update()   # also shown from a background check, where Flet does not flush on its own
 
@@ -231,12 +232,12 @@ def offer_update(app: App) -> None:
 def install_update(app: App, release: update.Release, admin: bool = False) -> None:
     """Downloads and checks the release, then quits so the new app can take this one's place."""
     stop = threading.Event()
-    status = t.text("正在下载…", 13, t.MUTED)
+    status = t.text(tr('main.downloading_f976eb', 'Downloading...'), 13, t.MUTED)
     bar = ft.ProgressBar(value=None, color=t.BLUE, bgcolor=t.FIELD, height=4)
-    cancel = t.secondary_button("取消", lambda e: stop.set())
+    cancel = t.secondary_button(tr('main.cancel_19766e', 'Cancel'), lambda e: stop.set())
     app.page.show_dialog(t.dialog(
-        semantics_label="正在更新", modal=True,
-        title=t.text(f"正在更新到 {release.version}", 17, weight=ft.FontWeight.W_600),
+        semantics_label=tr('main.updating_0b5260', 'Updating'), modal=True,
+        title=t.text(tr('main.updating_to_47aca3', 'Updating to {value0}', value0=release.version), 17, weight=ft.FontWeight.W_600),
         content=ft.Container(ft.Column([status, bar], spacing=12, tight=True), width=460),
         actions=[cancel]))
     app.page.update()
@@ -250,8 +251,8 @@ def install_update(app: App, release: update.Release, admin: bool = False) -> No
 
         def show():
             mb = 1 << 20
-            status.value = (f"正在下载 {done / mb:.0f} / {total / mb:.0f} MB" if total else
-                            f"正在下载 {done / mb:.0f} MB")
+            status.value = (tr('main.downloading_of_mb_797da4', 'Downloading {value0:.0f} of {value1:.0f} MB', value0=done / mb, value1=total / mb) if total else
+                            tr('main.downloading_mb_3d82fe', 'Downloading {value0:.0f} MB', value0=done / mb))
             bar.value = done / total if total else None
             app.page.update()
         app.ui(show)
@@ -259,17 +260,16 @@ def install_update(app: App, release: update.Release, admin: bool = False) -> No
     def failed(message: str) -> None:
         app.page.pop_dialog()
         app.page.show_dialog(t.dialog(
-            semantics_label="更新失败",
-            title=t.text("未能安装更新", 17, weight=ft.FontWeight.W_600),
-            content=ft.Container(t.text(f"{translate(message)}。当前应用未更改；"
-                                        "你可以手动下载新版本。", 13, t.MUTED), width=460),
-            actions=[t.secondary_button("关闭", lambda e: app.page.pop_dialog()),
-                     t.button("下载", lambda e: (app.page.pop_dialog(),
+            semantics_label=tr('main.update_failed_e58282', 'Update failed'),
+            title=t.text(tr('main.the_update_did_not_install_d79712', 'The update did not install'), 17, weight=ft.FontWeight.W_600),
+            content=ft.Container(t.text(tr('main.this_app_is_unchanged_you_can_download_the_new_version__8f43d1', '{value0}{value1}. This app is unchanged; you can download the new version yourself.', value0=message[:1].upper(), value1=message[1:]), 13, t.MUTED), width=460),
+            actions=[t.secondary_button(tr('main.close_7d9eb7', 'Close'), lambda e: app.page.pop_dialog()),
+                     t.button(tr('main.download_d6eafe', 'Download'), lambda e: (app.page.pop_dialog(),
                                                      app.page.run_task(app.open_url, release.download)), "download")]))
         app.page.update()
 
     def restart() -> None:
-        status.value, bar.value, cancel.disabled = "正在重启到新版本…", None, True
+        status.value, bar.value, cancel.disabled = tr('main.restarting_in_the_new_version_d1dfd3', 'Restarting in the new version...'), None, True
         app.page.update()
 
         async def quit_():
@@ -303,18 +303,17 @@ def updated_notice(app: App, outcome: dict) -> None:
     """What the last update did, shown once by the app it opened."""
     error, version = outcome.get("error") or "", str(outcome.get("version") or "")
     if not error and version == __version__:
-        app.page.show_dialog(ft.SnackBar(ft.Text(f"pokeldn 已更新到 {__version__}"), duration=4000))
+        app.page.show_dialog(ft.SnackBar(ft.Text(tr('main.pokeldn_updated_to_1f62a1', 'pokeldn updated to {value0}', value0=__version__)), duration=4000))
         return
-    popup.acknowledge("未能安装更新",
-                      f"pokeldn {version} 未能替换当前应用：{translate(error) if error else '打开了旧版本'}。当前应用未更改。",
-                      id="update-failed", label="关闭", tone="error")
+    popup.acknowledge(tr('main.the_update_did_not_install_d79712', 'The update did not install'),
+                      tr('main.pokeldn_could_not_replace_this_app_this_app_is_unchange_23fff0', 'pokeldn {value0} could not replace this app: {value1}. This app is unchanged.', value0=version, value1=error or tr('main.it_opened_the_old_version_6f6d59', 'it opened the old version')), id="update-failed", label=tr('main.close_7d9eb7', 'Close'), tone="error")
 
 
 def plugin_stopped_notice(app: App) -> None:
     """A plugin froze or closed the app last time while it started; App turned it off."""
-    popup.confirm("插件已停用",
-                  f"上次启动插件 {app.plugin_stopped} 时，pokeldn 关闭或停止响应。该插件已停用；作者修复后，可在“插件”页重新启用。",
-                  "打开插件页", "暂不打开", id="plugin-stopped", tone="warning",
+    popup.confirm(tr('main.a_plugin_was_turned_off_ed25fc', 'A plugin was turned off'),
+                  tr('main.pokeldn_closed_or_stopped_answering_last_time_while_sta_bc8a75', 'pokeldn closed or stopped answering last time while starting the plugin {value0}. It is off now; turn it on again on the Plugins page once its author has a fix.', value0=app.plugin_stopped),
+                  tr('main.open_plugins_2faa63', 'Open Plugins'), tr('main.not_now_a0e63d', 'Not now'), id="plugin-stopped", tone="warning",
                   on_agree=lambda: app.ui(lambda: app.navigate("plugins")))
 
 
@@ -344,29 +343,29 @@ def welcome(app: App) -> None:
 
     body = ft.Column([
         ft.Row([ft.Image(src="logo.svg", width=28, height=32), ft.Container(expand=True),
-                t.icon_button("close", close, '关闭欢迎页面')],
+                t.icon_button("close", close, tr('main.close_welcome_dcd26c', 'Close welcome'))],
                vertical_alignment=ft.CrossAxisAlignment.START),
-        t.text('欢迎使用 pokeldn', 22, weight=ft.FontWeight.W_600),
-        t.text('直接通过电脑，以本地无线通信交换宝可梦和发送礼物。', 13, t.MUTED),
+        t.text(tr('main.welcome_to_pokeldn_319d9e', 'Welcome to pokeldn'), 22, weight=ft.FontWeight.W_600),
+        t.text(tr('main.trade_and_send_gifts_over_local_wireless_right_from_you_11fb42', 'Trade and send gifts over local wireless, right from your computer.'), 13, t.MUTED),
         ft.Container(height=6),
         t.step_list([
-            '选择从自己的游戏机导出的 prod.keys。密钥用于解密本地无线通信消息，并保存在此电脑上。',
-            '使用 USB 数据线连接 ESP32。',
-            '选择游戏和功能，然后按照游戏机操作步骤进行。',
+            tr('main.choose_prod_keys_dumped_from_your_own_console_the_keys__07399e', 'Choose prod.keys dumped from your own console. The keys decrypt local wireless messages and stay on this computer.'),
+            tr('main.plug_in_your_esp32_with_a_usb_data_cable_0b0ddf', 'Plug in your ESP32 with a USB data cable.'),
+            tr('main.pick_a_game_choose_a_tool_and_follow_the_console_steps_a4a338', 'Pick a game, choose a tool and follow the console steps.'),
         ]),
-        ft.Row([t.link_button('阅读设置指南', instructions)]),
+        ft.Row([t.link_button(tr('main.read_the_setup_guide_d201fc', 'Read the setup guide'), instructions)]),
     ], spacing=8, tight=True)
     app.page.show_dialog(t.dialog(
         modal=True, content_padding=0, actions_padding=0, inset_padding=32,
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-        semantics_label='欢迎使用 pokeldn',
+        semantics_label=tr('main.welcome_to_pokeldn_319d9e', 'Welcome to pokeldn'),
         content=drop.target(ft.Container(ft.Column([
             ft.Container(body, padding=ft.Padding(28, 22, 18, 8)),
             ft.Container(ft.Row([
-                t.text('将 prod.keys 拖放到此处，或稍后在设置中添加密钥。' if drop.AVAILABLE else
-                       '稍后可在设置中添加密钥。', 12, t.FAINT, expand=True),
-                t.secondary_button('稍后', close),
-                t.button('选择 prod.keys', choose, "key"),
+                t.text(tr('main.drop_prod_keys_here_or_add_keys_later_in_settings_b49b46', 'Drop prod.keys here, or add keys later in Settings.') if drop.AVAILABLE else
+                       tr('main.add_keys_later_in_settings_8bc2f9', 'Add keys later in Settings.'), 12, t.FAINT, expand=True),
+                t.secondary_button(tr('main.later_73b6e4', 'Later'), close),
+                t.button(tr('main.choose_prod_keys_782614', 'Choose prod.keys'), choose, "key"),
             ], spacing=8), padding=ft.Padding(28, 12, 24, 24)),
         ], spacing=0, tight=True), width=500, border_radius=20), dropped),
     ))
@@ -391,9 +390,9 @@ def window_header(page: ft.Page) -> ft.Control:
             page.update()
 
         controls.extend([
-            ft.IconButton(ft.Icons.REMOVE, tooltip="最小化", on_click=minimize, icon_size=16),
-            ft.IconButton(ft.Icons.CROP_SQUARE, tooltip="最大化或还原", on_click=maximize, icon_size=14),
-            ft.IconButton(ft.Icons.CLOSE, tooltip="关闭", on_click=close, icon_size=16),
+            ft.IconButton(ft.Icons.REMOVE, tooltip=tr('main.minimize_d72e31', 'Minimize'), on_click=minimize, icon_size=16),
+            ft.IconButton(ft.Icons.CROP_SQUARE, tooltip=tr('main.maximize_or_restore_9e47a6', 'Maximize or restore'), on_click=maximize, icon_size=14),
+            ft.IconButton(ft.Icons.CLOSE, tooltip=tr('main.close_7d9eb7', 'Close'), on_click=close, icon_size=16),
         ])
     return ft.Container(ft.Row(controls, spacing=0), height=40, bgcolor=t.BG)
 

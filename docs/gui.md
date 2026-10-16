@@ -59,6 +59,15 @@ a Settings shortcut where Android supports it. The flow presents the relevant ne
 keeps setup progress visible. Developer tooling such as ADB and wireless debugging remains
 separate from user setup.
 
+## App language
+
+Settings, App language lists English and installed community language packs. Choosing a pack enables
+it; restart the app to apply the choice. Missing strings fall back to English. Trainer language
+controls built Pokemon separately. [Language packs](plugins.md#language-packs-15) describes the
+package format and translator template. The desktop app ships English defaults only. The bundled [Noto Sans CJK SC](https://github.com/notofonts/noto-cjk/tree/main/Sans/OTF/SimplifiedChinese) fallback font
+covers Chinese, Japanese and Korean text offline; its SIL Open Font License is in
+`gui/assets/fonts/LICENSE`.
+
 ## Your trainer
 
 Settings, Your trainer is the original trainer of every Pokemon the app builds: a name, a gender, a
@@ -417,6 +426,17 @@ the header reads "Off: Event". Unfolding brings the event back. The card opens a
 event is in use. An event the copy lacks (not downloaded, or an update dropped it) stays chosen: the
 header reads "Missing: Event" in red, and the run refuses it until the copy has it or another event
 is chosen (`pokeldn.app.command.code_error`).
+
+## Hosted raid rewards
+
+The Tera Raid (Host) tool's Rewards card offers training items, Tera Shards (Stellar included),
+Herba Mystica, treasure and balls as templates. Choosing a bundle replaces the current reward rows.
+Quantity each changes every row in that bundle, from 1 to 999. Editing an item or an individual
+quantity switches to Custom rewards; rows can be added or removed, up to 45. Incomplete rows or
+invalid quantities prevent a launch. The saved selection keeps the items and quantities.
+
+Raid's own rewards clears the overrides and uses the selected raid's reward tables
+([Hosting](sv_raid.md#hosting); `gui/views/rewards.py`).
 
 ## Raid NPC partners
 

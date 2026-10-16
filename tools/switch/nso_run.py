@@ -5,9 +5,8 @@ In the static image every PLT stub jumps through a zero GOT slot: stubs are mapp
 (nso_imports) and serviced in Python. bin/swsh_gift_host.py runs the Wonder Card validator with it."""
 from pathlib import Path
 import os, struct, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from nso_imports import imports
-from nso_relocs import relatives
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from pokeldn.switch.nso import imports, load as _load, plt_stubs as _plt_stubs, relatives  # noqa: E402,F401
 from unicorn import *
 from unicorn.arm64_const import *
 
@@ -17,33 +16,8 @@ RETURN = SCRATCH + 0xF000
 
 
 def load(path):
-    img = bytearray(Path(path).read_bytes())
-    off = struct.unpack_from("<I", img, 4)[0]
-    bss_start, bss_end = struct.unpack_from("<ii", img, off + 8)
-    bss_start += off; bss_end += off
-    if bss_end > len(img):
-        img.extend(b"\0" * (bss_end - len(img)))
-    for slot, addend in relatives(bytes(img)):
-        if slot + 8 <= len(img):
-            struct.pack_into("<Q", img, slot, addend)
-    return img
-
-
-def _plt_stubs(img, got):
-    """PLT stub address -> import name, by the adrp/ldr/add/br shape."""
-    n = len(img) // 4
-    w = struct.unpack(f"<{n}I", bytes(img[:n * 4]))
-    out = {}
-    for i in range(n - 3):
-        if (w[i] & 0x9F00001F) == 0x90000010 and (w[i + 1] & 0xFFC003FF) == 0xF9400211 \
-           and w[i + 3] == 0xD61F0220:
-            immlo, immhi = (w[i] >> 29) & 3, (w[i] >> 5) & 0x7FFFF
-            imm = (immhi << 2 | immlo)
-            imm -= (1 << 21) if imm & (1 << 20) else 0
-            slot = ((i * 4) & ~0xFFF) + (imm << 12) + (((w[i + 1] >> 10) & 0xFFF) * 8)
-            if slot in got:
-                out[i * 4] = got[slot]
-    return out
+    """-> the laid-out image at `path` with bss and its RELATIVE slots filled at base 0."""
+    return _load(Path(path))
 
 
 class Runner:

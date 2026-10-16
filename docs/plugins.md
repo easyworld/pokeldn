@@ -189,7 +189,8 @@ asks.
 
 `help=` puts a line under the input, `default=` fills it, and `hidden=True` moves it to the
 Advanced tab. The fields the built-in tools use, and the
-rest of `Field`, are in `pokeldn/app/catalog.py`. A tool's `fixed` arguments may carry `{ot}`,
+rest of `Field`, are in `pokeldn/app/catalog.py`. API 1.5 adds `Field.identity`, a stable settings
+key for a positional field whose label is translated. A tool's `fixed` arguments may carry `{ot}`,
 `{tid}`, `{sid}`, `{language}` and `{gender}` (the trainer in Settings), `{received}` (the Received
 folder) and `{stamp}` (the run's start time).
 
@@ -286,6 +287,57 @@ Plugins page's refresh is pressed. A newer version turns the Plugins menu entry 
 screen with its signature check. Nothing installs without the player's acceptance. HTTP is accepted
 for `127.0.0.1` and `localhost` only, to test a release locally.
 
+## Language packs (1.5)
+
+A language pack is a data-only folder plugin. Its `name` is the display name in Settings,
+App language. Its `locale` is a language tag; the saved selection identifies the plugin by `id`.
+
+```toml
+id = "community-zh-hans"
+name = "简体中文"
+version = "1.0.0"
+api = "1.5"
+locale = "zh-Hans"
+strings = "strings.toml"
+```
+
+`strings.toml` sits beside `plugin.toml`. Quote each dotted key so TOML reads a flat table:
+
+```toml
+"bank.bank_676c47" = "宝可梦银行"
+```
+
+The file contains text values only. A pack needs no Python module or `register` function.
+Installation, signatures, author keys, removal and `updates` use the same package path as other
+plugins. Invalid TOML, non-text values and invalid format syntax are refused before installation.
+A damaged installed pack shows its loading error and falls back to English.
+
+Install the pack on the Plugins page, then choose it in Settings, App language and restart pokeldn.
+Choosing a pack enables its plugin. English is always available. A missing, disabled or removed pack
+uses English. Trainer language still controls the Pokemon the app builds.
+
+Every lookup has an inline English default. Missing keys use that default; unused keys have no
+effect. Named placeholders such as `{value0}` can move within a translation. Keep their names,
+conversions and format specifications; `{{` and `}}` produce literal braces. A translation whose
+placeholders cannot be formatted uses the English default for that lookup.
+
+```bash
+python scripts/extract_strings.py
+python scripts/extract_strings.py --check
+python scripts/pack_plugin.py examples/plugins/pseudo -o pseudo.pokeplugin
+```
+
+The extractor writes `pokeldn/app/data/strings.en.toml`, sorted by key. Tests check that it matches
+the source and refuse a key with two English defaults. Keys remain unchanged when wording changes.
+Copy the template into a separate plugin repository and translate its values; omitted keys need no
+maintenance. The partial pseudo-locale in `examples/plugins/pseudo` brackets selected strings and
+leaves others to exercise fallback. Examples are excluded from desktop packages.
+
+The lookup covers desktop controls, dialogs, local errors and catalog labels, help and console
+instructions. Reference Markdown, game data supplied by PKHeX and game modules, third-party plugin
+copy and upstream exception messages retain their source language. Session logs, radio script
+output and `[done]` protocol lines retain their existing text.
+
 ## The Plugin Test Kit
 
 `examples/plugins/test_kit`, packed with `scripts/pack_plugin.py`, adds:
@@ -320,6 +372,7 @@ or a downgrade.
 | 1.2 | `pokeldn.popup` |
 | 1.3 | the program surface: builders, gift files, PKHeX and the board |
 | 1.4 | Bank imports, records, destinations, offers and trade completion |
+| 1.5 | language-pack plugins and string lookup |
 
 ## The API, version 1
 
@@ -329,7 +382,7 @@ or a downgrade.
 | `api.add_game(game, icon="")` | adds a game section with its tools |
 | `api.add_radio(scheme, install, label="")` | adds a radio |
 | `api.folder` | the plugin's folder (a `Path`), or None for a Python package |
-| `api.version`, `api.level` | the major and level the app runs, `1` and `4` |
+| `api.version`, `api.level` | the major and level the app runs, `1` and `5` |
 | `api.data` | a folder kept across updates, created on first use (1.1) |
 | `pokeldn.plugins.data_folder(id)` | the same folder from a tool's script (1.1) |
 | `Tool`, `Field`, `Game` | the app's catalog types, imported from `pokeldn.plugins` |
@@ -341,7 +394,7 @@ or a downgrade.
 This table and the next one are the supported surface. Anything else a plugin imports from pokeldn
 can change in any release.
 
-## The program surface (1.3, Bank added in 1.4)
+## The program surface (1.3, Bank added in 1.4, language packs in 1.5)
 
 A plugin, or a separate program built on a pokeldn checkout (a touchscreen front end, a script), can
 build gifts and Pokemon and manage the board with the same code the app uses. These names keep their
@@ -350,6 +403,7 @@ meaning within API major 1; `tests/test_plugin_surface.py` resolves every one.
 | name | what it is |
 |---|---|
 | `python -m pokeldn --list`, `python -m pokeldn TOOL -- ARGS` | every tool's key, and a run of one with the trainer in Settings and the arguments after `--` |
+| `pokeldn.app.i18n.t(key, default, **fmt)`, `select(plugin_id)` | string lookup with an inline English default and named formatting; select an enabled language pack by plugin id, or English with an empty id (1.5) |
 | `pokeldn.app.catalog.GAMES` | the built-in games, each `Game`'s `.tools` holding its `Tool`s: the script under `bin/` and its fields; a flag the app passes keeps its name |
 | `pokeldn.pokemon.SERVICE.species(game)`, `.names(game, kind)` | the species, and the `moves`, `items`, `bag`, `held` or `balls` a game has, as `{"id", "name"}` lists |
 | `pokeldn.pokemon.SERVICE.options(game, species, trainer)` | the forms, natures, abilities, items and balls an offer of that species can carry |

@@ -22,6 +22,26 @@ def test_saved_pokemon_offer_keeps_its_card_description():
     assert GamesView.description(view, field) == field.help
 
 
+def test_plugin_error_and_findings_can_render_translated_metadata():
+    from gui.views.plugins import PluginsView
+    dialogs = []
+    view = SimpleNamespace(app=SimpleNamespace(page=SimpleNamespace(show_dialog=dialogs.append)))
+    PluginsView.error_dialog(view, "插件错误", "unknown error")
+    assert dialogs[0].content.value == "未知错误"
+    assert PluginsView._findings(["unknown error"]) is not None
+
+
+def test_raid_gallery_renders_chinese_species_without_changing_event_keys():
+    from gui.views.raid_event import RaidEventPicker
+    dropdown = SimpleNamespace()
+    picker = SimpleNamespace(view=SimpleNamespace(values={}), field=SimpleNamespace(key="--raid-event"),
+                             dropdown=dropdown, control=SimpleNamespace(update=lambda: None))
+    event = SimpleNamespace(key="013 Walking Wake", title="Walking Wake", species=("Walking Wake", "Iron Leaves"))
+    RaidEventPicker._fill(picker, [event], "")
+    assert dropdown.options[1].key == event.key
+    assert "波荡水、铁斑叶" in dropdown.options[1].text
+
+
 def test_choice_card_includes_help_for_the_saved_selection():
     field = Field("--mode", "Mode", "choice", help="Choose a mode.",
                   choice_help=(("trade", "Trades Pokemon."),))
@@ -905,7 +925,7 @@ def test_display_logs_keep_raw_diagnostics_and_identifiers():
     from gui.localization import translate_app_log, translate
 
     raw = '[app] Firmware for ESP32-S3: C:/Pikachu/firmware.bin'
-    assert Log._line(raw).value == '[app] 适用于 ESP32-S3 的固件：C:/Pikachu/firmware.bin'
+    assert Log._line(raw).value == raw
     assert translate_app_log('[app] Checking COM3; the board may restart.') == '[app] 正在检查 COM3；开发板可能会重启。'
     assert translate_app_log('Writing at 0x1000... (50%)') == 'Writing at 0x1000... (50%)'
     assert translate('16 bytes; returned 1 after 2 frames (4 instructions) and answers 0x00000001.') == '16 字节；在 2 帧后返回 1（执行 4 条指令），回复值为 0x00000001。'
@@ -2044,11 +2064,11 @@ def test_the_finder_tells_how_far_a_search_is_and_how_long_it_has_left():
     assert searching(0, 1000, 0) == "正在搜索种子 0 / 1,000…"
     assert searching(500, 1000, 2) == "正在搜索种子 500 / 1,000，每秒 250 个，预计剩余 2 秒…"
     assert searching(50_000_000, 1 << 32, 2) == (
-        "正在搜索种子 50,000,000 / 4,294,967,296，每秒 2500.0 万 个，预计剩余 2 分 49 秒…")
+        "正在搜索种子 50,000,000 / 4,294,967,296，每秒 25.0 百万 个，预计剩余 2 分 49 秒…")
     assert searching(28_448_764_162, 180_388_626_432, 28.209) == (
-        "正在搜索种子 28,448,764,162 / 180,388,626,432，每秒 10.08 亿 个，预计剩余 2 分 30 秒…")
-    assert "10.00 亿 个" in searching(999_960_000, 1 << 32, 1)
-    assert "99990.0 万 个" in searching(999_900_000, 1 << 32, 1)
+        "正在搜索种子 28,448,764,162 / 180,388,626,432，每秒 1.01 十亿 个，预计剩余 2 分 30 秒…")
+    assert "1.00 十亿 个" in searching(999_960_000, 1 << 32, 1)
+    assert "999.9 百万 个" in searching(999_900_000, 1 << 32, 1)
 
 
 def test_the_finder_s_checkboxes_flip_and_tell(monkeypatch):

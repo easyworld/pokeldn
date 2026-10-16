@@ -903,6 +903,13 @@ Only a local-wireless card keeps its date. Every other route overwrites the eigh
 `nn::time::StandardNetworkSystemClock::GetCurrentTime` (`0x00ff3f8c` -> `0x01449ca0`; PLT
 `0x01900050`, GOT `0x0260fbb8`), packed by `0x016cbfd0` and `0x016cc1d0`.
 
+The distributor fills an empty date with the computer's current UTC time immediately before
+sending a card, then reseals its checksum. A nonzero distributor date is preserved. Official event
+files often carry eight zero bytes because the online route supplies their receipt time. This
+fallback gives those files a date over local wireless as well. Exported files keep their original
+date, and cards already stored in the console's album are unchanged. The Pokemon's own met date
+is separate from the album date.
+
 ## Where the album keeps a card
 
 The album is save block `0x112D5141` (PKHeX's `KMysteryGift`), `0x17C8` bytes, loaded by

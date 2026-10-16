@@ -1,5 +1,6 @@
 """The controller: a Switch's buttons pressed from this computer through the controller board, and
 the macros the board plays on its own clock [pokeldn.pad, docs/gui.md, The controller]."""
+from pokeldn.app.i18n import t as tr
 import copy
 import os
 import sys
@@ -10,7 +11,6 @@ from concurrent.futures import ThreadPoolExecutor
 import flet as ft
 
 from gui import theme as t
-from gui.localization import translate
 from gui.views import widgets
 from gui.views.widgets import open_folder
 from pokeldn.app import macros
@@ -21,17 +21,16 @@ from pokeldn.pad import service
 
 # Keyboard keys (Flet key names) to controller keys, used while "Keyboard" is on.
 KEYBOARD = {
-    "Arrow Up": "UP", "Arrow Down": "DOWN", "Arrow Left": "LEFT", "Arrow Right": "RIGHT",
-    "X": "A", "Z": "B", "S": "X", "A": "Y", "Q": "L", "W": "R", "1": "ZL", "2": "ZR",
-    "Enter": "PLUS", "Backspace": "MINUS", "H": "HOME", "C": "CAPTURE",
+    "Arrow Up": 'UP', "Arrow Down": 'DOWN', "Arrow Left": 'LEFT', "Arrow Right": 'RIGHT',
+    "X": "A", "Z": "B", "S": "X", "A": "Y", "Q": "L", "W": "R", "1": 'ZL', "2": 'ZR',
+    "Enter": 'PLUS', "Backspace": 'MINUS', "H": 'HOME', "C": 'CAPTURE',
 }
 HINT = {v: k.replace("Arrow ", "") for k, v in KEYBOARD.items()}
-STICK_DIRECTIONS = [("", '居中', (0.0, 0.0)), ("UP", '上', (0.0, 1.0)), ("UPRIGHT", '右上', (0.71, 0.71)),
-                    ("RIGHT", '右', (1.0, 0.0)), ("DOWNRIGHT", '右下', (0.71, -0.71)),
-                    ("DOWN", '下', (0.0, -1.0)), ("DOWNLEFT", '左下', (-0.71, -0.71)),
-                    ("LEFT", '左', (-1.0, 0.0)), ("UPLEFT", '左上', (-0.71, 0.71))]
-BLUETOOTH_REFUSED = ('macOS 未允许此程序使用蓝牙。打包应用会请求权限；从源码'
-                     '运行时，请在“系统设置 → 隐私与安全性”中允许终端使用蓝牙。')
+STICK_DIRECTIONS = [("", tr('controller.centre_45c193', 'Centre'), (0.0, 0.0)), ('UP', tr('controller.up_55490a', 'Up'), (0.0, 1.0)), ('UPRIGHT', tr('controller.up_right_3e0f6f', 'Up-right'), (0.71, 0.71)),
+                    ('RIGHT', tr('controller.right_883361', 'Right'), (1.0, 0.0)), ('DOWNRIGHT', tr('controller.down_right_2ba044', 'Down-right'), (0.71, -0.71)),
+                    ('DOWN', tr('controller.down_b86d11', 'Down'), (0.0, -1.0)), ('DOWNLEFT', tr('controller.down_left_92b2bc', 'Down-left'), (-0.71, -0.71)),
+                    ('LEFT', tr('controller.left_58eb90', 'Left'), (-1.0, 0.0)), ('UPLEFT', tr('controller.up_left_0e99ce', 'Up-left'), (-0.71, 0.71))]
+BLUETOOTH_REFUSED = (tr('controller.macos_refused_bluetooth_to_this_program_the_packaged_ap_130da9', 'macOS refused Bluetooth to this program. The packaged app asks for it; from a source checkout, allow Bluetooth for the terminal in System Settings, Privacy & Security.'))
 
 
 def start_service(on_exit=lambda code: None, popups=None) -> Process | None:
@@ -45,8 +44,7 @@ def start_service(on_exit=lambda code: None, popups=None) -> Process | None:
                 return None
             client.call("quit")
         except service.ServiceError as error:
-            raise service.ServiceError('旧版本手柄服务占用了蓝牙连接，请关闭所有 '
-                                       'pokeldn 窗口后重新打开应用') from error
+            raise service.ServiceError(tr('controller.an_older_controller_service_holds_the_bluetooth_link_qu_aa8033', 'an older controller service holds the Bluetooth link; quit every pokeldn window and open the app again')) from error
         finally:
             client.close()
         for _ in range(50):
@@ -57,7 +55,7 @@ def start_service(on_exit=lambda code: None, popups=None) -> Process | None:
     # POKELDN_MANAGED_RUN: the child stops when the app's end of its stdin closes (pokeldn.app.runner).
     child = Process(["--module", "pokeldn.pad.service"], str(SESSION),
                     dict(os.environ, POKELDN_MANAGED_RUN="1"), lambda line: None, on_exit, bluetooth=True,
-                    popups=popups, label="Controller service")
+                    popups=popups, label=tr('controller.controller_service_c608fb', 'Controller service'))
     for _ in range(100):
         if service.running() or not child.running:
             break
@@ -67,16 +65,15 @@ def start_service(on_exit=lambda code: None, popups=None) -> Process | None:
 
 def describe(step: dict, macro: m.Macro) -> str:
     if "wait" in step:
-        return f"等待 {step['wait']} 毫秒"
+        return tr('controller.wait_ms_48e659', 'Wait {value0} ms', value0=step['wait'])
     if "repeat" in step:
-        return f"重复 {step['repeat']} 次"
+        return tr('controller.repeat_times_d20988', 'Repeat {value0} times', value0=step['repeat'])
     keys = step.get("press", [])
     keys = [keys] if isinstance(keys, str) else list(keys)
     for side in ("left", "right"):
         if side in step:
-            label = '左摇杆' if side == 'left' else '右摇杆'
-            keys.append(f"{label}{direction_of(step[side])[1]}")
-    return f"{' + '.join(keys) or '无操作'}  ·  按住 {step.get('ms', macro.press_ms)} 毫秒，间隔 {step.get('after', macro.gap_ms)} 毫秒"
+            keys.append(tr('controller.stick_e120fb', '{value0} stick {value1}', value0=tr('controller.stick_side_left', 'Left') if side == 'left' else tr('controller.stick_side_right', 'Right'), value1=direction_of(step[side])[1].lower()))
+    return tr('controller.ms_then_ms_a88cbd', '{value0}  ·  {value1} ms, then {value2} ms', value0=' + '.join(keys) or tr('controller.nothing_67e1bc', 'Nothing'), value1=step.get('ms', macro.press_ms), value2=step.get('after', macro.gap_ms))
 
 
 def direction_of(xy) -> tuple[str, str, tuple]:
@@ -91,7 +88,7 @@ class ControllerView:
         self.client: service.Client | None = None
         self.child: Process | None = None
         self.connecting = False
-        self.state = "Not connected"
+        self.state = tr('controller.not_connected_0303e1', 'Not connected')
         self.board: dict = {}
         self.error = ""
         self.sender = ThreadPoolExecutor(max_workers=1)
@@ -112,17 +109,17 @@ class ControllerView:
         self.footer = ft.Column(spacing=8, tight=True)
         self.control = ft.Row([
             t.panel(ft.Column([
-                t.panel_header('宏列表',
-                               t.icon_button("plus", lambda e: self.new(), '新建宏'),
-                               t.icon_button("upload", self._import, '导入 .pokemacro 文件'),
+                t.panel_header(tr('controller.macros_866dcd', 'Macros'),
+                               t.icon_button("plus", lambda e: self.new(), tr('controller.new_macro_b9a983', 'New macro')),
+                               t.icon_button("upload", self._import, tr('controller.import_a_pokemacro_file_13a934', 'Import a .pokemacro file')),
                                t.icon_button("folder", lambda e: open_folder(str(macros.library())),
-                                             '打开宏文件夹')),
+                                             tr('controller.open_the_macros_folder_10afa1', 'Open the macros folder'))),
                 t.fade(self.list),
             ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
             t.fade(ft.ListView([self.status, self.pad], spacing=t.GAP, padding=ft.Padding(0, 0, 0, 24),
                                expand=True)),
             t.panel(ft.Column([
-                t.panel_header('宏'),
+                t.panel_header(tr('controller.macro_cdf16e', 'Macro')),
                 self.editor,
                 ft.Container(self.footer, padding=ft.Padding(18, 0, 18, 18)),
             ], spacing=0, expand=True), width=t.SESSION_WIDTH),
@@ -147,7 +144,7 @@ class ControllerView:
     def connect(self, e=None) -> None:
         if self.connecting:
             return
-        self.connecting, self.error, self.state = True, "", "Looking for the board..."
+        self.connecting, self.error, self.state = True, "", tr('controller.looking_for_the_board_fff30a', 'Looking for the board...')
         self.render_status()
         threading.Thread(target=self._connect, daemon=True).start()
 
@@ -166,17 +163,17 @@ class ControllerView:
             self.client.call("connect")
             reply = self.client.call("status")
             self.board = {**reply.get("status", {}), "link": reply.get("link", "")}
-            self.state = "Connected"
+            self.state = tr('controller.connected_229655', 'Connected')
         except (OSError, service.ServiceError) as error:
             self._drop()
-            self.state = "Not connected"
+            self.state = tr('controller.not_connected_0303e1', 'Not connected')
             self.error = self.error or str(error)
         self.connecting = False
         self.app.ui(self.render_status)
 
     def _child_exit(self, code: int) -> None:
         self._drop()
-        self.state = "Not connected"
+        self.state = tr('controller.not_connected_0303e1', 'Not connected')
         if code and sys.platform == "darwin" and code in (-6, 134):
             self.error = BLUETOOTH_REFUSED
         self.app.ui(self.render_status)
@@ -184,16 +181,16 @@ class ControllerView:
     def _reconnect(self) -> None:
         """The link dropped (the board lost power moving to the Switch, or went out of range): the
         service finds it again when it advertises."""
-        if self.state == "Connected":
-            self.board, self.state, self.error = {}, "Board lost: looking for it again...", ""
+        if self.state == tr("controller.connected_229655", "Connected"):
+            self.board, self.state, self.error = {}, tr('controller.board_lost_looking_for_it_again_8278e1', 'Board lost: looking for it again...'), ""
             self.app.ui(self.render_status)
         try:
             self.client.call("connect")
         except (OSError, service.ServiceError):
-            self.state = "Board lost: looking for it again. Is it plugged into the Switch or a USB power source?"
+            self.state = tr('controller.board_lost_looking_for_it_again_is_it_plugged_into_the__43e2fa', 'Board lost: looking for it again. Is it plugged into the Switch or a USB power source?')
             self.app.ui(self.render_status)
             return
-        self.state, self.error = "Connected", ""
+        self.state, self.error = tr('controller.connected_229655', 'Connected'), ""
         self.app.ui(self.render_status)
 
     def _drop(self) -> None:
@@ -208,7 +205,7 @@ class ControllerView:
             except (OSError, service.ServiceError):
                 pass
         self._drop()
-        self.board, self.state = {}, "Not connected"
+        self.board, self.state = {}, tr('controller.not_connected_0303e1', 'Not connected')
         self.render_status()
 
     def _call(self, op: str, **fields) -> dict | None:
@@ -299,7 +296,7 @@ class ControllerView:
             self.path, self.macro = None, None
         rows = [self._row(entry) for entry in self.items]
         self.list.controls = rows or [ft.Container(t.text(
-            '暂无宏。点击 + 新建，或导入他人分享的 .pokemacro 文件。', 12, t.MUTED),
+            tr('controller.no_macros_yet_make_one_with_or_import_a_pokemacro_someo_aeace1', 'No macros yet. Make one with +, or import a .pokemacro someone shared.'), 12, t.MUTED),
             padding=10)]
 
     def _row(self, entry: macros.Entry) -> ft.Control:
@@ -309,7 +306,7 @@ class ControllerView:
             t.text(entry.name, 13, t.TEXT if active else t.SOFT, weight=ft.FontWeight.W_600, expand=True,
                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
         ], spacing=10), padding=ft.Padding(10, 8, 10, 8), border_radius=12,
-            tooltip=translate(entry.error) if entry.error else None, bgcolor=t.SELECTED if active else None,
+            tooltip=entry.error or None, bgcolor=t.SELECTED if active else None,
             on_click=lambda e, p=entry.path: self.open(p))
 
     def open(self, path) -> None:
@@ -317,7 +314,7 @@ class ControllerView:
             self.macro, self.path = macros.load(path), path
             self._say("")
         except (OSError, m.MacroError) as error:
-            self._say(f"无法打开此文件：{translate(str(error))}", t.RED)
+            self._say(tr('controller.this_file_does_not_load_1d6a84', 'This file does not load: {value0}', value0=error), t.RED)
             return
         self.recording = False
         self.refresh_list()
@@ -325,7 +322,7 @@ class ControllerView:
         self.control.update()
 
     def new(self) -> None:
-        macro = m.Macro(name='新建宏', loops=1)
+        macro = m.Macro(name=tr('controller.new_macro_b9a983', 'New macro'), loops=1)
         self.path = macros.save(macro)
         self.macro = macro
         self.refresh_list()
@@ -345,14 +342,14 @@ class ControllerView:
                 try:
                     last = macros.import_file(f.path)
                 except (OSError, UnicodeDecodeError, m.MacroError) as error:
-                    self._say(f"{os.path.basename(f.path)}: {error}", t.RED)
+                    self._say(tr('controller._6a7768', '{value0}: {value1}', value0=os.path.basename(f.path), value1=error), t.RED)
         if last:
             self.open(last)
 
     async def _export(self, e) -> None:
         if self.macro is None:
             return
-        path = await self.app.picker.save_file(dialog_title='导出宏',
+        path = await self.app.picker.save_file(dialog_title=tr('controller.export_macro_d0363d', 'Export macro'),
                                                file_name=f"{self.macro.name}{m.EXTENSION}",
                                                file_type=ft.FilePickerFileType.CUSTOM,
                                                allowed_extensions=[m.EXTENSION[1:]])
@@ -362,7 +359,7 @@ class ControllerView:
         try:
             with open(path, "w", encoding="utf-8") as out:
                 out.write(self.macro.dumps())
-            self._say(f"已导出到 {path}")
+            self._say(tr('controller.exported_to_58eb1e', 'Exported to {value0}', value0=path))
         except OSError as error:
             self._say(str(error), t.RED)
 
@@ -376,11 +373,11 @@ class ControllerView:
             self.control.update()
 
         self.app.page.show_dialog(t.dialog(
-            title=t.text('删除此宏？', 18),
-            content=t.text(f"将从此电脑删除“{self.macro.name}”。如需保留文件，请先导出。",
+            title=t.text(tr('controller.delete_this_macro_647eaf', 'Delete this macro?'), 18),
+            content=t.text(tr('controller.is_deleted_from_this_computer_export_it_first_to_keep_a_d54293', '{value0} is deleted from this computer. Export it first to keep a file.', value0=self.macro.name),
                            13, t.MUTED, width=380),
-            actions=[t.button('取消', lambda e: self.app.page.pop_dialog(), filled=False),
-                     t.button('删除', done, color=t.RED)]))
+            actions=[t.button(tr('controller.cancel_19766e', 'Cancel'), lambda e: self.app.page.pop_dialog(), filled=False),
+                     t.button(tr('controller.delete_e2d0a5', 'Delete'), done, color=t.RED)]))
 
     # Playing
 
@@ -397,7 +394,7 @@ class ControllerView:
         def run():
             reply = self._call("play", macro=self.macro.dumps())
             if reply:
-                self._say('正在开发板上运行。电脑进入睡眠后仍会继续。')
+                self._say(tr('controller.playing_on_the_board_it_keeps_going_if_this_computer_sl_33fc14', 'Playing on the board. It keeps going if this computer sleeps.'))
                 self.board = {**self.board, "playing": True}
                 self.app.ui(self.render_all_update)
         threading.Thread(target=run, daemon=True).start()
@@ -417,32 +414,31 @@ class ControllerView:
         self.render_editor(update=False)
 
     def render_status(self, update: bool = True) -> None:
-        connected = self.client is not None and self.state == "Connected"
-        lost = self.client is not None and self.state.startswith("Board lost")
+        connected = self.client is not None and self.state == tr("controller.connected_229655", "Connected")
+        lost = self.client is not None and not connected and not self.connecting
         board = self.board or {}
         facts = []
         if connected:
             link = board.get("link", "")
-            facts.append(t.chip(f"已通过 {link.split(' ')[1]} 连接开发板" if link.startswith("serial ")
-                                else '已通过蓝牙连接开发板', "check", t.GREEN))
+            facts.append(t.chip(tr('controller.board_connected_on_c9d52b', 'Board connected on {value0}', value0=link.split(' ')[1]) if link.startswith("serial ")
+                                else tr('controller.board_connected_over_bluetooth_dbda11', 'Board connected over Bluetooth'), "check", t.GREEN))
             facts.append(self.where(board))
-        action = (t.button('断开连接', self.disconnect, "close", filled=False) if connected else
-                  t.button('停止搜索', self.disconnect, "close", filled=False) if lost else
-                  t.button('正在搜索…' if self.connecting else '连接', self.connect, "zap",
+        action = (t.button(tr('controller.disconnect_acfc5b', 'Disconnect'), self.disconnect, "close", filled=False) if connected else
+                  t.button(tr('controller.stop_looking_86f929', 'Stop looking'), self.disconnect, "close", filled=False) if lost else
+                  t.button(tr('controller.looking_c1c971', 'Looking...') if self.connecting else tr('controller.connect_1a2303', 'Connect'), self.connect, "zap",
                            disabled=self.connecting))
-        body = [ft.Row([ft.Row(facts or [t.text(translate(self.state), 13, t.MUTED)], spacing=6, wrap=True, expand=True),
+        body = [ft.Row([ft.Row(facts or [t.text(self.state, 13, t.MUTED)], spacing=6, wrap=True, expand=True),
                         action], vertical_alignment=ft.CrossAxisAlignment.CENTER)]
         if self.error:
-            body.append(t.text(translate(self.error), 12, t.RED))
+            body.append(t.text(self.error, 12, t.RED))
         if not connected and not lost:
             body += self.guidance()
         if board.get("playing"):
             body.append(ft.Row([
-                t.badge(f"宏正在运行：第 {board.get('loops_done', 0) + 1} 轮，"
-                        f"步骤 {board.get('index', 0) + 1}／{board.get('count', 0)}", t.BLUE, "play"),
-                t.button('停止', self.stop, "stop", color=t.RED)],
+                t.badge(tr('controller.macro_running_loop_step_of_ad7131', 'Macro running: loop {value0}, step {value1} of {value2}', value0=board.get('loops_done', 0) + 1, value1=board.get('index', 0) + 1, value2=board.get('count', 0)), t.BLUE, "play"),
+                t.button(tr('controller.stop_cae7d5', 'Stop'), self.stop, "stop", color=t.RED)],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN))
-        self.status.controls = [t.card('手柄开发板', ft.Column(body, spacing=10, tight=True))]
+        self.status.controls = [t.card(tr('controller.controller_board_2f732b', 'Controller board'), ft.Column(body, spacing=10, tight=True))]
         self.render_footer()
         if update:
             try:
@@ -455,31 +451,26 @@ class ControllerView:
         """Where the board is plugged in. `mounted` says only that some USB host configured it: this
         computer does too, so being on this computer's USB bus is asked first."""
         if board.get("link", "").startswith("serial "):   # a classic board pairs over Bluetooth Classic
-            return (t.chip('已与 Switch 配对', "check", t.GREEN) if board.get("mounted") else
-                    t.chip('尚未配对：请在 Switch 上打开“手柄 → 更改握法／顺序”', "usb", t.AMBER))
+            return (t.chip(tr('controller.paired_with_the_switch_81e9d4', 'Paired with the Switch'), "check", t.GREEN) if board.get("mounted") else
+                    t.chip(tr('controller.not_paired_on_the_switch_open_controllers_change_grip_o_c8139e', 'Not paired: on the Switch, open Controllers, Change Grip/Order'), "usb", t.AMBER))
         if self.app.controllers:
-            return t.chip('已连接到电脑：请连接到 Switch 以控制游戏', "usb", t.AMBER)
+            return t.chip(tr('controller.plugged_into_this_computer_plug_it_into_the_switch_to_p_4ea75e', 'Plugged into this computer: plug it into the Switch to play'), "usb", t.AMBER)
         if board.get("mounted"):
-            return t.chip('已连接到 Switch', "check", t.GREEN)
-        return t.chip('尚未连接到 Switch', "usb", t.AMBER)
+            return t.chip(tr('controller.plugged_into_the_switch_fb8cf5', 'Plugged into the Switch'), "check", t.GREEN)
+        return t.chip(tr('controller.not_plugged_into_the_switch_de9b47', 'Not plugged into the Switch'), "usb", t.AMBER)
 
     def guidance(self) -> list[ft.Control]:
         """What is plugged in and the next step, while no board is connected."""
         from gui import board
-        to_board = t.secondary_button('打开开发板页', lambda e: self.app.navigate("board"), "cpu")
+        to_board = t.secondary_button(tr('controller.open_the_board_page_2664cd', 'Open the Board page'), lambda e: self.app.navigate("board"), "cpu")
         if self.app.controllers:
-            return [t.text('手柄开发板已连接到电脑。点击“连接”以通过'
-                           '蓝牙连接。控制游戏时请将开发板连接到 Switch 的 USB-C 接口，它会自动重新连接。',
+            return [t.text(tr('controller.a_controller_board_is_plugged_into_this_computer_press__656ca1', "A controller board is plugged into this computer. Press Connect to reach it over Bluetooth. To play, plug it into the Switch's USB-C port; it reconnects on its own."),
                            12, t.MUTED)]
         radios = [d for d, ident in self.app.identities.items() if isinstance(ident, board.Identity)]
         if radios:
-            return [t.text('已连接的开发板正在运行交换用的无线固件。若要作为手柄使用，'
-                           '请在“开发板”页安装手柄固件。',
+            return [t.text(tr('controller.the_board_plugged_in_runs_the_wireless_firmware_for_tra_383729', 'The board plugged in runs the wireless firmware, for trades. To use it as a controller, install the Controller firmware on the Board page.'),
                            12, t.MUTED), ft.Row([to_board])]
-        return [t.text('未找到手柄开发板。安装手柄固件的 ESP32-S3 连接到 '
-                       'Switch 的 USB-C 接口，电脑通过蓝牙与其连接；经典 ESP32 则保持'
-                       '连接到电脑，并作为 Pro 手柄与 Switch 配对。请在'
-                       '“开发板”页安装固件。', 12, t.MUTED), ft.Row([to_board])]
+        return [t.text(tr('controller.no_controller_board_found_an_esp32_s3_with_the_controll_86ae6e', "No controller board found. An ESP32-S3 with the controller firmware plugs into the Switch's USB-C port and this computer reaches it over Bluetooth; a classic ESP32 stays plugged into this computer and pairs with the Switch as a Pro Controller. Install it on the Board page."), 12, t.MUTED), ft.Row([to_board])]
 
     def _button(self, key: str, label: str, width=44, height=44, round_=True, icon: str = "") -> ft.Control:
         hint = HINT.get(key, "")
@@ -507,18 +498,18 @@ class ControllerView:
         gap = ft.Container(width=40, height=40)
         k = (lambda d: f"{prefix}{d}") if prefix else (lambda d: d)
         return ft.Column([
-            ft.Row([gap, self._arrow(k("UP"), "arrow-up"), gap], spacing=4, tight=True),
-            ft.Row([self._arrow(k("LEFT"), "arrow-left"), centre or gap, self._arrow(k("RIGHT"), "arrow-right")],
+            ft.Row([gap, self._arrow(k('UP'), "arrow-up"), gap], spacing=4, tight=True),
+            ft.Row([self._arrow(k('LEFT'), "arrow-left"), centre or gap, self._arrow(k('RIGHT'), "arrow-right")],
                    spacing=4, tight=True),
-            ft.Row([gap, self._arrow(k("DOWN"), "arrow-down"), gap], spacing=4, tight=True),
+            ft.Row([gap, self._arrow(k('DOWN'), "arrow-down"), gap], spacing=4, tight=True),
         ], spacing=4, tight=True)
 
     def render_pad(self) -> None:
         b = self._button
         shoulders = ft.Row([
-            ft.Row([b("ZL", "ZL", 64, 34, False), b("L", "L", 64, 34, False)], spacing=6),
-            ft.Row([b("MINUS", "-", 34, 34), b("PLUS", "+", 34, 34)], spacing=60),
-            ft.Row([b("R", "R", 64, 34, False), b("ZR", "ZR", 64, 34, False)], spacing=6),
+            ft.Row([b('ZL', 'ZL', 64, 34, False), b("L", "L", 64, 34, False)], spacing=6),
+            ft.Row([b('MINUS', "-", 34, 34), b('PLUS', "+", 34, 34)], spacing=60),
+            ft.Row([b("R", "R", 64, 34, False), b('ZR', 'ZR', 64, 34, False)], spacing=6),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=560)
         face = ft.Column([
             ft.Row([b("X", "X")], alignment=ft.MainAxisAlignment.CENTER, width=140),
@@ -526,35 +517,34 @@ class ControllerView:
             ft.Row([b("B", "B")], alignment=ft.MainAxisAlignment.CENTER, width=140),
         ], spacing=0, tight=True)
         middle = ft.Row([
-            ft.Column([t.text('左摇杆', 11, t.MUTED), self._cross("LS_", b("LSTICK", "L3", 40, 40))],
+            ft.Column([t.text(tr('controller.left_stick_674e59', 'Left stick'), 11, t.MUTED), self._cross("LS_", b('LSTICK', "L3", 40, 40))],
                       spacing=6, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
             face,
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=560,
             vertical_alignment=ft.CrossAxisAlignment.CENTER)
         lower = ft.Row([
-            ft.Column([t.text('方向键', 11, t.MUTED), self._cross("", None)], spacing=6,
+            ft.Column([t.text(tr('controller.d_pad_126a91', 'D-pad'), 11, t.MUTED), self._cross("", None)], spacing=6,
                       horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
-            ft.Row([b("CAPTURE", '截图', 40, 40, False, "camera"), b("HOME", "HOME", 40, 40, True, "home")],
+            ft.Row([b('CAPTURE', tr('controller.capture_1900b4', 'Capture'), 40, 40, False, "camera"), b('HOME', 'HOME', 40, 40, True, "home")],
                    spacing=24),
-            ft.Column([t.text('右摇杆', 11, t.MUTED), self._cross("RS_", b("RSTICK", "R3", 40, 40))],
+            ft.Column([t.text(tr('controller.right_stick_20fcdb', 'Right stick'), 11, t.MUTED), self._cross("RS_", b('RSTICK', "R3", 40, 40))],
                       spacing=6, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, width=560,
             vertical_alignment=ft.CrossAxisAlignment.CENTER)
         options = ft.Row([
-            ft.Row([t.switch(self.keyboard, self._keyboard), t.text('键盘控制', 13, t.SOFT)], spacing=6, tight=True,
-                   tooltip='方向键控制十字键，X → A，Z → B，S → X，A → Y，Q → L，W → R，1 → ZL，2 → ZR，Enter → +，'
-                           'Backspace → -，H → HOME，C → 截图'),
-            ft.Row([t.switch(self.recording, self._recording), t.text('录制到宏', 13, t.SOFT)],
+            ft.Row([t.switch(self.keyboard, self._keyboard), t.text(tr('controller.keyboard_231681', 'Keyboard'), 13, t.SOFT)], spacing=6, tight=True,
+                   tooltip=tr('controller.arrows_for_the_d_pad_x_a_z_b_s_x_a_y_q_l_w_r_1_zl_2_zr__c8b3b3', 'Arrows for the D-pad, X A, Z B, S X, A Y, Q L, W R, 1 ZL, 2 ZR, Enter +, Backspace -, H HOME, C Capture')),
+            ft.Row([t.switch(self.recording, self._recording), t.text(tr('controller.record_into_the_macro_0c10a9', 'Record into the macro'), 13, t.SOFT)],
                    spacing=6, tight=True,
-                   tooltip='将每次按键、按住时长及下次按键前的间隔记录为步骤'),
+                   tooltip=tr('controller.each_press_its_length_and_the_pause_before_the_next_one_100b06', 'Each press, its length and the pause before the next one become steps')),
         ], spacing=24)
-        self.pad.controls = [t.card('手柄', ft.Column([
+        self.pad.controls = [t.card(tr('controller.controller_31df66', 'Controller'), ft.Column([
             ft.Container(ft.Column([shoulders, middle, lower], spacing=22, tight=True,
                                    horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                          padding=ft.Padding(0, 8, 0, 8), alignment=ft.Alignment.CENTER),
             options,
         ], spacing=16, tight=True, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            '按住屏幕上的按键，主机上的对应按键也会保持按下。')]
+            tr('controller.hold_a_button_to_hold_it_on_the_console_501072', 'Hold a button to hold it on the console.'))]
 
     def _keyboard(self, e) -> None:
         self.keyboard = e.control.value
@@ -574,20 +564,20 @@ class ControllerView:
     def render_editor(self, update: bool = True) -> None:
         mac = self.macro
         if mac is None:
-            self.editor.controls = [t.text('请在左侧选择宏，或点击 + 新建。', 13, t.MUTED)]
+            self.editor.controls = [t.text(tr('controller.pick_a_macro_on_the_left_or_make_a_new_one_with_3cf0ac', 'Pick a macro on the left, or make a new one with +.'), 13, t.MUTED)]
         else:
             self.editor.controls = [
-                self._text_field('名称', mac.name, lambda v: setattr(mac, "name", v or '宏')),
-                self._text_field('说明', mac.description, lambda v: setattr(mac, "description", v),
+                self._text_field(tr('controller.name_dcd1d5', 'Name'), mac.name, lambda v: setattr(mac, "name", v or "Macro")),
+                self._text_field(tr('controller.description_526e00', 'Description'), mac.description, lambda v: setattr(mac, "description", v),
                                  multiline=True),
-                ft.Row([self._number('按住时长（毫秒）', mac.press_ms, lambda v: setattr(mac, "press_ms", max(1, v)),
-                                     '步骤未单独指定时，按键保持按下的时长'),
-                        self._number('操作后间隔（毫秒）', mac.gap_ms, lambda v: setattr(mac, "gap_ms", v),
-                                     '步骤未单独指定时，每个步骤结束后的间隔')], spacing=10),
-                self._number('循环次数（0 = 直到手动停止）', mac.loops,
+                ft.Row([self._number(tr('controller.press_ms_1f75f4', 'Press (ms)'), mac.press_ms, lambda v: setattr(mac, "press_ms", max(1, v)),
+                                     tr('controller.how_long_a_step_holds_its_buttons_unless_it_says_otherw_f1c099', 'How long a step holds its buttons unless it says otherwise')),
+                        self._number(tr('controller.pause_after_ms_212f61', 'Pause after (ms)'), mac.gap_ms, lambda v: setattr(mac, "gap_ms", v),
+                                     tr('controller.the_pause_after_each_step_unless_it_says_otherwise_c03c51', 'The pause after each step unless it says otherwise'))], spacing=10),
+                self._number(tr('controller.repeat_the_loop_0_until_stopped_0676a3', 'Repeat the loop (0 = until stopped)'), mac.loops,
                              lambda v: setattr(mac, "loops", min(v, 1_000_000))),
-                self._section('运行一次', "setup", mac.setup),
-                self._section('循环', "loop", mac.loop),
+                self._section(tr('controller.run_once_5f041f', 'Run once'), "setup", mac.setup),
+                self._section(tr('controller.loop_f2f6a0', 'Loop'), "loop", mac.loop),
             ]
         self.render_footer()
         if update:
@@ -604,7 +594,7 @@ class ControllerView:
         def changed(e):
             setter(e.control.value)
             self.save()
-            if label == '名称':
+            if label == "Name":
                 self.refresh_list()
                 self.list.update()
         return t.labeled_control(label, t.field(value=value, multiline=multiline, min_lines=2 if multiline else None,
@@ -620,8 +610,8 @@ class ControllerView:
                                                 on_submit=changed, tooltip=tip or None), expand=True)
 
     def _section(self, title: str, target: str, steps: list) -> ft.Control:
-        rec = t.chip('正在录制到此处', "circle-info", t.RED) if self.recording and self.target == target else \
-            ft.Container(t.text('录制到此处', 11, t.FAINT), on_click=lambda e: self._target(target),
+        rec = t.chip(tr('controller.recording_here_cce87d', 'Recording here'), "circle-info", t.RED) if self.recording and self.target == target else \
+            ft.Container(t.text(tr('controller.record_here_ea3c50', 'Record here'), 11, t.FAINT), on_click=lambda e: self._target(target),
                          visible=self.recording)
         return t.section(title, ft.Column([
             *self._steps(steps, 0),
@@ -638,14 +628,14 @@ class ControllerView:
             icon = "clock" if "wait" in step else "repeat" if "repeat" in step else "gamepad"
             label = describe(step, self.macro)
             if step.get("note"):
-                label += f"  ·  {step['note']}"
+                label += tr('controller._fc0bd4', '  ·  {value0}', value0=step['note'])
             rows.append(ft.Container(ft.Row([
                 t.pixel_icon(icon, size=12, color=t.MUTED),
                 t.text(label, 12, t.SOFT, expand=True, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
-                t.icon_button("arrow-up", lambda e, s=steps, n=i: self._move(s, n, -1), '上移',
+                t.icon_button("arrow-up", lambda e, s=steps, n=i: self._move(s, n, -1), tr('controller.move_up_c66feb', 'Move up'),
                               disabled=i == 0),
-                t.icon_button("edit", lambda e, s=steps, n=i: self._edit(s, n), '编辑'),
-                t.icon_button("trash", lambda e, s=steps, n=i: self._remove_step(s, n), '移除'),
+                t.icon_button("edit", lambda e, s=steps, n=i: self._edit(s, n), tr('controller.edit_464c4f', 'Edit')),
+                t.icon_button("trash", lambda e, s=steps, n=i: self._remove_step(s, n), tr('controller.remove_c3812f', 'Remove')),
             ], spacing=4), padding=ft.Padding(8 + 14 * depth, 2, 0, 2), border_radius=8, bgcolor=t.CARD))
             if "repeat" in step:
                 inner = step.setdefault("steps", [])
@@ -662,9 +652,9 @@ class ControllerView:
             self.render_editor()
             if kind != "repeat":
                 self._edit(steps, len(steps) - 1)
-        return ft.Row([t.link_button('+ 按键', lambda e: add("press")),
-                       t.link_button('+ 等待', lambda e: add("wait")),
-                       t.link_button('+ 重复', lambda e: add("repeat"))], spacing=0)
+        return ft.Row([t.link_button(tr('controller.press_2e0708', '+ Press'), lambda e: add("press")),
+                       t.link_button(tr('controller.wait_1d24d7', '+ Wait'), lambda e: add("wait")),
+                       t.link_button(tr('controller.repeat_402130', '+ Repeat'), lambda e: add("repeat"))], spacing=0)
 
     def _move(self, steps, n, delta) -> None:
         steps[n + delta], steps[n] = steps[n], steps[n + delta]
@@ -683,13 +673,13 @@ class ControllerView:
 
         if "wait" in step:
             wait = t.field(value=str(step["wait"]), digits=True, limit=7)
-            controls.append(t.labeled_control('等待（毫秒）', wait))
+            controls.append(t.labeled_control(tr('controller.wait_ms_a9c19b', 'Wait (ms)'), wait))
 
             def collect():
                 return {"wait": int(wait.value or 0), **({"note": note.value} if note.value else {})}
         elif "repeat" in step:
             count = t.field(value=str(step["repeat"]), digits=True, limit=5)
-            controls.append(t.labeled_control('次数', count))
+            controls.append(t.labeled_control(tr('controller.times_0c0fd3', 'Times'), count))
 
             def collect():
                 return {"repeat": max(1, int(count.value or 1)), "steps": step.get("steps", []),
@@ -713,25 +703,25 @@ class ControllerView:
 
             render_chips()
             sticks = {}
-            for side, label in (("left", '左摇杆'), ("right", '右摇杆')):
+            for side, label in (("left", tr('controller.left_stick_674e59', 'Left stick')), ("right", tr('controller.right_stick_20fcdb', 'Right stick'))):
                 current = direction_of(step[side])[0] if side in step else ""
-                sticks[side] = t.dropdown([(d[0] or "CENTRE", d[1]) for d in STICK_DIRECTIONS],
-                                          current or "CENTRE")
+                sticks[side] = t.dropdown([(d[0] or 'CENTRE', d[1]) for d in STICK_DIRECTIONS],
+                                          current or 'CENTRE')
                 controls_side = t.labeled_control(label, sticks[side], expand=True)
                 sticks[side + "_row"] = controls_side
             hold = t.field(value=str(step.get("ms", "")), digits=True, limit=7,
-                           hint=f"{self.macro.press_ms}（宏的默认值）")
+                           hint=tr('controller.the_macro_s_f555b8', "{value0}, the macro's", value0=self.macro.press_ms))
             after = t.field(value=str(step.get("after", "")), digits=True, limit=7,
-                            hint=f"{self.macro.gap_ms}（宏的默认值）")
-            controls += [t.text('同时按下的按键', 11, t.MUTED), chips,
+                            hint=tr('controller.the_macro_s_f555b8', "{value0}, the macro's", value0=self.macro.gap_ms))
+            controls += [t.text(tr('controller.buttons_held_together_37a294', 'Buttons held together'), 11, t.MUTED), chips,
                          ft.Row([sticks["left_row"], sticks["right_row"]], spacing=10, width=420),
-                         ft.Row([t.labeled_control('按住时长（毫秒）', hold, expand=True),
-                                 t.labeled_control('操作后间隔（毫秒）', after, expand=True)], spacing=10, width=420)]
+                         ft.Row([t.labeled_control(tr('controller.hold_ms_16f67e', 'Hold (ms)'), hold, expand=True),
+                                 t.labeled_control(tr('controller.pause_after_ms_212f61', 'Pause after (ms)'), after, expand=True)], spacing=10, width=420)]
 
             def collect():
                 out = {"press": sorted(chosen, key=m.KEYS.index)}
                 for side in ("left", "right"):
-                    d = next(d for d in STICK_DIRECTIONS if (d[0] or "CENTRE") == sticks[side].value)
+                    d = next(d for d in STICK_DIRECTIONS if (d[0] or 'CENTRE') == sticks[side].value)
                     if d[0]:
                         same = side in step and direction_of(step[side])[0] == d[0]
                         out[side] = step[side] if same else list(d[2])
@@ -743,15 +733,15 @@ class ControllerView:
                     out["note"] = note.value
                 return {k: v for k, v in out.items() if k != "note" or v}
 
-        note = t.field(value=step.get("note", ""), hint='此步骤的用途')
-        controls.append(t.labeled_control('备注（可选）', note))
+        note = t.field(value=step.get("note", ""), hint=tr('controller.what_this_step_is_for_0d1709', 'What this step is for'))
+        controls.append(t.labeled_control(tr('controller.note_optional_f9b73e', 'Note (optional)'), note))
 
         def done(e):
             new = collect()
             try:
                 m.check_steps([new])
             except m.MacroError as error:
-                error_text.value = translate(str(error))
+                error_text.value = str(error)
                 error_text.update()
                 return
             steps[n] = new
@@ -761,32 +751,31 @@ class ControllerView:
 
         error_text = t.text("", 12, t.RED)
         page.show_dialog(t.dialog(
-            title=t.text('编辑步骤', 18),
+            title=t.text(tr('controller.edit_step_c5279a', 'Edit step'), 18),
             content=ft.Column([*controls, error_text], spacing=10, tight=True, width=420),
-            actions=[t.button('取消', lambda e: page.pop_dialog(), filled=False), t.button('保存', done)]))
+            actions=[t.button(tr('controller.cancel_19766e', 'Cancel'), lambda e: page.pop_dialog(), filled=False), t.button(tr('controller.save_1509f5', 'Save'), done)]))
 
     def _summary(self) -> ft.Control:
         try:
             p = m.compile_macro(self.macro)
         except m.MacroError as error:
-            return t.text(translate(str(error)), 12, t.AMBER)
-        loops = '直到手动停止' if p.loops == 0 else f"x{p.loops}"
-        return t.text(f"开发板步骤 {len(p.entries)}／{m.MAX_ENTRIES}  ·  运行一次 {p.setup_ms / 1000:g} 秒  ·  "
-                      f"循环 {p.loop_ms / 1000:g} 秒 {loops}", 12, t.MUTED)
+            return t.text(str(error), 12, t.AMBER)
+        loops = tr('controller.until_stopped_ca2053', 'until stopped') if p.loops == 0 else f"x{p.loops}"
+        return t.text(tr('controller.of_board_steps_run_once_s_loop_s_3d534d', '{value0} of {value1} board steps  ·  run once {value2:g} s  ·  loop {value3:g} s {value4}', value0=len(p.entries), value1=m.MAX_ENTRIES, value2=p.setup_ms / 1000, value3=p.loop_ms / 1000, value4=loops), 12, t.MUTED)
 
     def _actions(self) -> ft.Control:
         connected = self.client is not None
         playing = bool(self.board.get("playing"))
-        main = (t.button('停止', self.stop, "stop", color=t.RED) if playing else
-                t.button('在开发板上运行', self.play, "play", disabled=not connected,
-                         tooltip=None if connected else '请先连接开发板'))
+        main = (t.button(tr('controller.stop_cae7d5', 'Stop'), self.stop, "stop", color=t.RED) if playing else
+                t.button(tr('controller.play_on_the_board_56ea82', 'Play on the board'), self.play, "play", disabled=not connected,
+                         tooltip=None if connected else tr('controller.connect_the_board_first_feea04', 'Connect the board first')))
         return ft.Row([main, ft.Row([
-            t.icon_button("download", self._export, '导出为 .pokemacro 文件以分享'),
-            t.icon_button("trash", lambda e: self._delete(), '删除此宏'),
+            t.icon_button("download", self._export, tr('controller.export_as_a_pokemacro_file_to_share_c4b552', 'Export as a .pokemacro file to share')),
+            t.icon_button("trash", lambda e: self._delete(), tr('controller.delete_this_macro_ef52c4', 'Delete this macro')),
         ], spacing=2)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
     def _say(self, text: str, color: str = t.MUTED) -> None:
-        self.note.value, self.note.color = translate(text), color
+        self.note.value, self.note.color = text, color
         try:
             self.note.update()
         except RuntimeError:
