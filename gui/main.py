@@ -140,20 +140,19 @@ def main(page: ft.Page) -> None:
 
     app.navigate = navigate
     page.on_keyboard_event = page_key     # set once, before a code box takes the focus
-    side = ft.Container(ft.Column([
+    side = t.panel(ft.Column([
         ft.Container(ft.Image(src="logo.svg", width=28, height=32), padding=ft.Padding(0, 16, 0, 18)),
         rail,
         ft.Container(expand=True),
         bottom,
         ft.Container(height=8),
-    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0), width=72,
-        margin=ft.Margin(8, 0, 0, 0))
-    workspace = t.backdrop(content)
-    workspace.border_radius = ft.BorderRadius(16, 16, 0, 0)
-    workspace.clip_behavior = ft.ClipBehavior.ANTI_ALIAS
-    body = ft.Row([side, workspace], spacing=8, expand=True,
+    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0), width=72)
+    body = ft.Row([side, content], spacing=t.GAP, expand=True,
                   vertical_alignment=ft.CrossAxisAlignment.STRETCH)
-    page.add(ft.Column([window_header(page), body], spacing=0, expand=True))
+    # The header sits on the checkerboard so the grid runs under the hidden title bar too.
+    window = t.backdrop(ft.Column([window_header(page), body], spacing=0, expand=True))
+    window.padding = ft.Padding(t.GAP, 0, t.GAP, t.GAP)
+    page.add(window)
     navigate("games")
     if not page.web:
         page.run_task(page.window.center)
@@ -394,7 +393,7 @@ def window_header(page: ft.Page) -> ft.Control:
             ft.IconButton(ft.Icons.CROP_SQUARE, tooltip=tr('main.maximize_or_restore_9e47a6', 'Maximize or restore'), on_click=maximize, icon_size=14),
             ft.IconButton(ft.Icons.CLOSE, tooltip=tr('main.close_7d9eb7', 'Close'), on_click=close, icon_size=16),
         ])
-    return ft.Container(ft.Row(controls, spacing=0), height=40, bgcolor=t.BG)
+    return ft.Container(ft.Row(controls, spacing=0), height=40)
 
 
 def run() -> None:

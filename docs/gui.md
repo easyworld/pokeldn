@@ -22,8 +22,8 @@ conversion.
 
 ## First launch
 
-The desktop header and navigation rail share a solid background. The checkerboard is confined
-to the workspace. The header has no visible app title and supports dragging and double-clicking
+The checkerboard covers the whole window, the transparent header included; the navigation rail
+floats on it as a glass panel like the others. The header has no visible app title and supports dragging and double-clicking
 to maximize or restore. macOS retains its native window buttons; Windows and Linux use buttons
 in the app header. The integrated header has been visually checked on macOS; Windows and Linux
 window-manager behavior remains unverified.
