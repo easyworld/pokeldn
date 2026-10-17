@@ -27,6 +27,7 @@ static uint16_t s_tx_handle;
 static atomic_int s_conn = -1;
 static atomic_bool s_subscribed;
 static atomic_uint s_mtu = 23;
+static atomic_uint s_interval_us;   /* the connection interval the central granted; STATUS ble_itvl_us */
 
 static int rx_access(uint16_t conn, uint16_t attr, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
@@ -61,17 +62,21 @@ static const struct ble_gatt_svc_def services[] = {
 
 static void advertise(void);
 
+/* Apple's accessory rules allow min = max = 15 ms as the one exception to max >= min + 15 ms;
+   every link-loop message waits for a connection event. */
+static void ask_fast_interval(uint16_t conn)
+{
+    struct ble_gap_upd_params p = {.itvl_min = 12, .itvl_max = 12, .latency = 0, .supervision_timeout = 400};
+    ble_gap_update_params(conn, &p);
+}
+
 static int gap_event(struct ble_gap_event *event, void *arg)
 {
     switch (event->type) {
     case BLE_GAP_EVENT_CONNECT:
         if (event->connect.status != 0) { advertise(); break; }
         atomic_store(&s_conn, event->connect.conn_handle);
-        /* Apple's accessory rules allow min = max = 15 ms as the one exception to max >= min + 15 ms;
-           every link-loop message waits for a connection event. */
-        struct ble_gap_upd_params p = {.itvl_min = 12, .itvl_max = 12, .latency = 0,
-                                       .supervision_timeout = 400};
-        ble_gap_update_params(event->connect.conn_handle, &p);
+        ask_fast_interval(event->connect.conn_handle);
         /* 251-byte link-layer packets instead of 27 (data length extension). */
         ble_gap_set_data_len(event->connect.conn_handle, 251, 2120);
         ble_gap_set_prefered_le_phy(event->connect.conn_handle, BLE_GAP_LE_PHY_2M_MASK,
@@ -85,9 +90,18 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         advertise();
         break;
     case BLE_GAP_EVENT_SUBSCRIBE:
-        if (event->subscribe.attr_handle == s_tx_handle)
+        if (event->subscribe.attr_handle == s_tx_handle) {
             atomic_store(&s_subscribed, event->subscribe.cur_notify != 0);
+            /* A request at connect is refused while the central still discovers services: ask again. */
+            if (event->subscribe.cur_notify) ask_fast_interval(event->subscribe.conn_handle);
+        }
         break;
+    case BLE_GAP_EVENT_CONN_UPDATE: {
+        struct ble_gap_conn_desc desc;
+        if (ble_gap_conn_find(event->conn_update.conn_handle, &desc) == 0)
+            atomic_store(&s_interval_us, desc.conn_itvl * 1250u);
+        break;
+    }
     case BLE_GAP_EVENT_MTU:
         atomic_store(&s_mtu, event->mtu.value);
         break;
@@ -142,6 +156,8 @@ void ble_start(void)
 }
 
 bool ble_linked(void) { return atomic_load(&s_subscribed); }
+
+uint32_t ble_interval_us(void) { return atomic_load(&s_interval_us); }
 
 int ble_read(uint8_t *out, size_t size, uint32_t ticks)
 {

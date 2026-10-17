@@ -11,7 +11,7 @@ FORMAT = "pokeldn.gift"
 VERSION = 2
 EXTENSION = "pokegift"
 MAX_FILE_SIZE = 256 * 1024
-ADAPTERS = {"frlg": "pokeldn.frlg.gift.file", "swsh": "pokeldn.swsh.gift_file"}
+ADAPTERS = {"frlg": "pokeldn.frlg.gift.file", "rse": "pokeldn.rse.gift_file", "swsh": "pokeldn.swsh.gift_file"}
 NATIVE = {".wc3": ("frlg", "to_wc3"), ".wc8": ("swsh", "record")}   # suffix -> game, writer
 
 

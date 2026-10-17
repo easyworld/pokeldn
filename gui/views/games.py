@@ -289,7 +289,7 @@ class GamesView:
         for game in self.catalog:
             open_ = game is self.game
             rows.append(ft.Container(ft.Row([
-                ft.Container(ft.Image(src=Path(game.icon).read_bytes() if game.icon else f"games/{game.key}.png", width=36, height=36,
+                ft.Container(ft.Image(src=t.image_src(Path(game.icon).read_bytes()) if game.icon else f"games/{game.key}.png", width=36, height=36,
                                       fit=ft.BoxFit.CONTAIN, filter_quality=ft.FilterQuality.NONE,
                                       semantics_label=game.name),
                              width=40, height=36, alignment=ft.Alignment.CENTER),
@@ -676,7 +676,8 @@ class SessionPanel:
         self.command_text = command_block.text
         self.command_box = command_block.control
         self.command_box.visible = False
-        self.log = Log(app.page, tr('games.the_session_s_output_appears_here_07c340', "The session's output appears here."))
+        self.log = Log(app.page, tr('games.the_session_s_output_appears_here_07c340', "The session's output appears here."),
+                       private=lambda: [app.settings.ot] if app.settings.private_logs else None)
         tools = ft.Row([
             t.icon_button("code", self._toggle_command, tr('games.show_the_command_324bde', 'Show the command')),
             t.icon_button("copy", self._copy_log, tr('games.copy_the_log_e01862', 'Copy the log')),

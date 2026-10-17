@@ -77,12 +77,12 @@ class Sprite:
 
     def _image(self, data: bytes) -> ft.Control:
         if self.size >= SIZE:
-            return ft.Image(src=data, width=self.size, height=self.size, fit=ft.BoxFit.CONTAIN,
+            return ft.Image(src=t.image_src(data), width=self.size, height=self.size, fit=ft.BoxFit.CONTAIN,
                             filter_quality=ft.FilterQuality.NONE, anti_alias=False, gapless_playback=True,
                             error_content=self._placeholder())
         x0, y0, x1, y1 = bounds(data) or (0, 0, SIZE, SIZE)
         scale = (self.size - 2 * PAD) / max(x1 - x0, y1 - y0)
-        image = ft.Image(src=data, width=SIZE * scale, height=SIZE * scale, fit=ft.BoxFit.FILL,
+        image = ft.Image(src=t.image_src(data), width=SIZE * scale, height=SIZE * scale, fit=ft.BoxFit.FILL,
                          left=round(self.size / 2 - (x0 + x1) / 2 * scale),
                          top=round(self.size / 2 - (y0 + y1) / 2 * scale),
                          filter_quality=ft.FilterQuality.MEDIUM,

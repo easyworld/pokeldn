@@ -17,6 +17,7 @@ USB 串行上的 ESP32 板是无线收发设备。运行`firmware/esp32/`，承�
 | ESP32-S3 |原生 USB 串行/JTAG | `pokeldn-radio-s3.bin` |
 | ESP32-C3 |原生 USB 串行/JTAG | `pokeldn-radio-c3.bin` |
 | ESP32-C6 |原生 USB 串行/JTAG | `pokeldn-radio-c6.bin` |
+| 经典 ESP32、ESP32-C6 | 蓝牙低功耗（iOS 应用），以及上述 USB 连接 | `pokeldn-radio-ble.bin`、`pokeldn-radio-ble-c6.bin` |
 
 所有目标均使用 2.4 GHz。不支持 ESP32-S2。 Seeed Studio XIAO ESP32C3 和 XIAO ESP32S3 没有板载天线，需要连接随附的外部天线；较大的 S3 板（例如 N8R2 和 N16R8）带有板载天线。具有独立 UART 和本机 USB 插槽的 S3、C3 或 C6 板需要本机插槽进行无线收发设备通信。 USB 串行/JTAG 使用 GPIO19 (D-) 和 GPIO20 (D+)，如 [Espressif 的 USB 指南](https://docs.espressif.com/projects/esp-idf/en/v5.2/esp32s3/api-guides/usb-serial-jtag-console.html) 中所述。在 C3 上，本机 USB 使用 GPIO18 (D-) 和 GPIO19 (D+)，如 [Espressif 的 C3 USB 指南](https://docs.espressif.com/projects/esp-idf/en/latest/esp32c3/api-guides/usb-serial-jtag-console.html) 中所述。 USB标识符`303a:1001`被多个芯片共享；刷机用esptool检测芯片。通过其 UART 套接字（DevKitC 上的 WCH CH343 桥）刷新 S3 成功，然后固件在该套接字上永远不会应答。当没有固件通过 USB 串行桥接应答时，桌面应用程序会从 ROM 引导加载程序（esptool `detect_chip`，然后硬重置）读取芯片类型，并将在那里找到的 S3、C3 或 C6 命名为插入了错误的插槽。
 
@@ -462,7 +463,7 @@ ESP-IDF v6.1（标签 `v6.1`，提交 `fff9895c82d744c7237be8847347bdd1b07c6643`
         -D SDKCONFIG=../../scratchpad/esp/build-ble/sdkconfig \
         -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.ble" build
 
-开发板广播名称为 `POKELDN-RADIO`，服务为 `7a1e0101-5d2c-4c3e-9f4b-504f4b454c44`。主机将 COBS 字节流写入 `...0102`（无需响应写入），开发板在 `...0103` 上发送通知。中央设备订阅 `...0103` 时，wire 层改在该连接上读写，数据线不再传输；取消订阅后恢复数据线连接。帧格式、CRC 和 CREDIT 不变。开发板请求 15 毫秒连接间隔、2M PHY 和 247 字节 MTU。任意启动器可通过 `POKELDN_RADIO=esp32:ble`（或 `esp32:ble:NAME`）打开此连接（`pokeldn/ldn/esp32_ble.py`，bleak）。
+开发板广播名称为 `POKELDN-RADIO`，服务为 `7a1e0101-5d2c-4c3e-9f4b-504f4b454c44`。主机将 COBS 字节流写入 `...0102`（无需响应写入），开发板在 `...0103` 上发送通知。中央设备订阅 `...0103` 时，wire 层改在该连接上读写，数据线不再传输；取消订阅后恢复数据线连接。帧格式、CRC 和 CREDIT 不变。开发板请求 15 毫秒连接间隔、2M PHY 和 247 字节 MTU。HELLO 文本以 `link=ble` 结尾，“开发板”页据此显示为蓝牙无线固件。任意启动器可通过 `POKELDN_RADIO=esp32:ble`（或 `esp32:ble:NAME`）打开此连接（`pokeldn/ldn/esp32_ble.py`，bleak）。
 
 经典 ESP32 的双模控制器仅留下 32 KB 空闲堆，低于 wire 层的 64 KB 下限，因此 `wire_send` 拒绝全部消息，只有绕过下限的 CREDIT 能到达主机。`sdkconfig.defaults.ble` 改用仅 BLE 的控制器，并将静态 Wi-Fi RX 缓冲区从 25 个减至 10 个；`ble.c` 释放经典蓝牙内存，将接收缓冲区设为 10 KB（FLOW_WINDOW 加一帧）。最后一步前有 60 KB 空闲堆，完成后仍足够。从 Mac 实测，连接并完成 HELLO 需 1.3 至 1.7 秒；连续 200 次 HELLO 的往返为 63 毫秒，约两个连接间隔。
 
@@ -472,7 +473,9 @@ ESP-IDF v6.1（标签 `v6.1`，提交 `fff9895c82d744c7237be8847347bdd1b07c6643`
 
 经 BLE 加入《火红》未能完成 RFU 握手，游戏机显示 2318-0013。链路层数据包为 27 字节时，开发板每秒听到约 217 帧，主机仅收到 6522 帧中的 757 帧。数据长度扩展（251 字节包）将基准速率由 14.1 提高至 28.1 KB/s；下一次加入运行收到 796 条 RX_ETH 中的 776 条，但主机每秒仍只发送 5 个 T 槽位，而游戏机为 30 个，24 帧窗口几乎满载；开发板因堆下限拒绝 581323 条消息（`heap_min=30296`）。经典 ESP32 为蓝牙 4.2 芯片，不支持 2M PHY。
 
-在 XIAO ESP32C6（蓝牙 5）上，相同构建实测为 33.6 KB/s、HELLO 往返 62 毫秒；从 Mac 经 BLE 加入的《火红》交换完成，加入方与游戏机均保持每秒 18 个 T 槽位。玩家反馈仍慢于数据线。C6 的 BLE 镜像距离 1 MB 应用分区上限仅剩 13 KB。
+在 XIAO ESP32C6（蓝牙 5）上，相同构建实测为 33.6 KB/s、HELLO 往返 62 毫秒；从 Mac 经 BLE 加入的《火红》交换完成，加入方与游戏机均保持每秒 18 个 T 槽位。玩家反馈仍慢于数据线。C6 的 BLE 镜像距离 1 MB 应用分区上限仅剩 13 KB。开发板只广播名称：iOS 应用不按服务过滤扫描，而是匹配 `POKELDN-RADIO`。
+
+XIAO ESP32C6 若仅在建立连接时请求 15 毫秒间隔，实际会以 30 毫秒运行：iPhone 13 Pro 的每次 HELLO 为 61.5 毫秒，火红房间运行缓慢。中央设备订阅后再请求一次，就能获得 15 毫秒间隔（STATUS 中为 `ble_itvl_us=15000`，每次 HELLO 为 32.1 毫秒）。建立连接时发送请求，中央设备仍在发现服务。
 
 macOS 上，若负责进程所属的应用没有蓝牙授权，bleak 会以 SIGABRT 终止；通过 `open -n -a Terminal FILE.command` 启动的脚本使用 Terminal 的授权。
 

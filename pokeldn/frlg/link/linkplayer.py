@@ -9,6 +9,9 @@ from pokeldn.frlg.text import charmap, easychat
 GAMEFREAK_MAGIC = b"GameFreak inc.\x00\x00"  # 16 bytes
 assert len(GAMEFREAK_MAGIC) == 16
 
+VERSION_SAPPHIRE = 0x4001                        # gGameVersion(1) + 0x4000 [pokeemerald link.c:331]
+VERSION_RUBY = 0x4002
+VERSION_EMERALD = 0x4003
 VERSION_FIRE_RED = 0x4004                        # gGameVersion(4) + 0x4000
 VERSION_LEAF_GREEN = 0x4005                      # gGameVersion(5) + 0x4000
 LANGUAGE_JAPANESE = 1
@@ -120,3 +123,12 @@ def parse_block(b):
     magic2 = b[44:60]
     ok = (magic1[:14] == b"GameFreak inc." and magic2[:14] == b"GameFreak inc.")
     return LinkPlayer.unpack(struct), ok
+
+
+def national_flags(lp):
+    """The RfuGameData national flags a LinkPlayer advertises: Ruby, Sapphire and Emerald only
+    (pokeldn.frlg.config.TrainerProfile.national_flags)."""
+    if lp.version not in (VERSION_SAPPHIRE, VERSION_RUBY, VERSION_EMERALD):
+        return dict(national_link=False, national_dex=False, game_clear=False)
+    return dict(national_link=bool(lp.progress_flags & 0x10), national_dex=bool(lp.progress_flags & 0x01),
+                game_clear=bool(lp.progress_flags & 0x10))

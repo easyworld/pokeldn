@@ -266,11 +266,18 @@ def test_the_engine_plays_the_colosseum_route_at_the_seat():
     assert len(h._held_plan) == sum(held for _key, held in ENTRY_LEFT_CHAIR_ROUTE)
 
 
-def test_the_console_leaving_the_colosseum_is_answered_with_our_own_exit_key():
+@pytest.mark.parametrize("colosseum,state", [
+    (True, "H_UROOM_BATTLE_LINK"),
+    # A retail FireRed walked out of the Trade Center before sitting down: key 0x17 while the host
+    # walked to its chair, then "Please wait" until the host left too.
+    (False, "H_ENTRY_SEAT"),
+])
+def test_the_console_leaving_the_room_is_answered_with_our_own_exit_key(colosseum, state):
     """The door script waits for PLAYER_LINK_STATE_EXITING_ROOM from every player [overworld.c:2977]."""
-    from pokeldn.frlg.link.host_trade import H_EXIT, H_UROOM_BATTLE_LINK, LINK_KEY_EXIT_ROOM
-    h = _engine()
-    h._set_state(H_UROOM_BATTLE_LINK)
+    from pokeldn.frlg.link import host_trade
+    from pokeldn.frlg.link.host_trade import H_EXIT, LINK_KEY_EXIT_ROOM
+    h = _engine(colosseum=colosseum)
+    h._set_state(getattr(host_trade, state))
     h._child_send_held_keys({"keycode": LINK_KEY_EXIT_ROOM})
     assert h.state == H_EXIT
     assert h._held_label == "EXIT_ROOM_KEY"

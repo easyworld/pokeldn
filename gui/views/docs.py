@@ -7,6 +7,7 @@ import flet as ft
 
 from gui import theme as t
 from gui.views.widgets import MarkdownDocument
+from pokeldn.app import preview
 from pokeldn.app.paths import ROOT
 from pokeldn.app.i18n import t as tr
 
@@ -41,13 +42,14 @@ def split_front_matter(text: str) -> tuple[dict, str]:
 
 
 def pages() -> list[Page]:
-    """The docs site's navigation: front matter titles, parents and nav_order."""
-    found = []
+    """The docs site's navigation: front matter titles, parents and nav_order. A page the site leaves
+    out of its navigation (`nav_exclude`, an unreleased title) shows only while preview is enabled."""
+    found, shown = [], preview.enabled()
     for name in sorted(os.listdir(DOCS)):
         if name.endswith(".md"):
             with open(os.path.join(DOCS, name), encoding="utf-8") as f:
                 meta, _ = split_front_matter(f.read())
-            if meta.get("title"):
+            if meta.get("title") and (shown or meta.get("nav_exclude") != "true"):
                 found.append(Page(name, meta["title"], int(meta.get("nav_order", 99)), meta.get("parent", "")))
     by_title = {p.title: p for p in found}
     roots = []

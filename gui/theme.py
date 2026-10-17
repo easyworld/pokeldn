@@ -1,6 +1,8 @@
 import subprocess
 import sys
 from dataclasses import fields
+import base64
+import os
 
 import flet as ft
 import flet.canvas as cv
@@ -410,7 +412,10 @@ def fade(scrollable: ft.ScrollableControl, size: float = 24) -> ft.ShaderMask:
         mask.shader = shader
         return changed
 
+    # A scroll or size event otherwise ends in Flet's automatic update of the whole page: on a phone,
+    # where a run shares the interpreter, an auto-scrolling log cost 72 ms per line (examples/android).
     def resized(e) -> None:
+        ft.context.disable_auto_update()
         edges["height"] = e.height
         if paint():
             mask.update()
@@ -418,6 +423,7 @@ def fade(scrollable: ft.ScrollableControl, size: float = 24) -> ft.ShaderMask:
     previous = scrollable.on_scroll
 
     def scrolled(e) -> None:
+        ft.context.disable_auto_update()
         top, bottom = e.pixels > e.min_scroll_extent + 1, e.pixels < e.max_scroll_extent - 1
         if (top, bottom) != (edges["top"], edges["bottom"]):
             edges["top"], edges["bottom"] = top, bottom
@@ -466,3 +472,11 @@ def step_list(steps: list[str]) -> ft.Column:
             ft.Container(text(step, 13), expand=True, padding=ft.Padding(0, lead, 0, gap)),
         ], spacing=10, intrinsic_height=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH))
     return ft.Column(rows, spacing=0, tight=True)
+
+
+def image_src(data: bytes) -> bytes | str:
+    """An image's bytes as an ft.Image src. iOS's WKWebView draws nothing for a bytes src and draws a
+    data URI (examples/ios/README.md); the decoder reads the format from the bytes, not the label."""
+    if os.environ.get("POKELDN_PLATFORM") == "ios":
+        return "data:image/png;base64," + base64.b64encode(data).decode()
+    return data

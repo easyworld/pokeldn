@@ -13,7 +13,7 @@ import flet as ft
 from gui import board
 from gui.app import NO_FIRMWARE, PORT_BUSY, PORT_DENIED
 from pokeldn.pad import service
-from pokeldn.app import android, runner
+from pokeldn.app import android, ios, runner
 from pokeldn.app.paths import SESSION
 from gui import drop, theme as t
 from gui.views.widgets import CodeBlock, Log, PixelActivity
@@ -64,7 +64,8 @@ class BoardView:
         self.pad_checking = False
         self.list = ft.ListView(spacing=4, padding=8, expand=True)
         self.detail = ft.Column(spacing=t.GAP)
-        self.log = Log(app.page, tr('boards.checks_and_installs_show_their_output_here_effc3a', 'Checks and installs show their output here.'))
+        self.log = Log(app.page, tr('boards.checks_and_installs_show_their_output_here_effc3a', 'Checks and installs show their output here.'),
+                       private=lambda: [app.settings.ot] if app.settings.private_logs else None)
         self.progress = ft.ProgressBar(value=None, color=t.BLUE, bgcolor=t.FIELD, height=4, border_radius=2)
         self.progress_text = t.text("", 12, t.MUTED)
         self.panes = t.Panes(
@@ -154,7 +155,7 @@ class BoardView:
         f = Facts(key, port=port, chip=self.app.chips.get(key, ""))
         ident = self.app.identities.get(key)
         if isinstance(ident, board.Identity):
-            f.kind, f.version, f.mac = "radio", ident.firmware_version, ident.sta_mac
+            f.kind, f.version, f.mac = "radio_ble" if ident.ble else "radio", ident.firmware_version, ident.sta_mac
             f.chip = ident.chip or f.chip
             f.state = "ready" if ident.current else "old"
         elif isinstance(ident, board.PadIdentity):
@@ -205,7 +206,8 @@ class BoardView:
             rows.append(ft.Container(ft.Column([
                 t.pixel_icon("usb", color=t.FAINT),
                 t.text(tr('boards.no_board_found_6df721', 'No board found'), 13, t.MUTED, weight=ft.FontWeight.W_600),
-                t.text(tr('boards.plug_it_into_this_computer_with_a_data_cable_it_shows_u_ca5481', 'Plug it into this computer with a data cable. It shows up here on its own.'), 12,
+                t.text(tr('boards.ios_list_hint', 'Power the board near the phone. It shows up here over Bluetooth on its own.') if ios.active() else
+                       tr('boards.plug_it_into_this_computer_with_a_data_cable_it_shows_u_ca5481', 'Plug it into this computer with a data cable. It shows up here on its own.'), 12,
                        t.FAINT, text_align=ft.TextAlign.CENTER),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6), padding=24))
         self.list.controls = rows
@@ -281,7 +283,7 @@ class BoardView:
                 tr('boards.firmware_is_the_newest_this_app_includes_ae0469', '{value0} firmware {value1} is the newest this app includes.', value0=f.firmware.name, value1=f.version) if f.version else
                 tr('boards.firmware_8d2ff6', '{value0} firmware.', value0=f.firmware.name))
         if not self.installing and f.state == "ready":
-            if f.kind == "radio":
+            if f.kind in ("radio", "radio_ble"):
                 several = len(self.ports) > 1
                 if several and f.key != self.app.radio_port(self.ports):
                     action.append(t.secondary_button(tr('boards.use_for_trades_9f2fdb', 'Use for trades'), self._use, "check"))
@@ -603,6 +605,12 @@ class BoardView:
             return t.secondary_button(label, lambda e: self.app.page.run_task(self.app.open_url, url),
                                       "external-link")
 
+        if ios.active():   # the board is reached over Bluetooth (examples/ios)
+            lines = [t.text(tr('boards.ios_power', "The board needs USB only for power: a charger, a computer or a battery. Keep it within a few metres of the phone."), 13),
+                     t.text(tr('boards.ios_firmware', "It must run the Bluetooth radio firmware (pokeldn-radio-ble-c6.bin for an ESP32-C6), installed once from a computer with the desktop app's Board page."), 13, t.MUTED),
+                     t.text(tr('boards.ios_permission', "If nothing shows up, allow pokeldn under Settings, Privacy and Security, Bluetooth."), 13, t.MUTED),
+                     t.text(tr('boards.ios_one_host', "The board talks to one device at a time: close pokeldn on any computer it is plugged into."), 13, t.MUTED)]
+            return t.card(tr('boards.board_not_listed_or_not_answering_1a424c', 'Board not listed, or not answering?'), ft.Column(lines, spacing=8))
         lines = [t.text(tr('boards.try_another_cable_or_usb_port_many_cables_only_charge_d90a3a', 'Try another cable or USB port. Many cables only charge.'), 13)]
         if android.active():   # Bridge.java drives native USB only
             lines += [t.text(tr('boards.android_boards', "A phone drives an ESP32-S3, C3 or C6 through its native USB port, the one marked USB. A classic ESP32 needs a computer."), 13, t.MUTED),

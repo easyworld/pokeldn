@@ -80,17 +80,20 @@ def stage_code(app: Path) -> None:
     shutil.copytree(ROOT / 'examples/android/src/python/fastapi', app / 'fastapi',
                     ignore=shutil.ignore_patterns('__pycache__'))
     shutil.copy2(HERE / 'src/python/ios_gui.py', app / 'ios_gui.py')
+    # The FireRed host's protocol on LDN's own Trio thread, as measured on Android (its README, Scheduling).
+    shutil.copy2(ROOT / 'examples/android/src/python/android_host_loop.py', app / 'android_host_loop.py')
 
 
-# msgpack without its C extension, built from its sdist as examples/android/build.py builds it.
-LOCAL = (('msgpack==1.2.3', {'MSGPACK_PUREPYTHON': '1'}),)
+# Built from sdists as examples/android/build.py builds them: msgpack without its C extension, and
+# python-netlink, which pokeldn.ldn imports for host mode and has no wheel.
+LOCAL = (('msgpack==1.2.3', {'MSGPACK_PUREPYTHON': '1'}), ('python-netlink==0.0.15', {}))
 
 
 def pure_packages(target: Target, packages: Path) -> None:
     wheels = BUILD / 'wheels'
     wheels.mkdir(parents=True, exist_ok=True)
     for spec, extra in LOCAL:
-        name = spec.split('==')[0]
+        name = spec.split('==')[0].replace('-', '_')
         if not list(wheels.glob(f'{name}-*.whl')):
             run(sys.executable, '-m', 'pip', 'wheel', '--quiet', '--no-deps', '--no-binary', ':all:',
                 '-w', wheels, spec, env={**os.environ, **extra})
@@ -155,6 +158,28 @@ def native_packages(target: Target, framework: Path, packages: Path, work: Path)
                  zstd_src / 'c-ext' / 'backend_c.c')
 
 
+def pkhex(target: Target, bundle: Path) -> None:
+    """services/pkhex compiled ahead of time as a library (Library.cs): iOS starts no second process,
+    so pokeldn.pokemon runs its request loop on a thread (_Library)."""
+    rid = 'ios-arm64' if target.device else 'iossimulator-arm64'
+    out = BUILD / 'pkhex' / rid
+    library = out / 'pokeldn-pkhex.dylib'
+    sources = [*(ROOT / 'services' / 'pkhex').glob('*.cs'), ROOT / 'services' / 'pkhex' / 'pkhex.csproj']
+    if not library.is_file() or library.stat().st_mtime < max(p.stat().st_mtime for p in sources):
+        run('dotnet', 'publish', ROOT / 'services' / 'pkhex' / 'pkhex.csproj', '-c', 'Release', '-r', rid,
+            '-o', out, '--artifacts-path', BUILD / 'pkhex' / 'artifacts',   # services/pkhex/bin stays the desktop's
+            '-p:PublishAot=true', '-p:NativeLib=Shared', '-p:OutputType=Library',
+            '-p:PublishSingleFile=false', '-p:EnableCompressionInSingleFile=false',
+            '-p:PublishAotUsingRuntimePack=true')
+    folder = bundle / 'Frameworks' / 'pokeldn_pkhex.framework'
+    folder.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(library, folder / 'pokeldn_pkhex')
+    run('install_name_tool', '-id', '@rpath/pokeldn_pkhex.framework/pokeldn_pkhex', folder / 'pokeldn_pkhex')
+    info = plistlib.loads((SUPPORT / 'Python.xcframework' / 'build' / 'iOS-dylib-Info-template.plist').read_bytes())
+    info.update(CFBundleExecutable='pokeldn_pkhex', CFBundleIdentifier=f'{BUNDLE_ID}.pkhex')
+    (folder / 'Info.plist').write_bytes(plistlib.dumps(info))
+
+
 def frameworks(app_root: Path, base: Path) -> None:
     """Every .so under `base` becomes Frameworks/<module>.framework with a .fwork file in its place,
     as Python.xcframework/build/utils.sh does; iOS loads code only from frameworks."""
@@ -173,6 +198,53 @@ def frameworks(app_root: Path, base: Path) -> None:
         (folder / f'{module}.origin').write_text(str(so.with_suffix('.fwork').relative_to(app_root)))
 
 
+STUB_PBXPROJ = """// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		A1 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		A2 /* stub.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = stub.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = A1; };
+		B1 = {isa = PBXGroup; children = (A1, B2); sourceTree = "<group>"; };
+		B2 /* Products */ = {isa = PBXGroup; children = (A2); name = Products; sourceTree = "<group>"; };
+		C1 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A3); runOnlyForDeploymentPostprocessing = 0; };
+		D1 /* stub */ = {isa = PBXNativeTarget; buildConfigurationList = E2; buildPhases = (C1); buildRules = (); dependencies = (); name = stub; productName = stub; productReference = A2; productType = "com.apple.product-type.application"; };
+		F1 /* Project */ = {isa = PBXProject; buildConfigurationList = E1; compatibilityVersion = "Xcode 14.0"; mainGroup = B1; productRefGroup = B2; projectDirPath = ""; projectRoot = ""; targets = (D1); attributes = {TargetAttributes = {D1 = {DevelopmentTeam = @TEAM@; ProvisioningStyle = Automatic;};};}; };
+		G1 /* Debug project */ = {isa = XCBuildConfiguration; buildSettings = {SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = @MIN@;}; name = Debug; };
+		G2 /* Debug target */ = {isa = XCBuildConfiguration; buildSettings = {PRODUCT_BUNDLE_IDENTIFIER = @BUNDLE@; PRODUCT_NAME = stub; DEVELOPMENT_TEAM = @TEAM@; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; TARGETED_DEVICE_FAMILY = "1,2"; SDKROOT = iphoneos; OTHER_LDFLAGS = ("-framework", "UIKit");}; name = Debug; };
+		E1 = {isa = XCConfigurationList; buildConfigurations = (G1); defaultConfigurationName = Debug; };
+		E2 = {isa = XCConfigurationList; buildConfigurations = (G2); defaultConfigurationName = Debug; };
+	};
+	rootObject = F1;
+}
+"""
+
+
+def provision(team: str, device: str, work: Path) -> Path:
+    """A development profile for BUNDLE_ID: Xcode makes one only for a project it builds, so it builds
+    a one-file stub app with the same identifier and its profile is reused."""
+    stub = work / 'stub'
+    (stub / 'stub.xcodeproj').mkdir(parents=True, exist_ok=True)
+    (stub / 'main.m').write_text('#import <UIKit/UIKit.h>\nint main(int c, char *v[]) { return UIApplicationMain(c, v, nil, nil); }\n')
+    (stub / 'stub.xcodeproj' / 'project.pbxproj').write_text(
+        STUB_PBXPROJ.replace('@TEAM@', team).replace('@BUNDLE@', BUNDLE_ID).replace('@MIN@', MIN_IOS))
+    run('xcodebuild', '-quiet', '-project', stub / 'stub.xcodeproj', '-scheme', 'stub', '-configuration', 'Debug',
+        '-destination', f'id={device}', '-derivedDataPath', stub / 'derived', '-allowProvisioningUpdates', 'build')
+    return next((stub / 'derived').rglob('stub.app/embedded.mobileprovision'))
+
+
+def sign(bundle: Path, profile: Path, identity: str, work: Path) -> None:
+    shutil.copy2(profile, bundle / 'embedded.mobileprovision')
+    decoded = subprocess.run(['security', 'cms', '-D', '-i', str(profile)], check=True, capture_output=True).stdout
+    entitlements = work / 'entitlements.plist'
+    entitlements.write_bytes(plistlib.dumps(plistlib.loads(decoded)['Entitlements']))
+    for fw in sorted((bundle / 'Frameworks').iterdir()):
+        run('codesign', '--force', '--sign', identity, '--timestamp=none', fw)
+    run('codesign', '--force', '--sign', identity, '--timestamp=none', '--entitlements', entitlements, bundle)
+
+
 def info_plist(target: Target) -> dict:
     import re
     version = re.search(r'__version__ = "([^"]+)"', (ROOT / 'pokeldn' / '__init__.py').read_text())[1]
@@ -184,8 +256,9 @@ def info_plist(target: Target) -> dict:
         'UIRequiredDeviceCapabilities': ['arm64'], 'LSRequiresIPhoneOS': True,
         'NSBluetoothAlwaysUsageDescription': 'pokeldn talks to its radio board over Bluetooth.',
         'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
-        'CFBundleIcons': {'CFBundlePrimaryIcon': {'CFBundleIconFiles': ['AppIcon60x60', 'AppIcon76x76'],
-                                                  'CFBundleIconName': 'AppIcon'}},
+        'UIApplicationSceneManifest': {'UIApplicationSupportsMultipleScenes': False, 'UISceneConfigurations': {
+            'UIWindowSceneSessionRoleApplication': [{'UISceneConfigurationName': 'Default',
+                                                     'UISceneDelegateClassName': 'SceneDelegate'}]}},
         'UIFileSharingEnabled': True, 'LSSupportsOpeningDocumentsInPlace': True,
         'UISupportedInterfaceOrientations': ['UIInterfaceOrientationPortrait',
                                              'UIInterfaceOrientationLandscapeLeft',
@@ -197,8 +270,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--device', action='store_true', help='build for iPhone and write an unsigned .ipa')
     parser.add_argument('--install', action='store_true', help='install and launch on the booted simulator')
+    parser.add_argument('--run-on', metavar='DEVICE', help='sign with your Apple Development identity and '
+                        'install on this paired iPhone (a devicectl identifier); needs --team')
+    parser.add_argument('--team', help='your Apple developer team ID (Xcode, Settings, Accounts)')
     args = parser.parse_args()
-    target = Target(args.device)
+    target = Target(args.device or bool(args.run_on))
     framework = support()
     work = BUILD / target.sdk
     bundle = work / 'pokeldn.app'
@@ -210,10 +286,15 @@ def main() -> int:
                  '-framework', 'UIKit', '-framework', 'CoreGraphics', '-framework', 'WebKit', '-framework', 'CoreBluetooth', '-framework', 'UniformTypeIdentifiers',
                  '-Xlinker', '-rpath', '-Xlinker', '@executable_path/Frameworks',
                  '-o', bundle / 'pokeldn', HERE / 'src' / 'main.m')
-    (bundle / 'Info.plist').write_bytes(plistlib.dumps(info_plist(target)))
-    for name, size in (('AppIcon60x60@2x.png', 120), ('AppIcon60x60@3x.png', 180), ('AppIcon76x76@2x~ipad.png', 152)):
-        run('sips', '-z', size, size, ROOT / 'gui' / 'assets' / 'icon.png', '--out', bundle / name,
-            stdout=subprocess.DEVNULL)
+    info = info_plist(target)
+    # An Icon Composer document (HERE/AppIcon.icon) compiled into Assets.car: iOS draws it as its own
+    # layered icon instead of masking a flat PNG. Replace the folder with an export to change the icon.
+    partial = work / 'icon-partial.plist'
+    run('xcrun', 'actool', HERE / 'AppIcon.icon', '--compile', bundle, '--app-icon', 'AppIcon',
+        '--platform', target.sdk, '--minimum-deployment-target', MIN_IOS, '--target-device', 'iphone',
+        '--target-device', 'ipad', '--output-partial-info-plist', partial, stdout=subprocess.DEVNULL)
+    info.update(plistlib.loads(partial.read_bytes()))
+    (bundle / 'Info.plist').write_bytes(plistlib.dumps(info))
     shutil.copytree(framework / target.slice / 'Python.framework', bundle / 'Frameworks' / 'Python.framework',
                     symlinks=True)
     lib = bundle / 'python' / 'lib'
@@ -226,12 +307,19 @@ def main() -> int:
     native_packages(target, framework, packages, work)
     for base in (lib / 'python3.13' / 'lib-dynload', packages):
         frameworks(bundle, base)
+    pkhex(target, bundle)
 
     if not args.device:
         for fw in sorted((bundle / 'Frameworks').iterdir()):
             run('codesign', '--force', '--sign', '-', '--timestamp=none', fw)
         run('codesign', '--force', '--sign', '-', '--timestamp=none', bundle)
     print('App:', bundle)
+    if args.run_on:
+        identity = subprocess.run(['security', 'find-identity', '-v', '-p', 'codesigning'], check=True,
+                                  capture_output=True, text=True).stdout.split('"')[1]
+        sign(bundle, provision(args.team, args.run_on, work), identity, work)
+        run('xcrun', 'devicectl', 'device', 'install', 'app', '--device', args.run_on, bundle)
+        run('xcrun', 'devicectl', 'device', 'process', 'launch', '--device', args.run_on, BUNDLE_ID)
     if args.device:
         ipa = BUILD / 'pokeldn-ios.ipa'
         with zipfile.ZipFile(ipa, 'w', zipfile.ZIP_DEFLATED) as z:

@@ -6,6 +6,7 @@ the message set is `firmware/esp32/main/radio.c`, documented in docs/hardware_es
 from pokeldn.host_support import open_output
 import collections
 import os
+import re
 import struct
 import threading
 import time
@@ -654,9 +655,11 @@ class Radio:
         """True for a usbwatch report line this link already logged: every HELLO repeats it."""
         if not line.startswith(b"usbwatch:"):
             return False
-        if line in self._usbwatch_seen:
+        # "reset reason N, up T ms" carries the uptime at this HELLO: the same reset each time.
+        key = re.sub(rb", up \d+ ms$", b"", line)
+        if key in self._usbwatch_seen:
             return True
-        self._usbwatch_seen.add(line)
+        self._usbwatch_seen.add(key)
         return False
 
     def hello(self) -> Info:

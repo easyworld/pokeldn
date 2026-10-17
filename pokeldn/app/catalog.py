@@ -2,6 +2,7 @@
 fields a user fills in, and what to press on the console. Fixed arguments may carry {received}
 (the Received folder), {stamp} (the run's time), {src_var} (a fresh random id) and {keys} (the
 prod.keys file Settings names)."""
+from pokeldn.app import preview
 from pokeldn.app.i18n import t as tr
 from dataclasses import dataclass, replace
 
@@ -192,6 +193,32 @@ FRLG = Game("frlg", tr('catalog.firered_leafgreen_2b757f', 'FireRed & LeafGreen'
          fixed=("--live", "--ot", "{ot}", "--id", "{tid}:{sid}", "--dump-file",
                 "{received}/frlg-dump-{stamp}.bin"), doc="frlg_gift.md"),
 ))
+
+RSE_VERSIONS = (("emerald", tr('catalog.emerald', 'Emerald')), ("ruby", tr('catalog.ruby', 'Ruby')),
+                ("sapphire", tr('catalog.sapphire', 'Sapphire')))
+
+
+def rse_tool(tool: Tool) -> Tool:
+    """A FireRed and LeafGreen tool for a Ruby, Sapphire or Emerald console: the same launcher, the
+    same Pokemon Center 2F attendants [pokeemerald data/maps/*_PokemonCenter_2F], other versions."""
+    # Ruby and Sapphire have no Mystery Gift menu, only the e-Reader's Mystery Event.
+    versions = RSE_VERSIONS[:1] if tool.key == "frlg-gift" else RSE_VERSIONS
+    fields = tuple(replace(f, choices=versions, default="emerald") if f.choices == VERSIONS else f
+                   for f in tool.fields)
+    if tool.key == "frlg-gift":
+        tool = replace(tool, summary=tr('catalog.rse_gift_summary', 'Send an Emerald Wonder Card through Mystery Gift.'), steps=(
+            tr('catalog.rse_gift_menu', 'Title screen: Mystery Gift, Wonder Cards, Friend. Emerald lists Mystery Gift once the player has written LINK TOGETHER WITH ALL on the questionnaire.'),
+            tr('catalog.start_the_host_then_pick_pokeldn_when_it_appears_abee9d', 'Start the host, then pick POKELDN when it appears.'),
+            tr('catalog.answer_yes_if_the_console_asks_to_replace_its_card_95ef96', 'Answer Yes if the console asks to replace its card.'),
+            tr('catalog.rse_gift_delivery', 'After the card is saved, talk to the delivery man on 2F of any Pokemon Center.'),
+            tr('catalog.back_out_of_the_search_screen_between_two_runs_f0a1d7', 'Back out of the search screen between two runs.')))
+    return replace(tool, key=tool.key.replace("frlg-", "rse-"), fields=fields, doc="rse.md",
+                   fixed=tuple(a.replace("/frlg-", "/rse-") for a in tool.fixed))
+
+
+# Unreleased on the Switch: shown only while pokeldn.app.preview is enabled (docs/rse.md).
+RSE = Game("rse", tr('catalog.rse_name', 'Ruby, Sapphire & Emerald'), tr('catalog.rse_short', 'RSE'), "rse.md",
+           tuple(rse_tool(tool) for tool in FRLG.tools))
 
 LGPE_STEPS = tr('catalog.x_communicate_local_communication_trade_enter_the_same__d54e70', 'X, Communicate, Local Communication, Trade, enter the same link code, then search.')
 
@@ -456,22 +483,29 @@ def simulated_gift(game: Game, host: Tool, steps: tuple[str, ...]) -> Tool:
                 doc="gift_simulated.md")
 
 
+def trade_keys(game: Game) -> tuple[str, str]:
+    """The keys of `game`'s trade host and joiner."""
+    if any(t.key == f"{game.key}-trade-host" for t in game.tools):
+        return f"{game.key}-trade-host", f"{game.key}-trade-join"
+    return f"{game.key}-host", f"{game.key}-join"
+
+
 def with_gift(game: Game, steps: tuple[str, ...]) -> Game:
     """`game` with its Mystery Gift - Simulated after its trades, made from its trade host."""
-    host = next(t for t in game.tools if t.key == ("frlg-trade-host" if game.key == "frlg" else f"{game.key}-host"))
-    at = max(n for n, t in enumerate(game.tools) if t.key in (("frlg-trade-host", "frlg-trade-join") if game.key == "frlg" else (f"{game.key}-host", f"{game.key}-join"))) + 1
+    host = next(t for t in game.tools if t.key == trade_keys(game)[0])
+    at = max(n for n, t in enumerate(game.tools) if t.key in trade_keys(game)) + 1
     return replace(game, tools=game.tools[:at] + (simulated_gift(game, host, steps),) + game.tools[at:])
 
 
 def with_online(game: Game, steps: tuple[str, ...], code: Field | None = None) -> Game:
     """`game` with its online trade after its local trades; `code` replaces the host's own code field's
     help, or is a new field where the game has no code."""
-    host = next(t for t in game.tools if t.key == ("frlg-trade-host" if game.key == "frlg" else f"{game.key}-host"))
+    host = next(t for t in game.tools if t.key == trade_keys(game)[0])
     if code is None:
         code = next(f for f in host.fields if f.kind in ("code", "linkcode"))
         code = replace(code, help=ONLINE_CODE_HELP if code.kind == "code" else
                        tr('catalog.the_three_pokemon_you_and_your_partner_pick_in_the_same_a31f1a', 'The three Pokemon you and your partner pick, in the same order, here and on the console.'))
-    at = max(n for n, t in enumerate(game.tools) if t.key in (("frlg-trade-host", "frlg-trade-join") if game.key == "frlg" else (f"{game.key}-host", f"{game.key}-join"))) + 1   # after Join
+    at = max(n for n, t in enumerate(game.tools) if t.key in trade_keys(game)) + 1   # after Join
     return replace(game, tools=game.tools[:at] + (online(host, steps, code),) + game.tools[at:])
 
 
@@ -500,3 +534,8 @@ GAMES = (
                 (tr('catalog.x_link_play_link_trade_nearby_players_the_same_code_the_b0f613', 'X, Link Play, Link Trade, Nearby Players, the same code, then search.'),
                  tr('catalog.pick_on_the_trade_box_offer_then_trade_b0a22c', 'Pick on the trade box, offer, then trade.'))),
 )
+
+if preview.enabled():
+    GAMES = GAMES[:1] + (with_online(RSE, (tr('catalog.join_group_then_pick_pokeldn_125fa7', '{value0}, Join Group, then pick POKELDN.', value0=FRLG_PATH),
+                                           tr('catalog.your_partner_s_party_shows_on_the_right_choose_the_poke_ca7e7b', "Your partner's party shows on the right: choose the Pokemon you send, then confirm.")),
+                                     Field("--online-code", tr('catalog.code_340f46', 'Code'), "code", help=ONLINE_CODE_HELP)),) + GAMES[1:]

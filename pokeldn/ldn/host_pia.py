@@ -19,6 +19,9 @@ HOST_CARRY_DEPTH = 4
 # The console goes silent ~0.5 s after accepting the card (its save); sending into it blocks the
 # host or floods the console (docs/frlg_link.md).
 QUIET_GATE_SECONDS = 0.25
+# A quiet console still gets one retransmission this often: with HostSession's hole guard holding new
+# frames, dropping every resend left a FireRed room silent on both sides (docs/frlg_link.md, Leaving the room).
+QUIET_RETRANSMIT_SECONDS = 1.0
 HOST_VBLANK_SECONDS = 1.0 / 59.727
 RELIABLE_BATCH_MAX = 9
 PIA_COMPRESS_MIN = 62
@@ -319,8 +322,14 @@ class HostPeerProtocol:
     def _send_reliable(self, outputs):
         if not outputs or self.pia_crypto is None or self.guest_var is None or self.guest_ip is None:
             return
-        if self._console_quiet(time.monotonic()):
-            outputs = [o for o in outputs if not getattr(o, "retransmitted", False)]
+        now = time.monotonic()
+        if self._console_quiet(now):
+            fresh = [o for o in outputs if not getattr(o, "retransmitted", False)]
+            if (len(fresh) < len(outputs)
+                    and now - getattr(self, "_last_quiet_retransmit", 0.0) >= QUIET_RETRANSMIT_SECONDS):
+                self._last_quiet_retransmit = now
+                fresh = [next(o for o in outputs if getattr(o, "retransmitted", False))] + fresh
+            outputs = fresh
             if not outputs:
                 return
         else:

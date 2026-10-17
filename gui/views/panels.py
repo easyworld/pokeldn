@@ -18,7 +18,7 @@ def image(path: str | None, size: int) -> ft.Control | None:
         data = Path(path).read_bytes()
     except OSError:
         return None
-    return ft.Container(ft.Image(src=data, width=size, height=size, fit=ft.BoxFit.COVER),
+    return ft.Container(ft.Image(src=t.image_src(data), width=size, height=size, fit=ft.BoxFit.COVER),
                         width=size, height=size, border_radius=size // 6, clip_behavior=ft.ClipBehavior.ANTI_ALIAS)
 
 

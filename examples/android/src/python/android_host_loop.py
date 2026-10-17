@@ -2,7 +2,7 @@ import time
 
 import trio
 
-from pokeldn.app import screen
+from pokeldn.app import runner, screen
 from pokeldn.frlg.link.host_app import HOST_CONTROL_POLL_SECONDS
 from pokeldn.frlg.link.host_beacon import NullBeaconInjector
 
@@ -80,7 +80,25 @@ def run(self):
         self.injector.start()
         self.info(self._hosting_instructions())
         token = self.network._network._tap._token
-        return trio.from_thread.run(protocol, self, trio_token=token)
+        scopes = []
+
+        async def cancellable():
+            with trio.CancelScope() as scope:
+                scopes.append(scope)
+                return await protocol(self)
+            raise KeyboardInterrupt   # the app's Stop: InProcess.stop treats it as a clean stop
+
+        def stop():
+            # This thread waits in from_thread.run, where InProcess.stop's injected KeyboardInterrupt
+            # never lands: cancel the protocol on LDN's Trio thread instead.
+            if scopes:
+                trio.from_thread.run_sync(scopes[0].cancel, trio_token=token)
+
+        runner.at_app_close(stop)
+        try:
+            return trio.from_thread.run(cancellable, trio_token=token)
+        finally:
+            runner._closing.remove(stop)
     finally:
         screen.drain()
         if self.injector is not None:

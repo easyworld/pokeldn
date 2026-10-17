@@ -115,6 +115,11 @@ class App:
             self.identities.pop(device)   # unplugged: check again when it returns
         if not present and android.active():
             return self.android_status()
+        if not present and ios.active():
+            off = ios.radio_state() == "off"
+            return BoardStatus("missing", tr('app.ios_no_radio', 'Bluetooth is off') if off else
+                               tr('app.ios_looking_for_radio', 'Looking for the Bluetooth radio'),
+                               tr('app.ios_radio_steps', 'Power a board running the Bluetooth radio firmware near the phone, and allow pokeldn to use Bluetooth in Settings.'))
         if not present:
             hidden = board.bridges_without_port() if sys.platform.startswith("linux") else []
             if hidden:

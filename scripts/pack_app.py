@@ -22,6 +22,8 @@ FIRMWARE_C3 = ROOT / "gui" / "firmware" / "pokeldn-radio-c3.bin"
 FIRMWARE_C6 = ROOT / "gui" / "firmware" / "pokeldn-radio-c6.bin"
 FIRMWARE_PAD = ROOT / "gui" / "firmware" / "pokeldn-pad-s3.bin"
 FIRMWARE_PAD_ESP32 = ROOT / "gui" / "firmware" / "pokeldn-pad.bin"
+FIRMWARE_BLE = ROOT / "gui" / "firmware" / "pokeldn-radio-ble.bin"
+FIRMWARE_BLE_C6 = ROOT / "gui" / "firmware" / "pokeldn-radio-ble-c6.bin"
 APP_ID = "io.github.decryptu.pokeldn"
 UNICORN = ROOT / "gui" / "unicorn"
 MARKER_UNICORN = "pokeldn-unicorn"
@@ -91,25 +93,35 @@ def strip_local_symbols(app: Path, keep: set[Path]) -> None:
 
 def clear_cfg(exe: Path) -> None:
     """PyInstaller's Windows bootloader enables Control Flow Guard; Unicorn faults in a CFG process
-    (unicorn-engine/unicorn#2281), python.exe has it off. Clear GUARD_CF in DllCharacteristics."""
-    with exe.open("r+b") as f:
-        f.seek(0x3C)
-        pe = int.from_bytes(f.read(4), "little")
-        f.seek(pe)
-        assert f.read(4) == b"PE\0\0", exe
-        field = pe + 24 + 70
-        f.seek(field)
-        flags = int.from_bytes(f.read(2), "little")
-        f.seek(field)
-        f.write((flags & ~0x4000).to_bytes(2, "little"))
+    (unicorn-engine/unicorn#2281), python.exe has it off. Clear GUARD_CF in DllCharacteristics.
+    Trap: a stale header CheckSum reads as a tampered file to antivirus heuristics; recompute it."""
+    data = bytearray(exe.read_bytes())
+    pe = int.from_bytes(data[0x3C:0x40], "little")
+    assert data[pe:pe + 4] == b"PE\0\0", exe
+    field = pe + 24 + 70
+    flags = int.from_bytes(data[field:field + 2], "little")
+    data[field:field + 2] = (flags & ~0x4000).to_bytes(2, "little")
+    checksum = pe + 24 + 64
+    data[checksum:checksum + 4] = pe_checksum(data, checksum).to_bytes(4, "little")
+    exe.write_bytes(data)
+
+
+def pe_checksum(data: bytes, field: int) -> int:
+    """The PE optional header CheckSum (imagehlp CheckSumMappedFile), skipping its own four bytes."""
+    padded = bytes(data[:field]) + b"\0\0\0\0" + bytes(data[field + 4:]) + b"\0" * (len(data) % 2)
+    total = sum(memoryview(padded).cast("H"))
+    while total >> 16:
+        total = (total & 0xFFFF) + (total >> 16)
+    return total + len(data)
 
 
 def main() -> int:
     argparse.ArgumentParser(description=__doc__).parse_args()
-    firmware = (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6, FIRMWARE_PAD, FIRMWARE_PAD_ESP32)
+    firmware = (FIRMWARE, FIRMWARE_S3, FIRMWARE_C3, FIRMWARE_C6, FIRMWARE_PAD, FIRMWARE_PAD_ESP32, FIRMWARE_BLE,
+                FIRMWARE_BLE_C6)
     missing = [str(path) for path in firmware if not path.is_file()]
     if missing:
-        raise SystemExit(f"Missing firmware: {', '.join(missing)}. Build all six images "
+        raise SystemExit(f"Missing firmware: {', '.join(missing)}. Build all eight images "
                          "as described in docs/gui.md before packing.")
     client = CLIENT / platform_key()
     if not (client / MARKER).is_file():

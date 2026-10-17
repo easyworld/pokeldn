@@ -15,7 +15,8 @@ from pokeldn.app.paths import BANK
 from pokeldn.pokemon import EXTENSIONS
 
 FILES = re.compile(r"\.(pk3|pb7|pk8|pb8|pa8|pk9|pa9)$", re.IGNORECASE)
-GAME_OF = {extension: game for game, extension in EXTENSIONS.items()}
+# A .pk3 is FireRed's: Ruby, Sapphire and Emerald share the format and come after it.
+GAME_OF = {extension: game for game, extension in reversed(EXTENSIONS.items())}
 
 
 @dataclass(frozen=True)

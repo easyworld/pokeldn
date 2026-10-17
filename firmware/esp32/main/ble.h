@@ -14,6 +14,8 @@ bool ble_linked(void);
 int ble_read(uint8_t *out, size_t size, uint32_t ticks);
 /* Notifies `n` bytes in MTU-sized pieces; false when the link went away or stalled 500 ms. */
 bool ble_write(const uint8_t *p, size_t n);
+/* The connection interval the central granted, in microseconds; 0 before any update. */
+uint32_t ble_interval_us(void);
 #else
 static inline bool ble_linked(void) { return false; }
 #endif

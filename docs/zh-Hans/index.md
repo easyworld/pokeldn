@@ -5,7 +5,7 @@ nav_order: 1
 
 # pokeldn
 
-pokeldn 实现了 Nintendo Switch 本地无线通信（LDN），通过 USB 串口连接的 ESP32 开发板作为无线收发设备，与真实 Switch 上运行的宝可梦游戏通信。这些文档介绍相关协议，并提供反编译源码引用、反汇编地址和硬件实测结果。
+pokeldn 实现 Nintendo Switch 本地无线通信（LDN），通过 ESP32 无线开发板与实机上的宝可梦游戏通信：电脑和 Android 手机使用 USB 串口，iPhone 使用蓝牙。本系列文档说明相关协议，包含反编译引用、反汇编地址和硬件测量结果。
 
 先阅读[应用设置](gui.md)或[命令行用法](usage.md)。[代码组织](architecture.md)介绍共享模块和测试。
 

@@ -15,6 +15,7 @@ from gui.views.sprites import MINI, SIZE, Sprite
 from gui.views.widgets import open_folder
 from pokeldn import pokemon
 from pokeldn.app import bank
+from pokeldn.app.settings import GEN3
 from pokeldn.app.catalog import GAMES
 
 NAMES = {game.key: game.name for game in GAMES}
@@ -451,7 +452,7 @@ class EditDialog:
     def __init__(self, view: BankView, entry: bank.Entry, info: dict, moves: list[dict], items: list[dict]):
         self.view, self.entry, self.info = view, entry, info
         self.nickname = t.field(value=info["nickname"], hint=info["species"], expand=True,
-                                limit=10 if entry.game == "frlg" else 12)
+                                limit=10 if entry.game in GEN3 else 12)
         self.level = t.field(value=str(info["level"]), mono=True, width=90, digits=True, limit=3)
         move_options = [(NONE, tr('bank.none_dc937b', 'None'))] + [(str(n["id"]), n["name"]) for n in moves]
         known = (list(info["move_ids"]) + [0] * 4)[:4]

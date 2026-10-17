@@ -18,10 +18,10 @@ from pokeldn.app.paths import POKEMON, ROOT, SESSION
 HERE = os.path.join(ROOT, "services", "pkhex")
 EXE = "pokeldn-pkhex.exe" if sys.platform == "win32" else "pokeldn-pkhex"
 # The file each game's launchers take as an offer.
-EXTENSIONS = {"frlg": "pk3", "lgpe": "pb7", "bdsp": "pb8", "swsh": "pk8", "pla": "pa8", "sv": "pk9",
+EXTENSIONS = {"frlg": "pk3", "rse": "pk3", "lgpe": "pb7", "bdsp": "pb8", "swsh": "pk8", "pla": "pa8", "sv": "pk9",
               "za": "pa9"}
 ZA_OFFER_HEADER = bytes.fromhex("0101b90300bc815801")   # SelectPokemon, round 0 (docs/za.md)
-RECORD_SIZES = {"frlg": (80, 100), "lgpe": (232, 260), "bdsp": (328, 344),
+RECORD_SIZES = {"frlg": (80, 100), "rse": (80, 100), "lgpe": (232, 260), "bdsp": (328, 344),
                 "swsh": (328, 344), "pla": (360, 376), "sv": (328, 344), "za": (328, 344)}
 NATURES = ("Hardy", "Lonely", "Brave", "Adamant", "Naughty", "Bold", "Docile", "Relaxed", "Impish",
            "Lax", "Timid", "Hasty", "Serious", "Jolly", "Naive", "Modest", "Mild", "Quiet", "Bashful",
@@ -48,6 +48,43 @@ def _command() -> list[str]:
     raise BuilderError("PKHeX is missing. From source, run: dotnet build -c Release services/pkhex")
 
 
+def _library(command: list[str]) -> bool:
+    """The helper as a library: a .dylib, or the iOS bundle's framework (examples/ios/build.py). Python on
+    macOS lives in Python.framework too, so the framework is matched by name."""
+    return len(command) == 1 and (command[0].endswith(".dylib") or "/pokeldn_pkhex.framework/" in command[0])
+
+
+class _Library:
+    """The helper compiled as a library (services/pkhex/Library.cs), for iOS, which starts no process:
+    its request loop runs on a thread over two pipes, behind Popen's stdin, stdout, poll and wait."""
+
+    def __init__(self, path: str):
+        import ctypes
+        serve = ctypes.CDLL(path).pokeldn_pkhex_serve
+        serve.argtypes, serve.restype = (ctypes.c_int, ctypes.c_int), None
+        requests_read, requests_write = os.pipe()
+        replies_read, replies_write = os.pipe()
+        self.stdin = open(requests_write, "w", encoding="utf-8")
+        self.stdout = open(replies_read, "r", encoding="utf-8")
+        # The library owns and closes its two ends; closing stdin ends its loop.
+        self.thread = threading.Thread(target=serve, args=(requests_read, replies_write), name="pkhex", daemon=True)
+        self.thread.start()
+
+    def poll(self):
+        return None if self.thread.is_alive() else 0
+
+    def wait(self, timeout=None):
+        self.thread.join(timeout)
+        if self.thread.is_alive() and timeout is not None:
+            raise subprocess.TimeoutExpired("pkhex", timeout)
+        return 0
+
+    def kill(self):
+        """A thread cannot be stopped; a stuck check is abandoned with its pipes."""
+        self.thread = threading.Thread(target=lambda: None)
+        self.thread.start()
+
+
 class Service:
     def __init__(self, display_language: str = "en"):
         self.display_language = display_language
@@ -66,9 +103,11 @@ class Service:
                 if self.proc is None or self.proc.poll() is not None:
                     self._close()
                     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                    self.proc = subprocess.Popen(_command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                                 stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
-                                                 creationflags=flags)
+                    command = _command()
+                    self.proc = (_Library(command[0]) if _library(command) else
+                                 subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                                  stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+                                                  creationflags=flags))
                 line = self._exchange(request)
                 if not line:
                     raise BuilderError("The Pokemon builder stopped.")

@@ -142,12 +142,17 @@ uint32_t wire_events_full(void) { return atomic_load(&s_events_full); }
 
 int wire_stats(char *text, size_t size)
 {
-    return snprintf(text, size,
+    int n = snprintf(text, size,
         "refused_heap=%u refused_queue=%u heap_min=%u queue_max=%u read_max_us=%u "
         "handler_max_us=%u handler_max_type=%#x write_max_us=%u",
         atomic_load(&s_refused_heap), atomic_load(&s_refused_queue), atomic_load(&s_heap_min),
         atomic_load(&s_queue_max), atomic_load(&s_read_max_us), atomic_load(&s_handler_max_us),
         atomic_load(&s_handler_max_type), atomic_load(&s_write_max_us));
+#if POKELDN_BLE
+    if (n > 0 && (size_t)n < size)
+        n += snprintf(text + n, size - n, " ble_itvl_us=%u", (unsigned)ble_interval_us());
+#endif
+    return n;
 }
 
 /* A CREDIT jumps the queue and carries the count current when the writer reaches it: behind a

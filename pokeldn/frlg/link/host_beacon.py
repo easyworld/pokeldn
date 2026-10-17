@@ -47,6 +47,13 @@ def _apply_profile_to_search_word(record, profile):
     word |= ((player.language << beacon.SEARCH_LANGUAGE_SHIFT)
              & beacon.SEARCH_LANGUAGE_MASK)
     record[offset:offset + 2] = word.to_bytes(2, "little")
+    flags = int.from_bytes(record[offset:offset + 4], "little")
+    flags &= ~(beacon.SEARCH_NATIONAL_LINK | beacon.SEARCH_NATIONAL_DEX | beacon.SEARCH_GAME_CLEAR)
+    national = profile.national_flags
+    flags |= beacon.SEARCH_NATIONAL_LINK if national["national_link"] else 0
+    flags |= beacon.SEARCH_NATIONAL_DEX if national["national_dex"] else 0
+    flags |= beacon.SEARCH_GAME_CLEAR if national["game_clear"] else 0
+    record[offset:offset + 4] = flags.to_bytes(4, "little")
 
 
 def _element(element_id, data):

@@ -134,6 +134,10 @@ DEFAULT_BUFFER_FAILURE_MESSAGE = _encode_message(
     "The code ran but read the\nwrong value.", None)
 
 
+# The consoles a payload built for each game serves (pokeldn.frlg.gift.gift_composer.GameRules).
+GAME_CONSOLES = {"frlg": ("firered", "leafgreen"), "emerald": ("emerald",)}
+
+
 class MysteryGiftServerError(Exception):
     """The console sent something the server script cannot proceed from."""
 
@@ -524,11 +528,14 @@ class MysteryGiftServer:
                  buffer_decode=None, buffer_reference=None,
                  buffer_success_message=None, buffer_failure_message=None,
                  questionnaire=None, denied_message=None, expect_console=None,
-                 script=None, per_build=None, log=lambda *a: None):
+                 script=None, per_build=None, game="frlg", log=lambda *a: None):
         self.expect_console = None if expect_console is None else str(expect_console).lower()
-        if self.expect_console not in (None, "firered", "leafgreen"):
+        if game not in GAME_CONSOLES:
+            raise MysteryGiftServerError(f"game is one of {', '.join(GAME_CONSOLES)}, got {game!r}")
+        self.game = game
+        if self.expect_console not in (None, *GAME_CONSOLES[game]):
             raise MysteryGiftServerError(
-                f"expect_console is 'firered' or 'leafgreen', got {expect_console!r}")
+                f"expect_console is one of {', '.join(GAME_CONSOLES[game])}, got {expect_console!r}")
         self.console_mismatch = None
         self.news = None if news is None else bytes(news)
         if self.news is not None:
@@ -822,6 +829,7 @@ class MysteryGiftServer:
         self.game_data = mg_script.parse_link_game_data(self._received)
         self.info("Console identified itself: " + self.game_data.describe())
         self._check_expected_console()
+        self._check_game()
         self._select_build()
         for line in self.game_data.describe_extras():
             self.info(line)
@@ -838,6 +846,17 @@ class MysteryGiftServer:
             f"THIS RUN IS FOR {self.expect_console.upper()} AND THE CONSOLE THAT JOINED IS "
             f"{got.upper()}. Nothing was sent. Put the other cartridge on the Mystery Gift "
             "search screen and launch again, or drop --expect-console if the run does not care.")
+
+    def _check_game(self):
+        """Refuse a console of another game, before anything is sent: a gift names its own game's
+        flags, vars and specials (docs/rse.md, Mystery Gift)."""
+        got = self.game_data.version_name.lower()
+        if got in GAME_CONSOLES[self.game]:
+            return
+        self.console_mismatch = (self.game, got)
+        raise MysteryGiftServerError(
+            f"THIS GIFT IS FOR {' OR '.join(GAME_CONSOLES[self.game]).upper()} AND THE CONSOLE THAT "
+            f"JOINED IS {got.upper()}. Nothing was sent: its flags and variables are another game's.")
 
     BUILD_FIELDS = ("card", "ram_script", "news", "stamp", "activation_script",
                     "install_activation_script", "trainer", "mevent", "buffer_code", "buffer_lead",
@@ -866,7 +885,7 @@ class MysteryGiftServer:
         self.info(f"Console build {code} ({self.build.name}): sending the bytes built for it.")
 
     def _do_svr_check_game_data(self):
-        self.param = mg_script.validate_link_game_data(self.game_data)
+        self.param = mg_script.validate_link_game_data(self.game_data, news=self.news is not None)
         if not self.param:
             self.info("Console game data failed MysteryGift_ValidateLinkGameData; "
                       "declining to send the card.")

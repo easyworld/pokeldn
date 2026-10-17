@@ -250,7 +250,7 @@ def build_parser(file_config=None, *, shared_path=None, local_path=None):
               "function that returns nothing, such as SeedRng, this is the only evidence the call "
               "did what it was called for" % (builds.BPRF.rng, builds.BPRE.rng)))
     parser.add_argument(
-        "--expect-console", choices=("firered", "leafgreen"), default=None,
+        "--expect-console", choices=("firered", "leafgreen", "emerald"), default=None,
         help=("refuse the session unless the console that joins is this cartridge, checked "
               "against the version in its game data. Nothing is sent on a mismatch"))
     parser.add_argument(
@@ -624,8 +624,19 @@ def _hunt_definition(parser, args):
 
 def build_run_config(parser, args):
     profile, ldn, role = host_cli.build_host_config(parser, args)
+    emerald = args.version == "emerald" or args.expect_console == "emerald"
+    if args.version in ("ruby", "sapphire"):
+        parser.error("Ruby and Sapphire have no Mystery Gift menu, only the e-Reader's Mystery "
+                     "Event (docs/rse.md)")
+    if emerald and not args.gift_file:
+        parser.error("an Emerald console takes a gift file made for Emerald, --gift-file; the "
+                     "presets, news and console code are FireRed's (docs/rse.md, Mystery Gift)")
     try:
-        if args.gift_file:
+        if args.gift_file and emerald:
+            from pokeldn import gifts
+            from pokeldn.rse.gifts import EmeraldPayload
+            payload = EmeraldPayload(gifts.load(args.gift_file, game="rse"), dump_file=args.dump_file)
+        elif args.gift_file:
             from pokeldn import gifts
             from pokeldn.frlg.gift.file import FilePayload
             payload_prefixes = ("dump_", "create_mon_", "write_", "flash_", "scan_", "sum_",
@@ -890,8 +901,9 @@ def main(argv=None):
         from pokeldn import gifts
         from pokeldn.frlg.gift.file import from_payload
         try:
-            gift = from_payload(config.payload, console_build=config.console_build,
-                                version=config.console_version)
+            gift = (config.payload.file if hasattr(config.payload, "distribution") else
+                    from_payload(config.payload, console_build=config.console_build,
+                                 version=config.console_version))
             gifts.save(args.export_gift, gift,
                        build=None if config.console_build == "auto" else config.console_build)
         except (OSError, ValueError) as exc:

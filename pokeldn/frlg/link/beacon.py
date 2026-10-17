@@ -34,9 +34,13 @@ SEARCH_LANGUAGE_MASK = 0x3800
 SEARCH_LANGUAGE_SHIFT = 11
 SEARCH_HAS_CARD = 0x4000
 SEARCH_STARTED_ACTIVITY = 1 << 15
+# Bits of the 32-bit word at record[16:20] (docs/frlg_rom.md, The advertisement record).
+SEARCH_NATIONAL_LINK = 1 << 16      # canLinkNationally; Emerald gates a non-Emerald host on it
+SEARCH_NATIONAL_DEX = 1 << 17
+SEARCH_GAME_CLEAR = 1 << 24
 
-# Trading-board fields (docs/frlg_link.md, The trading board); bits 0-1 of byte 18 are unknown and
-# kept.
+# Trading-board fields (docs/frlg_link.md, The trading board); bits 0-1 of byte 18 and bit 0 of byte
+# 19 are the national flags above, kept.
 TRADE_BOARD_TYPE_OFFSET = 18
 TRADE_BOARD_LEVEL_OFFSET = 19
 TRADE_BOARD_SPECIES_OFFSET = 22

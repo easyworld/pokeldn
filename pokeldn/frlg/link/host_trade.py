@@ -534,6 +534,7 @@ class HostTradeEngine:
             self._expected = "warp0"
             self._queue_block(self._link_player_block, "host:link_player")
             self.info(f"Console identified as {lp.name!r}; sending the host LinkPlayer block now.")
+            self._warn_hoenn_dex(lp)
             return
         if expected == "uroom_chat":
             self._on_chat_block(data)
@@ -749,9 +750,10 @@ class HostTradeEngine:
             self.trace.append(("child_key", "READY"))
             self._maybe_finish_entry()
         elif key == LINK_KEY_EXIT_ROOM and self.state in (H_RETURN_FIELD, H_CC_BATTLE_ENTRY,
-                                                          H_UROOM_BATTLE_LINK):
-            # After a colosseum battle the console waits for every player to reach EXITING_ROOM
-            # [KeyInterCB_WaitForPlayersToExit, overworld.c:2977]; unanswered, the link errors.
+                                                          H_UROOM_BATTLE_LINK, H_ENTRY_SEAT):
+            # The console waits for every player to reach EXITING_ROOM [KeyInterCB_WaitForPlayersToExit,
+            # overworld.c:2977], after a battle or when its player walks out before sitting down;
+            # unanswered, it stays on "Please wait" (docs/frlg_link.md, Leaving the room).
             self.trace.append(("child_exit_first",))
             self._begin_room_exit(child_already_exited=True)
         elif key == LINK_KEY_EXIT_ROOM and self.state == H_EXIT:
@@ -1117,6 +1119,18 @@ class HostTradeEngine:
         if self.partner is not None:
             self._tick_online()
         return self._next_parent_words()
+
+    def _warn_hoenn_dex(self, lp):
+        """An Emerald console without the National Dex refuses an egg or a species outside the Hoenn
+        dex as our pick [pokeemerald trade.c:1585]; say so before the player reaches the prompt."""
+        if lp.version != linkplayer.VERSION_EMERALD:
+            return
+        from pokeldn.rse.constants import refuses_offer
+        for slot in sorted(set(self.offered_slots)):
+            mon_ = self.party[slot]
+            if refuses_offer(lp.progress_flags, mon_.species or 0, bool(mon_.raw[19] & 4)):
+                self.info(f"The console has no National Dex: Emerald refuses {mon_.species_name} "
+                          "(an egg, or outside the Hoenn Pokedex) and returns to the trade menu.")
 
     def _on_colosseum_link_player(self, data):
         """Task_StartWirelessCableClubBattle case 2/3 [cable_club.c:701]: the bare 28-byte

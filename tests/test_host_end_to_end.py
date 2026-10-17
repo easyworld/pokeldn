@@ -90,14 +90,16 @@ class ImpairedRadio:
 class ScriptedFireRedChild:
     """Right-seat peer that reacts only to leader wire traffic."""
 
-    def __init__(self, party, *, offered=(0, 1), trades=2):
+    def __init__(self, party, *, offered=(0, 1), trades=2, save_rounds=6,
+                 version=linkplayer.VERSION_FIRE_RED):
+        """`save_rounds` post-trade standbys: 6 on Switch FireRed, 5 in GBA Emerald's trade.c."""
         self.party = list(party)
         self.offered = list(offered)
+        self.save_rounds = save_rounds
         self.trades = trades
         self.rel = reliable.HostReliableSession(ack_period_ms=5,
                                                 rto_bootstrap_ms=20)
-        self.lp = linkplayer.LinkPlayer(name="SWITCH",
-                                        version=linkplayer.VERSION_FIRE_RED)
+        self.lp = linkplayer.LinkPlayer(name="SWITCH", version=version)
         self.card = linkplayer.build_trainer_card(self.lp)
         self.connect_id = b"\x80\x84"
         self.ni_send = None
@@ -190,8 +192,8 @@ class ScriptedFireRedChild:
                 self._req200 = 0
                 self._host_party = bytearray(600)
                 self._host_party_i = 0
-                base = 5 + (self.round - 1) * 6
-                for n in range(base, base + 6):
+                base = 5 + (self.round - 1) * self.save_rounds
+                for n in range(base, base + self.save_rounds):
                     self._queue_standby(n)
             elif cmd == trade.BOTH_CANCEL_TRADE:
                 self.cancel_seen = True
@@ -315,9 +317,9 @@ class ScriptedFireRedChild:
 
 
 class LeaderStack:
-    def __init__(self, party, trades=2):
+    def __init__(self, party, trades=2, save_rounds=None):
         self.session = HostSession(
-            party, trades=trades, offered_slots=list(range(trades)), anim_delay=1,
+            party, trades=trades, offered_slots=list(range(trades)), anim_delay=1, save_rounds=save_rounds,
             reliable_kwargs={"ack_period_ms": 5, "rto_bootstrap_ms": 20},
             rfu_kwargs={"host_session_id": b"\xb7\xf1"})
         self.rel = self.session.reliable
@@ -340,12 +342,14 @@ class LeaderStack:
         return self.session.tick(now)
 
 
-def _run_full_stack(trades=2):
+def _run_full_stack(trades=2, *, save_rounds=None, console_rounds=6, version=linkplayer.VERSION_FIRE_RED,
+                    require_completion=True):
     max_ms = 6000 * trades
     host_original = [_mon(0x11 + n) for n in range(trades)]
     child_original = [_mon(0x21 + n) for n in range(trades)]
-    host = LeaderStack(host_original, trades)
-    child = ScriptedFireRedChild(child_original, offered=range(trades), trades=trades)
+    host = LeaderStack(host_original, trades, save_rounds=save_rounds)
+    child = ScriptedFireRedChild(child_original, offered=range(trades), trades=trades,
+                                 save_rounds=console_rounds, version=version)
     radio = ImpairedRadio()
 
     for emission in child.start(0):
@@ -367,6 +371,8 @@ def _run_full_stack(trades=2):
                 and host.rel.inflight == child.rel.inflight == 0
                 and not radio.pending):
             return host, child, radio, host_original, child_original, now
+    if not require_completion:
+        return host, child, radio, host_original, child_original, None
     raise AssertionError(
         f"full stack timed out: t={max_ms} host={host.trade.state} "
         f"rfu={host.rfu.state} commits={host.trade.commits} "
@@ -441,3 +447,14 @@ def main():
     test_leader_cumulatively_acks_connect_before_opening_with_a()
     test_two_trades_survive_loss_duplicate_reordering_and_close_cleanly()
     print("host full-stack end-to-end test: OK")
+
+
+def test_an_emerald_console_with_five_save_rounds_trades_twice_with_save_rounds_5():
+    """GBA Emerald runs five post-trade standbys where Switch FireRed runs six [pokeemerald
+    trade.c:4686-4797]; --save-rounds 5 completes both trades, the FireRed count waits forever."""
+    host, child, *_, elapsed = _run_full_stack(2, save_rounds=5, console_rounds=5,
+                                               version=linkplayer.VERSION_EMERALD)
+    assert elapsed is not None and host.trade.commits == child.confirmed == 2
+    host, child, *_, elapsed = _run_full_stack(2, console_rounds=5, version=linkplayer.VERSION_EMERALD,
+                                               require_completion=False)
+    assert elapsed is None and child.confirmed == 1

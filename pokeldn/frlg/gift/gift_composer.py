@@ -2,6 +2,7 @@
 cursor, VAR_MYSTERY_GIFT_2..7 = stamp-slot cursors (0 absent, 1 activated, +1 per stage),
 FLAG_MYSTERY_GIFT_DONE = one-shot."""
 
+import contextvars
 import re
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from typing import TypeAlias
@@ -93,6 +94,40 @@ GET_CARD_BATTLES_WON = 2
 GET_CARD_BATTLES_LOST = 3
 GET_CARD_NUM_TRADES = 4
 SHAREABLE_STATES = (SHARE_NEVER, SHARE_ONCE, SHARE_ALWAYS)
+
+
+@dataclass(frozen=True)
+class GameRules:
+    """The numbers a compiled gift names that differ between FireRed/LeafGreen and Emerald; the field
+    script opcodes it emits are the same in both (docs/rse.md, Mystery Gift)."""
+    game: str
+    var_gift_1: int
+    slot_vars: tuple
+    flag_done: int
+    received_gift_flag: int         # sReceivedGiftFlags[0], the flag of card flagId 1000
+    max_item: int
+    max_flag: int
+    max_object_graphics: int
+    special_has_all_regional: int
+    special_legendary_battle: int
+    special_card_stat: int
+    max_special: int = 0xFFFF       # FireRed bounds `special` itself [scrcmd.c:101]; Emerald does not
+
+    def flag_for_flag_id(self, flag_id):
+        flag_for_flag_id(flag_id)       # the range check
+        return self.received_gift_flag + flag_id - 1000
+
+
+FRLG_RULES = GameRules("frlg", VAR_MYSTERY_GIFT_1, VAR_MYSTERY_GIFT_SLOT_VARS, FLAG_MYSTERY_GIFT_DONE,
+                       flag_for_flag_id(1000), MAX_ITEM, MAX_FLAG, MAX_OBJECT_GRAPHICS,
+                       SPECIAL_HAS_ALL_KANTO_MONS, SPECIAL_START_LEGENDARY_BATTLE,
+                       SPECIAL_GET_MYSTERY_GIFT_CARD_STAT)
+# compile_definition's `rules`, read by the emitters below while one definition compiles.
+_RULES = contextvars.ContextVar("gift_rules", default=FRLG_RULES)
+
+
+def rules():
+    return _RULES.get()
 _SHAREABLE_SEND_TYPES = {
     SHARE_NEVER: SEND_TYPE_DISALLOWED,
     SHARE_ONCE: SEND_TYPE_ALLOWED,
@@ -436,7 +471,7 @@ def _validate_card(card, path, *, flag_id):
     if card.send_type not in (0, 1, 2):
         _fail(f"{path}.send_type", "send type must be 0, 1, or 2")
     try:
-        flag_for_flag_id(flag_id)
+        rules().flag_for_flag_id(flag_id)
     except (TypeError, ValueError) as exc:
         _fail(f"{path}.default_flag_id", str(exc))
     for name in ("title", "subtitle", "footer1", "footer2"):
@@ -463,7 +498,7 @@ def _validate_action(action, path):
     if isinstance(action, Message):
         _validate_message(action.text, f"{path}.text")
     elif isinstance(action, GiveItem):
-        _validate_int(action.item, 1, MAX_ITEM, f"{path}.item", "item")
+        _validate_int(action.item, 1, rules().max_item, f"{path}.item", "item")
         _validate_int(action.quantity, 1, 0xFFFF, f"{path}.quantity", "quantity")
         if action.failure_message is not None:
             _validate_message(action.failure_message, f"{path}.failure_message")
@@ -471,7 +506,7 @@ def _validate_action(action, path):
         _validate_int(action.species, 1, MAX_POKEMON_SPECIES,
                       f"{path}.species", "species")
         _validate_int(action.level, 1, 100, f"{path}.level", "level")
-        _validate_int(action.held_item, 0, MAX_ITEM,
+        _validate_int(action.held_item, 0, rules().max_item,
                       f"{path}.held_item", "held item")
         if len(action.moves) > 4:
             _fail(f"{path}.moves", "a Pokémon may define at most four moves")
@@ -489,7 +524,7 @@ def _validate_action(action, path):
         if action.failure_message is not None:
             _validate_message(action.failure_message, f"{path}.failure_message")
     elif isinstance(action, ShowSprite):
-        _validate_int(action.graphics_id, 0, MAX_OBJECT_GRAPHICS,
+        _validate_int(action.graphics_id, 0, rules().max_object_graphics,
                       f"{path}.graphics_id", "graphics ID")
         _validate_position(action.position, f"{path}.position")
         _validate_int(action.direction, 0, 8, f"{path}.direction", "direction")
@@ -500,10 +535,10 @@ def _validate_action(action, path):
         _validate_int(action.species, 1, MAX_POKEMON_SPECIES,
                       f"{path}.species", "species")
         _validate_int(action.level, 1, 100, f"{path}.level", "level")
-        _validate_int(action.held_item, 0, MAX_ITEM,
+        _validate_int(action.held_item, 0, rules().max_item,
                       f"{path}.held_item", "held item")
     elif isinstance(action, RequireSpecialResult):
-        _validate_int(action.special_id, 0, 0xFFFF,
+        _validate_int(action.special_id, 0, rules().max_special,
                       f"{path}.special_id", "special ID")
         _validate_int(action.expected, 0, 0xFFFF,
                       f"{path}.expected", "expected result")
@@ -513,7 +548,7 @@ def _validate_action(action, path):
         _validate_int(action.value, 0, 0xFFFF, f"{path}.value", "value")
     elif isinstance(action, ReadSpecial):
         _validate_variable_id(action.variable, f"{path}.variable")
-        _validate_int(action.special_id, 0, 0xFFFF, f"{path}.special_id", "special ID")
+        _validate_int(action.special_id, 0, rules().max_special, f"{path}.special_id", "special ID")
     elif isinstance(action, GiveRandomEgg):
         if not action.eggs:
             _fail(f"{path}.eggs", "at least one egg is needed")
@@ -544,7 +579,7 @@ def _validate_condition(condition, path):
         _validate_variable_id(condition.variable, f"{path}.variable")
         _validate_int(condition.value, 0, 0xFFFF, f"{path}.value", "value")
     elif isinstance(condition, FlagSet):
-        _validate_int(condition.flag, MIN_FLAG, MAX_FLAG, f"{path}.flag", "flag")
+        _validate_int(condition.flag, MIN_FLAG, rules().max_flag, f"{path}.flag", "flag")
     elif isinstance(condition, Not):
         _validate_condition(condition.condition, f"{path}.condition")
     elif isinstance(condition, (AllOf, AnyOf)):
@@ -869,7 +904,7 @@ def _emit_battle_checkpoint(builder, cursor, final_cursor, *, receipt_flag,
     builder.emit(_setvar(cursor, final_cursor))
     builder.emit(_setflag(receipt_flag))
     if overall_completion:
-        builder.emit(_setflag(FLAG_MYSTERY_GIFT_DONE))
+        builder.emit(_setflag(rules().flag_done))
 
 
 def _emit_condition_branch(builder, condition, true_label, false_label, prefix):
@@ -995,7 +1030,7 @@ def _emit_action(builder, action, *, sprite_id, failure_label, completed_label):
         builder.emit(bytes([_OP_SETWILDBATTLE]) + _u16(action.species)
                      + bytes([action.level]) + _u16(action.held_item)
                      + bytes([_OP_SPECIAL])
-                     + _u16(SPECIAL_START_LEGENDARY_BATTLE))
+                     + _u16(rules().special_legendary_battle))
     elif isinstance(action, RequireSpecialResult):
         builder.emit(_specialvar(_VAR_RESULT, action.special_id))
         builder.emit(_compare(_VAR_RESULT, action.expected))
@@ -1144,33 +1179,33 @@ def _rally_entries(definition, plan, path):
 def _compile_gift(definition, flag_id):
     builder = _FieldScriptBuilder()
     failures = []
-    receipt_flag = flag_for_flag_id(flag_id)
+    receipt_flag = rules().flag_for_flag_id(flag_id)
     repeatable = definition.event.repeatable
     stages = _shared_entries(definition)
     builder.emit(bytes([_OP_SETVADDRESS])
                  + _RAM_SCRIPT_VIRTUAL_BASE.to_bytes(4, "little"))
     builder.emit(bytes([_OP_LOCK, _OP_FACEPLAYER]))
     if not repeatable:
-        builder.emit(bytes([_OP_CHECKFLAG]) + _u16(FLAG_MYSTERY_GIFT_DONE))
+        builder.emit(bytes([_OP_CHECKFLAG]) + _u16(rules().flag_done))
         builder.vgoto_if(_COMPARE_EQ, "completed")
     builder.message(definition.intro_message)
     # A replacement Wonder Card clears the card-scoped vars but not sReceivedGiftFlags.
     builder.emit(_clearflag(receipt_flag))
     _emit_cursor_dispatch(
-        builder, VAR_MYSTERY_GIFT_1, stages,
+        builder, rules().var_gift_1, stages,
         "main", "finish")
     _emit_plan(
-        builder, stages, VAR_MYSTERY_GIFT_1, "main", "finish",
+        builder, stages, rules().var_gift_1, "main", "finish",
         failures, 0, receipt_flag=receipt_flag, completed_label="completed",
         overall_completion=not repeatable,
         reset_on_terminal_battle=repeatable)
 
     builder.label("finish")
     if repeatable:
-        builder.emit(_setvar(VAR_MYSTERY_GIFT_1, 0))
+        builder.emit(_setvar(rules().var_gift_1, 0))
         builder.emit(_setflag(receipt_flag))
     else:
-        builder.emit(_setflag(FLAG_MYSTERY_GIFT_DONE))
+        builder.emit(_setflag(rules().flag_done))
         builder.emit(_setflag(receipt_flag))
     builder.vgoto("exit")
     builder.label("completed")
@@ -1206,17 +1241,17 @@ def _compile_rally(definition, flag_id):
     builder = _FieldScriptBuilder()
     failures = []
     rally = definition.event
-    receipt_flag = flag_for_flag_id(flag_id)
+    receipt_flag = rules().flag_for_flag_id(flag_id)
     builder.emit(bytes([_OP_SETVADDRESS])
                  + _RAM_SCRIPT_VIRTUAL_BASE.to_bytes(4, "little"))
     builder.emit(bytes([_OP_LOCK, _OP_FACEPLAYER]))
-    builder.emit(bytes([_OP_CHECKFLAG]) + _u16(FLAG_MYSTERY_GIFT_DONE))
+    builder.emit(bytes([_OP_CHECKFLAG]) + _u16(rules().flag_done))
     builder.vgoto_if(_COMPARE_EQ, "completed")
     builder.message(definition.intro_message)
 
     sprite_counter = 0
     for slot_index, slot in enumerate(rally.slots):
-        cursor = VAR_MYSTERY_GIFT_SLOT_VARS[slot_index]
+        cursor = rules().slot_vars[slot_index]
         prefix = f"slot_{slot_index}"
         next_label = f"slot_{slot_index + 1}_dispatch"
         stages = _rally_entries(
@@ -1250,7 +1285,7 @@ def _compile_rally(definition, flag_id):
 
     builder.label(f"slot_{len(rally.slots)}_dispatch")
     for slot_index, slot in enumerate(rally.slots):
-        cursor = VAR_MYSTERY_GIFT_SLOT_VARS[slot_index]
+        cursor = rules().slot_vars[slot_index]
         stages = _rally_entries(
             definition, slot.delivery,
             f"{definition.slug}.event.slots[{slot_index}].delivery")
@@ -1263,15 +1298,15 @@ def _compile_rally(definition, flag_id):
         definition, rally.completion,
         f"{definition.slug}.event.completion")
     _emit_cursor_dispatch(
-        builder, VAR_MYSTERY_GIFT_1, completion, "completion", "finish")
+        builder, rules().var_gift_1, completion, "completion", "finish")
     _emit_plan(
-        builder, completion, VAR_MYSTERY_GIFT_1,
+        builder, completion, rules().var_gift_1,
         "completion", "finish", failures, sprite_counter,
         receipt_flag=receipt_flag, completed_label="completed",
         overall_completion=True)
 
     builder.label("finish")
-    builder.emit(_setflag(FLAG_MYSTERY_GIFT_DONE))
+    builder.emit(_setflag(rules().flag_done))
     builder.emit(_setflag(receipt_flag))
     builder.vgoto("exit")
     builder.label("waiting")
@@ -1290,7 +1325,7 @@ def _compile_rally(definition, flag_id):
         card_type=CARD_TYPE_STAMP, max_stamps=len(rally.slots))
     distributions = {}
     for slot_index, slot in enumerate(rally.slots):
-        cursor = VAR_MYSTERY_GIFT_SLOT_VARS[slot_index]
+        cursor = rules().slot_vars[slot_index]
         stamp = _u16(slot.stamp_species) + _u16(slot.stamp_id)
         distributions[slot.slug] = MysteryGiftDistribution(
             card=card, ram_script=script, stamp=stamp,
@@ -1518,8 +1553,13 @@ __all__ = [
 ]
 
 
-def compile_definition(definition, *, flag_id=None, build=None):
-    result = _compile_definition(definition, flag_id=flag_id, build=build)
+def compile_definition(definition, *, flag_id=None, build=None, rules=FRLG_RULES):
+    """`rules` names the game the script runs in; Emerald's are pokeldn.rse.constants.EMERALD_RULES."""
+    token = _RULES.set(rules)
+    try:
+        result = _compile_definition(definition, flag_id=flag_id, build=build)
+    finally:
+        _RULES.reset(token)
     from pokeldn.frlg.gift import wonder_card
     def convert(distribution):
         return replace(distribution, card=wonder_card.for_build(distribution.card, build))

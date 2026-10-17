@@ -85,6 +85,8 @@ class MysteryGiftDistribution:
     buffer_decode: str | None = None
     # rom-checksum only: the path of the ROM image its sums are compared with, per build.
     buffer_reference: str | None = None
+    # The game whose flags and variables the scripts name; mg_server.GAME_CONSOLES lists who takes it.
+    game: str = "frlg"
 
     def __post_init__(self):
         if self.buffer_code is not None:

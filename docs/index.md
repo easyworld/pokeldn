@@ -6,8 +6,9 @@ nav_order: 1
 # pokeldn
 
 pokeldn is an implementation of Nintendo Switch local wireless (LDN) that speaks to Pokemon games
-running on retail Switch hardware, through an ESP32 board on USB serial as its radio. These pages document the protocols involved, with
-decompilation citations, disassembly addresses and hardware measurements.
+running on retail Switch hardware, through an ESP32 board as its radio: on USB serial from a computer
+or an Android phone, or over Bluetooth from an iPhone. These pages document the protocols involved,
+with decompilation citations, disassembly addresses and hardware measurements.
 
 Start with [app setup](gui.md) or [command-line usage](usage.md).
 [Code organization](architecture.md) covers the shared modules and tests.
@@ -48,7 +49,7 @@ Legends Arceus, in Scarlet and Violet and in Legends Z-A.
 | [Legends Z-A](za.md) | Pia header version 16, the game's twenty trade messages, and the trade in both roles. |
 | [Simulated Mystery Gifts](gift_simulated.md) | Official gift Pokemon traded by the host to the five titles with no local Mystery Gift, made for the receiving save. |
 | [Command-line usage](usage.md) | Source setup and commands for each game. |
-| [Desktop app](gui.md) | Setup, Bank, controller, updates and builds. |
+| [Desktop app](gui.md) | Setup, Bank, controller, updates and builds; the same app on Android and iOS. |
 | [Code organization](architecture.md) | Shared modules, Pokémon preparation and verification. |
 | [Hardware and setup](hardware.md) | The ESP32 radio, Switch keys, and legacy Linux Wi-Fi cards. |
 

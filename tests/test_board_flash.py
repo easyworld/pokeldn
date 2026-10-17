@@ -28,13 +28,15 @@ BOOTLOADERS = {
 }
 
 
-@pytest.mark.parametrize("protocol,text,release,compatible", [
-    (1, b"pokeldn-radio esp32c3 version=1.0.0 idf=v6.1", "1.0.0", True),
-    (1, b"pokeldn-radio esp32 version=0.9.9 idf=v6.1", "0.9.9", True),
-    (1, b"pokeldn-radio esp32s3 idf=v6.1", "", True),
-    (2, b"pokeldn-radio esp32 version=2.0.0 idf=v6.1", "2.0.0", False),
+@pytest.mark.parametrize("protocol,text,release,compatible,ble", [
+    (1, b"pokeldn-radio esp32c3 version=1.0.0 idf=v6.1", "1.0.0", True, False),
+    (1, b"pokeldn-radio esp32 version=0.9.9 idf=v6.1", "0.9.9", True, False),
+    (1, b"pokeldn-radio esp32s3 idf=v6.1", "", True, False),
+    (2, b"pokeldn-radio esp32 version=2.0.0 idf=v6.1", "2.0.0", False, False),
+    # What a XIAO ESP32C6 running the Bluetooth build answered over USB.
+    (1, b"pokeldn-radio esp32c6 version=1.6.2 idf=v6.1-dirty link=ble", "1.6.2", True, True),
 ])
-def test_identify_preserves_release_and_protocol_across_serial(monkeypatch, protocol, text, release, compatible):
+def test_identify_preserves_release_and_protocol_across_serial(monkeypatch, protocol, text, release, compatible, ble):
     class SerialReply:
         def __init__(self):
             self.inbox = Queue()
@@ -69,6 +71,7 @@ def test_identify_preserves_release_and_protocol_across_serial(monkeypatch, prot
     assert ident.firmware == text.decode()
     assert ident.firmware_version == release
     assert ident.protocol == protocol and ident.current is compatible
+    assert ident.ble is ble
     assert serial.closed
 
 

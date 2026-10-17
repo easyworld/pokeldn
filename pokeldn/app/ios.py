@@ -15,6 +15,21 @@ def port() -> str:
     return os.environ.get("POKELDN_IOS_RADIO", "")
 
 
+CONTAINER = "/var/mobile/Containers/Data/Application/"
+
+
+def rebase(value):
+    """A path saved under an earlier install's data container, moved to this one: iOS gives the app a
+    new container path on every install and update, and refuses the old one (Errno 1)."""
+    home = os.environ.get("POKELDN_IOS_DOCUMENTS", "")
+    for prefix in (CONTAINER, "/private" + CONTAINER):
+        if isinstance(value, str) and value.startswith(prefix) and home:
+            current = os.path.dirname(home)   # the container: Documents' parent
+            rest = value[len(prefix):].split("/", 1)
+            return os.path.join(current, rest[1]) if len(rest) == 2 else current
+    return value
+
+
 def radio_state() -> str:
     """off, scanning or ready: what main.m last wrote to Documents/.radio."""
     try:
@@ -75,7 +90,7 @@ class Picker:
     async def pick_files(self, allow_multiple: bool = False, allowed_extensions=None, **_):
         import asyncio
         paths = await asyncio.to_thread(_ask, f"pick {int(bool(allow_multiple))}")
-        files = [PickedFile(p) for p in paths]
+        files = [PickedFile(_keep(p)) for p in paths]
         if allowed_extensions:
             wanted = {e.lower().lstrip(".") for e in allowed_extensions}
             files = [f for f in files if f.name.rsplit(".", 1)[-1].lower() in wanted] or files
@@ -94,6 +109,18 @@ class Picker:
 
     async def get_directory_path(self, initial_directory: str = "", **_):
         return initial_directory or None
+
+
+def _keep(path: str) -> str:
+    """The picker's copy sits in tmp, which iOS empties; a setting such as prod.keys must outlive it."""
+    import shutil
+    import tempfile
+    from pokeldn.app.paths import DATA
+    os.makedirs(DATA / "picked", exist_ok=True)
+    folder = tempfile.mkdtemp(dir=DATA / "picked")
+    kept = os.path.join(folder, os.path.basename(path))
+    shutil.move(path, kept)
+    return kept
 
 
 def _export_when_written(path: str, settle: float = 1.0, limit: float = 600.0) -> None:

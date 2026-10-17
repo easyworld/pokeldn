@@ -131,6 +131,22 @@ The walk-out: the host emits `LINK_KEY_CODE_EXIT_ROOM` (0x17) and blocks in
 [overworld.c:2962-2981]. The child must answer with its own 0x17 on the held-keys stream; an all-zero
 slot is not a key.
 
+## Leaving the room
+
+A console whose player walks out of the Trade Center, before sitting down or after a battle, sends
+held key `0x17` (EXITING_ROOM) and waits on "Please wait" until every player has sent it
+[KeyInterCB_WaitForPlayersToExit, overworld.c:2977]. The host answers with its own `0x17` in
+`H_ENTRY_SEAT`, `H_RETURN_FIELD` and the battle states (`host_trade._child_send_held_keys`). A retail
+FireRed that walked out while the host was still walking to its chair stayed on "Please wait" until
+`H_ENTRY_SEAT` answered too.
+
+### Quiet gate
+
+While the console has sent nothing for `QUIET_GATE_SECONDS` (0.25 s), the host drops its own
+retransmissions, except one every `QUIET_RETRANSMIT_SECONDS` (1 s), so a console waiting on a frame
+the host's hole guard (`HOST_OUTSTANDING_MAX`) holds behind still receives it
+(`tests/test_host_quiet_gate.py`).
+
 ## Cancel after a trade
 
 `BufferTradeParties` clears received block flags after the gift-ribbon exchange
@@ -478,7 +494,8 @@ and stays in the room with no error.
 ## The trading board
 
 The board lists partners whose advertisement carries `tradeSpecies`, `tradeType` and `tradeLevel`
-[union_room.c:3400]: record byte 18 (`type << 2`), 19 (`gender | level << 1`) and 22:24 (little-endian
+[union_room.c:3400]: record byte 18 (`type << 2`), 19 (`gameClear | level << 1`, as the wrapper packs it:
+[The advertisement record](frlg_rom.md#the-advertisement-record)) and 22:24 (little-endian
 `tradeSpecies:10` of `RfuGameData` [include/link_rfu.h:107]). Species 277 (Treecko; low byte alone 21,
 Spearow) lists as "POKELDN / NORMAL / ARCKO / 26", which measures byte 23.
 

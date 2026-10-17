@@ -14,7 +14,9 @@
 Trade with retail Pokémon games on Switch and Switch 2 through an ESP32 board connected to your
 computer by USB. Nothing is installed on the console.
 
-The desktop app runs on macOS (Apple silicon), Windows and Linux. Command-line tools run from source.
+The desktop app runs on macOS (Apple silicon), Windows and Linux. The same app runs on Android, with
+the board on the phone's USB port, and on iPhone and iPad, with the board reached over Bluetooth.
+Command-line tools run from source.
 The project also documents the games' local wireless protocols. AI tools helped reverse engineer
 those protocols and write parts of the code.
 
@@ -51,6 +53,15 @@ Switch `prod.keys`, and a Switch or Switch 2 with a supported game.
 3. Connect the board and install the Wireless firmware from the Board page.
 4. Choose a game and tool, then follow the console instructions in the app.
 
+On a phone:
+
+- **Android**: install `pokeldn-android-arm64.apk` from Releases and plug an ESP32-S3, C3 or C6 into
+  the phone with a USB data cable ([Android setup](docs/gui.md#android-setup-requirements)).
+- **iPhone and iPad**: install `pokeldn-ios.ipa` with AltStore or SideStore (the app's
+  [AltStore source](https://raw.githubusercontent.com/Decryptu/pokeldn/main/.github/altstore/source.json)).
+  Flash the board once with the **Bluetooth wireless** firmware from the desktop app's Board page; it
+  then needs USB only for power ([iOS setup](docs/gui.md#ios-setup)).
+
 See [app setup](docs/gui.md), [first launch](docs/gui.md#first-launch),
 [Windows USB drivers](docs/gui.md#windows-usb-drivers) and [Linux serial ports](docs/gui.md#linux-serial-ports).
 
@@ -68,8 +79,8 @@ See [app setup](docs/gui.md), [first launch](docs/gui.md#first-launch),
 | Windows USB Wi-Fi adapters | [ldnrs setup](docs/hardware_adapters.md#windows-usb-wi-fi-through-ldnrs) |
 | Boards, firmware and optional screens | [ESP32 radio](docs/hardware_esp32.md) |
 | Running and building the desktop app from source | [Desktop builds](docs/gui.md#run-from-source) |
-| Building the experimental Android USB host | [Android prototype](examples/android/README.md) |
-| Building the experimental iOS app (Bluetooth radio, AltStore) | [iOS prototype](examples/ios/README.md) |
+| Building the Android app | [Android app](examples/android/README.md) |
+| Building the iOS app (Bluetooth radio, AltStore) | [iOS app](examples/ios/README.md) |
 | Code layout, Pokémon legality and tests | [Code organization](docs/architecture.md) |
 | Wireless protocols and reverse engineering | [Documentation index](docs/index.md) |
 

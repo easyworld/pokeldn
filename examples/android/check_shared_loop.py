@@ -52,3 +52,31 @@ assert set(threads) == {network.loop_thread}
 assert network.loop_thread != threading.get_ident()
 assert network.stopped == 1
 print('PASS shared Trio scheduler: tick thread, close grace, and network cleanup')
+
+# The app's Stop while the protocol never ends: InProcess.stop runs the closing hooks, and the run
+# thread, which waits in trio.from_thread.run, must leave with KeyboardInterrupt and clean up.
+import time
+from pokeldn.app import runner
+network = Network([('switch',)])
+session = _session()
+peer = _Peer(session, network, lambda peer: None)
+app = _RuntimeApplication(network, _Injector(), session, peer)
+app._timing = {}
+outcome = []
+def run():
+    try:
+        outcome.append(android_host_loop.run(app))
+    except KeyboardInterrupt:
+        outcome.append('stopped')
+worker = threading.Thread(target=run, daemon=True)   # a run Stop cannot reach fails here, not hangs
+worker.start()
+deadline = time.monotonic() + 3
+while peer.ticks < 3 and time.monotonic() < deadline:
+    time.sleep(0.01)
+assert peer.ticks >= 3, 'the protocol never ticked'
+for hook in list(runner._closing):
+    hook()
+worker.join(3)
+assert not worker.is_alive() and outcome == ['stopped'], outcome
+assert network.stopped == 1 and not runner._closing
+print('PASS shared Trio scheduler: the app\'s Stop cancels a protocol that never ends')

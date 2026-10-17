@@ -279,6 +279,11 @@ HAS_SAME_CARD = 1
 HAS_DIFF_CARD = 2
 
 _VERSION_NAMES = {VERSION_CODE_FIRERED: "FireRed", VERSION_CODE_LEAFGREEN: "LeafGreen"}
+# The game code's first three letters name the game for every Gen III title (docs/rse.md).
+GAME_NAMES = {b"AXV": "Ruby", b"AXP": "Sapphire", b"BPE": "Emerald", b"BPR": "FireRed", b"BPG": "LeafGreen"}
+# Emerald fills +0x0C and +0x10 with gift-type bits, not a version [pokeemerald mystery_gift.c:342-363].
+EMERALD_GIFT_TYPE_1 = 1 << 2
+EMERALD_GIFT_TYPE_2 = 1 << 9
 
 
 @dataclass(frozen=True)
@@ -306,7 +311,15 @@ class LinkGameData:
 
     @property
     def version_name(self):
+        # FireRed and LeafGreen keep the version code they send; Emerald sends gift-type bits there.
+        other = GAME_NAMES.get(bytes(self.game_code[:3]))
+        if other in ("Ruby", "Sapphire", "Emerald"):
+            return other
         return _VERSION_NAMES.get(self.version_code & 0x0F, f"version {self.version_code}")
+
+    @property
+    def is_emerald(self):
+        return bytes(self.game_code[:3]) == b"BPE"
 
     @property
     def has_card(self):
@@ -392,14 +405,19 @@ def parse_link_game_data(payload):
     )
 
 
-def validate_link_game_data(data):
-    """Port of MysteryGift_ValidateLinkGameData [decomp:src/mystery_gift.c:373]."""
+def validate_link_game_data(data, news=False):
+    """Port of MysteryGift_ValidateLinkGameData [decomp:src/mystery_gift.c:373]; an Emerald console
+    is held to Emerald's, which checks the gift-type bits for a card only [pokeemerald
+    mystery_gift.c:390]."""
     if data.magic != GAME_DATA_VALID_VAR:
         return False
     if not data.unk_04 & 1:
         return False
     if not data.unk_08 & 1:
         return False
+    if data.is_emerald:
+        return news or bool(data.unk_0c & EMERALD_GIFT_TYPE_1
+                            and data.version_code & (EMERALD_GIFT_TYPE_2 | 0x180))
     if not data.unk_0c & 1:
         return False
     if not data.version_code & 0x0F:

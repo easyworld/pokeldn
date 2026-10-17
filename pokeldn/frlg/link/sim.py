@@ -545,7 +545,8 @@ class Sim:
         src = ni.build_game_data(version_low=lp.version & 0xFF,
                                  trainer_id=lp.trainer_id & 0xFFFF, ot_name=lp.name,
                                  activity=getattr(self.engine, "ni_activity", ni.ACTIVITY_TRADE),
-                                 started=getattr(self.engine, "ni_started", True))
+                                 started=getattr(self.engine, "ni_started", True),
+                                 **linkplayer.national_flags(lp))
         self._ni = ni.NISender(src)
 
     def _gba_frame(self):

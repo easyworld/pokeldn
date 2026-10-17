@@ -106,7 +106,8 @@ class GiftBuilder:
             summary = ft.Column([self.when, self.effects, self.status], spacing=10)
             return [t.card(tr('gifts.gift_1a596a', 'Gift'), ft.Column([modes, body], spacing=14)), t.card(tr('gifts.before_you_start_74e492', 'Before you start'), summary)]
         actions = [self.save_button]
-        if mode == "preset" and self.module.PRESET[self.value["preset"]].state is not None:
+        if (mode == "preset" and self.module.PRESET[self.value["preset"]].state is not None
+                and any(m[0] == "build" for m in gift_builder.modes(self.game))):
             actions.insert(0, t.secondary_button(tr('gifts.customize_c5276e', 'Customize'), self._customize, "sliders-horizontal"))
         summary = ft.Column([self.when, self.effects, self.status,
                              ft.Row(actions, alignment=ft.MainAxisAlignment.END)], spacing=10)
@@ -743,7 +744,8 @@ class GiftBuilder:
             pass
         elif mode != "preset" or self.module.PRESET[self.value["preset"]].args == ():
             gift = gift_builder.compile(self.tool, self.value)
-            targets = [translate(frlg.CARTRIDGES.get(code, tr('gifts.sword_and_shield_769780', 'Sword and Shield'))) for code in gift.variants]
+            targets = [translate(frlg.CARTRIDGES.get(code) or (tr('gifts.emerald', 'Emerald') if code == "emerald"
+                       else tr('gifts.sword_and_shield_769780', 'Sword and Shield'))) for code in gift.variants]
             self.status.value = tr('gifts.works_on_8e9709', 'Works on ') + ", ".join(targets) + "."
             if mode == "file":
                 lines = [gift.name]

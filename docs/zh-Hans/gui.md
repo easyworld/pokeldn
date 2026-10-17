@@ -34,17 +34,23 @@ title: Desktop builds
 | 开发板回应握手 | 显示检测到的开发板和固件，再继续游戏流程 |
 | 开发板断开或用户从设置返回 | 刷新检测及权限状态，更新引导；开发板就绪后继续设置 |
 
-导入的 `prod.keys` 必须包含 `master_key_00`、`aes_kek_generation_source` 和 `aes_key_generation_source`；导入的 `.pk3` 必须为 80 或 100 字节，且校验和正确。手机端没有 PKHeX，因此不会对导入记录执行合法性检查。接收的宝可梦通过 Android 文件选择器保存。
+仅通过 CP210x、CH34x 或 FTDI 桥接芯片连接的开发板（经典 ESP32）会被标为手机应用无法驱动。PKHeX 已编译为 Android 版本，在手机上运行。接收的宝可梦通过 Android 文件选择器保存。
 
 设置引导应使用已验证的厂商路径或可搜索的设置名称，并在 Android 支持时提供设置快捷入口。流程显示下一步操作和当前进度。ADB、无线调试等开发工具不属于用户设置流程。
 
-Android 会将通过 CP210x、CH34x 或 FTDI 桥接芯片连接的开发板（经典 ESP32）标为手机无法驱动。“打开文件夹”会将目录保存为 ZIP，由玩家选择保存位置；文件选择器使用 Android 系统界面。
+Android 的“打开文件夹”会将目录保存为 ZIP，由玩家选择保存位置；文件选择器使用 Android 系统界面。
+
+<a id="ios-setup"></a>
+
+## iOS 设置
+
+[iOS 应用](../examples/ios/README.md)在 iPhone、iPad 上提供同一套界面，通过 AltStore 或 SideStore 安装。iPhone 无法打开 USB 串口设备，因此应用通过蓝牙连接开发板。开发板必须运行**蓝牙无线**固件，先从桌面应用“开发板”页安装一次：ESP32-C6 使用 `pokeldn-radio-ble-c6.bin`，经典 ESP32 使用 `pokeldn-radio-ble.bin`。之后 USB 仅用于供电。手机连接后，“开发板”页会将它列为“蓝牙无线开发板”；首次启动会请求蓝牙访问权限。手机占用开发板期间，开发板不回应 USB 数据线上的请求；从电脑或 Android 手机使用前，请先关闭 iOS 应用。文件选择器使用 iOS 系统界面，所选文件会复制到应用中；应用文件位于“文件 → 我的 iPhone → pokeldn”。
 
 <a id="phones"></a>
 
 ## 手机界面
 
-窗口宽度小于 760 点时，应用使用底部标签栏切换页面；每页一次显示一个面板，可通过上方的切换器选择。“游戏”页包括“游戏”“选项”“会话”，选择工具后自动显示选项，点击“开始”后显示会话。对话框占用屏幕宽度。Android 不提供“手柄”和“更新”页面。
+窗口宽度小于 760 点时，应用使用底部标签栏切换页面；每页一次显示一个面板，可通过上方的切换器选择。“游戏”页包括“游戏”“选项”“会话”，选择工具后自动显示选项，点击“开始”后显示会话。对话框占用屏幕宽度。Android 和 iOS 不提供“手柄”和“更新”页面。
 
 <a id="app-language"></a>
 
@@ -292,6 +298,23 @@ Let's Go、晶灿钻石／明亮珍珠、传说 阿尔宙斯、朱／紫和传�
 
 除 Let's Go 外，HOME 礼物按 [HOME 追踪码设置](#the-home-tracker-setting) 处理。卡片以琥珀色边框标出，卡片和选中副本均显示“PKHeX 提示缺少 HOME 追踪码”或“无法存入 HOME”。交换仍按普通提供记录处理（[交换提供的副本](gift_simulated.md#the-copy-a-trade-offers)）。
 
+<a id="private-logs"></a>
+
+## 日志隐私
+
+“设置 → 隐藏日志中的个人信息”默认启用，会在应用显示和复制的会话日志、开发板日志中遮罩以下内容（`pokeldn/app/redact.py`）：
+
+| 遮罩内容 | 替换显示 | 保留内容 |
+|---|---|---|
+| 路径中的用户目录（`/Users/NAME`、`/home/NAME`、`C:\Users\NAME`） | `~` | 路径的其余部分 |
+| iOS 应用容器（`/var/mobile/Containers/Data/Application/UUID`） | `<app>` | |
+| MAC 地址的设备部分，支持带冒号和不带冒号的格式 | `**:**:**`、`******` | 厂商部分（任天堂、乐鑫） |
+| `ot_name`、`ht_name`、`OT`、`nickname`、`trainer`、`player` 或 `name` 后带引号的值（`'…'`、`"…"`、`b'…'`） | `***` | 应用自身名称 `POKELDN`、`PKLDN`，不区分大小写 |
+| `TID`、`SID`、`tid`、`sid`、`trainer_id` 后的值 | `***` | |
+| 本次运行中曾出现的训练家姓名，以及设置中的训练家姓名，再次作为完整单词出现时 | `***` | |
+
+昵称只在其原位置被遮罩，不会在其他位置替换，因为它经常与宝可梦种类名称相同。会话录制（`captures/`）保存原始消息，不进行遮罩。本地连接地址（`169.254.x.x`、`127.0.0.x`）不用于识别个人，因此保留。
+
 <a id="pop-ups"></a>
 
 ## 弹窗
@@ -373,6 +396,12 @@ Flet 1.0.2 的桌面客户端不会发生文件丢失。 `scripts/build_client.p
 `gui/client/<platform>`。 `gui/drop.py` 声明匹配的 `FileDrop` 控件。 `gui/main.py` 在构建时运行该客户端，否则运行 Flet 自己的客户端，其中不显示目标；冻结的应用程序总是带有构建的应用程序。该脚本需要Flutter，版本为
 `python -m flet_cli.cli --version --json` 名称（Flet 1.0.2 为 3.44.8）。它将 macOS 客户端的部署目标从 11.0 提高到 12.0：Xcode 27 不会构建任何旧版本。 Linux 客户端是 Flet 的轻量版，因为 Flet 自己的 CI 构建了它。
 
+<a id="unreleased-titles"></a>
+
+## 尚未发布的游戏
+
+为尚未推出 Switch 版本的游戏预先准备的支持，仅在从源码目录运行时显示于游戏列表、银行和文档页（`pokeldn/app/preview.py`）。发行包已冻结且不含 `.git`，因此默认不显示。`POKELDN_PREVIEW=1` 可在任何环境显示；`POKELDN_PREVIEW=0` 可在源码目录隐藏。对应文档设置 `nav_exclude` 和 `search_exclude`。
+
 ## 从源代码运行
 
 对于源开发，请安装 Python 3.13 和 .NET 10 SDK：
@@ -407,6 +436,15 @@ idf.py -B build/esp32c3 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c3.bin"
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" set-target esp32c6
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" build
 idf.py -B build/esp32c6 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c6.bin"
+export POKELDN_BLE=1   # the Bluetooth builds for the iOS app (hardware_esp32.md, Bluetooth)
+BLE_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.ble"
+idf.py -B build/ble -D SDKCONFIG="$PWD/build/ble/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" set-target esp32
+idf.py -B build/ble -D SDKCONFIG="$PWD/build/ble/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" build
+idf.py -B build/ble merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-ble.bin"
+idf.py -B build/ble-c6 -D SDKCONFIG="$PWD/build/ble-c6/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" set-target esp32c6
+idf.py -B build/ble-c6 -D SDKCONFIG="$PWD/build/ble-c6/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" build
+idf.py -B build/ble-c6 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-ble-c6.bin"
+unset POKELDN_BLE
 cd ../pad
 idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" set-target esp32s3
 idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" build
@@ -417,7 +455,7 @@ python scripts/build_unicorn.py
 python scripts/pack_app.py
 ```
 
-绝对输出路径使镜像保留在 `gui/firmware`。打包器要求全部五个镜像、`scripts/build_client.py` 构建的客户端，以及 `scripts/build_unicorn.py` 构建的 Unicorn（需要 CMake）；冻结应用自检确认它们均已包含，且随包客户端支持 `flet_drop`。发布工作流分别构建各目标，再向每个平台的桌面打包器提供全部五个镜像。
+绝对输出路径使镜像保留在 `gui/firmware`。打包器要求无线、蓝牙无线和手柄固件镜像、`scripts/build_client.py` 构建的客户端，以及 `scripts/build_unicorn.py` 构建的 Unicorn（需要 CMake）；冻结应用自检确认它们均已包含，且随包客户端支持 `flet_drop`。发布工作流分别构建各目标，再向每个平台的桌面打包器提供全部镜像。
 
 应用版本为 `pokeldn.__version__`，显示在设置及 macOS、Windows 软件包元数据中。准备发布前，与 `.github/release-notes.md` 一起更新。工作流为三种桌面下载和五个固件镜像生成 `SHA256SUMS`。手动运行只生成构建产物；`v*` 标签发布名为 `pokeldn vX.Y.Z` 的版本，以 `.github/release-notes.md` 为正文；其首行必须为 `# pokeldn X.Y.Z`（工作流和 `tests/test_release.py` 均检查），每次提供相同的九个文件。只有包含连字符的标签（例如 `v0.3.0-rc1`）标记为预发布；GitHub 在仓库侧栏将最新的其他发行版显示为 Latest。
 

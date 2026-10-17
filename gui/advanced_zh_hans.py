@@ -1,6 +1,8 @@
 """Chinese descriptions for the advanced GUI; CLI help and argument values remain unchanged."""
 
-HELP = {'received-mon output path': '接收到的宝可梦的保存路径。',
+HELP = {'post-trade standby rounds before the parties are exchanged again; default 6, the Switch FireRed count. GBA Emerald runs 5 (docs/rse.md, After the trade)':
+        '交换结束后、再次交换队伍前的待机轮数；默认 6，与 Switch 火红相同。GBA 绿宝石运行 5 轮，见 docs/rse.md 的交换后流程。',
+ 'received-mon output path': '接收到的宝可梦的保存路径。',
  '0-based host party slot offered for one trade (default: 1)': '单次交换时提供的队伍位置，从 0 开始计数，默认 1（第二只）。',
  'comma-separated 0-based offered slots for multiple trades': '多次交换时提供的队伍位置，用逗号分隔，从 0 开始计数。',
  "host for the Union Room (the middle NPC on Pokemon Center 2F) instead of the trade centre's third NPC; use with --union-room-keepalive 120 and --board-type": '在联合房间担任主机（宝可梦中心二楼中间的接待员），而非交换中心。请配合 '

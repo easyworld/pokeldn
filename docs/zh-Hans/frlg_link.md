@@ -86,6 +86,16 @@ IDLE x75    -> the host pulls the party
 退出：主机发出 `LINK_KEY_CODE_EXIT_ROOM` (0x17) 并阻止
 `KeyInterCB_WaitForPlayersToExit` 直至 `AreAllPlayersInLinkState(EXITING_ROOM)`
 [overworld.c:2962-2981]。子节点必须在持有密钥流上用自己的 0x17 进行应答；全零的槽不是键。
+<a id="leaving-the-room"></a>
+
+## 离开房间
+
+游戏机玩家在入座前或对战后离开交换中心时，会发送按键 `0x17`（EXITING_ROOM），并停在“请稍候”，直到所有玩家均发送该值 [KeyInterCB_WaitForPlayersToExit, overworld.c:2977]。主机会在 `H_ENTRY_SEAT`、`H_RETURN_FIELD` 及对战状态中回复自己的 `0x17`（`host_trade._child_send_held_keys`）。实机火红在主机仍走向座位时离开，会一直等待，直到 `H_ENTRY_SEAT` 也作出回应。
+
+### 静默门限
+
+游戏机连续 `QUIET_GATE_SECONDS`（0.25 秒）未发送数据时，主机会抑制自身重传，但每 `QUIET_RETRANSMIT_SECONDS`（1 秒）仍发送一次，确保正在等待被主机空洞保护（`HOST_OUTSTANDING_MAX`）阻挡的帧的游戏机仍能收到该帧（`tests/test_host_quiet_gate.py`）。
+
 ## 交换后取消
 
 `BufferTradeParties` 在礼品奖章交换后清除收到的块标志
@@ -297,7 +307,7 @@ ERR_RECV_BUFF_OVER [librfu_rfu.c:2300] → `recvErrorFlag` → REQ 错误 → `L
 ## 交换板
 
 开发板列出广告带有`tradeSpecies`、`tradeType`和`tradeLevel`的合作伙伴
-[union_room.c:3400]：记录字节18（`type << 2`）、19（`gender | level << 1`）和22:24（小端字节序）
+[union_room.c:3400]：记录字节18（`type << 2`）、19（`gameClear | level << 1`，按包装层的打包方式，见[广播记录](frlg_rom.md#the-advertisement-record)）和22:24（小端字节序）
 `tradeSpecies:10` 的 `RfuGameData` [include/link_rfu.h:107]）。种类 277（木守宫；低字节单独 21，烈雀）列为“POKELDN / NORMAL / ARCKO / 26”，测量字节 23。
 
 交换板交换是每个链路一次交换。 `Task_StartUnionRoomTrade`将`gMain.savedCallback =

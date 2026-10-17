@@ -8,8 +8,9 @@ import os
 from pokeldn import gifts
 from pokeldn.app.paths import SESSION
 
-GAMES = {"frlg-gift": "frlg", "swsh-gift": "swsh"}
-MODULES = {"frlg": "pokeldn.frlg.gift.builder", "swsh": "pokeldn.swsh.gift_builder"}
+GAMES = {"frlg-gift": "frlg", "rse-gift": "rse", "swsh-gift": "swsh"}
+MODULES = {"frlg": "pokeldn.frlg.gift.builder", "rse": "pokeldn.rse.gift_builder",
+           "swsh": "pokeldn.swsh.gift_builder"}
 MODES = (("preset", '使用预设', "gift"), ("event", '官方活动', "book-open"),
          ("build", '自行制作', "sliders-horizontal"), ("file", '打开文件', "folder"),
          ("save", "我的存档", "save"))
@@ -22,7 +23,8 @@ def modes(game):
     """The modes a game's tool offers: official events only where the builder ships them, the
     save only on FireRed and LeafGreen."""
     return [m for m in MODES if (m[0] != "event" or hasattr(module(game), "OFFICIAL"))
-            and (m[0] != "save" or game in SAVE_GAMES)]
+            and (m[0] != "save" or game in SAVE_GAMES)
+            and (m[0] != "build" or getattr(module(game), "BUILD", True))]
 
 
 def module(game):

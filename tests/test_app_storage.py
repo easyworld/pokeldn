@@ -153,9 +153,9 @@ def test_every_format_written_by_the_builder_and_launcher_can_be_reclaimed(local
         created.extend([built, Path(pokemon.prepare_file(game, str(built)))])
         os.utime(built, (1, 1))
     inventory = storage.scan(local)
-    assert len(inventory.files) == 14
+    assert len(inventory.files) == len(set(created))
     result = storage.clear(inventory, local)
-    assert result.files == 14 and result.size == 84
+    assert result.files == len(set(created)) and result.size == 6 * len(set(created))
     assert not any(path.exists() for path in created)
 
 

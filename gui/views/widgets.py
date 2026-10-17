@@ -145,16 +145,28 @@ def on_ui(page: ft.Page, fn: Callable[[], None]) -> None:
 
 
 class Log:
-    """A monospace log that takes lines from any thread and redraws at most four times a second."""
+    """A monospace log that takes lines from any thread and redraws at most four times a second (once
+    on a phone)."""
 
     MAX = 1500
+    # On a phone the run shares the interface's interpreter, and each redraw diffs every line kept:
+    # an iPhone run fell from 41 to 12 link slots per second (examples/ios/README.md).
+    PHONE = os.environ.get("POKELDN_PLATFORM") in ("android", "ios")
+    if PHONE:
+        MAX = 300
+    FLUSH = 1.0 if PHONE else 0.25
 
-    def __init__(self, page: ft.Page, placeholder: str = ""):
+    def __init__(self, page: ft.Page, placeholder: str = "", private=None):
+        """`private`: a callable that returns the names to mask from the start (the user's trainer), or
+        None while Settings shows full logs; each clear starts a new run's Redactor."""
         self.page = page
+        self.private = private
         self.lines: deque[str] = deque(maxlen=self.MAX)
         self.pending: list[str] = []
         self.lock = threading.Lock()
         self.flush_scheduled = False
+        self.redactor = None
+        self._new_redactor()
         self.list = ft.ListView(expand=True, spacing=1, auto_scroll=True, padding=ft.Padding(12, 10, 12, 10))
         self.placeholder = t.text(placeholder, 12, t.FAINT)
         self.control = ft.Container(ft.Stack([t.fade(self.list, 16), ft.Container(self.placeholder, padding=12)],
@@ -171,12 +183,14 @@ class Log:
         return ft.Text(line, size=11, color=color, font_family=t.MONO, selectable=True)
 
     def add(self, line: str) -> None:
+        if self.redactor is not None:
+            line = self.redactor(line)
         with self.lock:
             self.pending.append(line)
             if self.flush_scheduled:
                 return
             self.flush_scheduled = True
-        threading.Timer(0.25, lambda: on_ui(self.page, self._flush)).start()
+        threading.Timer(self.FLUSH, lambda: on_ui(self.page, self._flush)).start()
 
     def _flush(self) -> None:
         with self.lock:
@@ -188,7 +202,13 @@ class Log:
         self.list.update()
         self.placeholder.update()
 
+    def _new_redactor(self) -> None:
+        from pokeldn.app.redact import Redactor
+        names = self.private() if self.private else None
+        self.redactor = Redactor(names) if names is not None else None
+
     def clear(self) -> None:
+        self._new_redactor()
         self.lines.clear()
         self.list.controls = []
         self.placeholder.visible = True

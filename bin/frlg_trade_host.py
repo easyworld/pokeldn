@@ -107,6 +107,10 @@ def build_parser(file_config=None, *, shared_path=None, local_path=None):
         "--link-player-idle-frames", type=int, default=None, metavar="N",
         help=("diagnostic: quiet console polls after the LinkPlayer exchange "
               "before the leader starts the trainer-card exchange itself"))
+    parser.add_argument(
+        "--save-rounds", type=int, default=None, metavar="N",
+        help=("post-trade standby rounds before the parties are exchanged again; default 6, "
+              "the Switch FireRed count. GBA Emerald runs 5 (docs/rse.md, After the trade)"))
     online.add_arguments(parser)
     host_cli.add_host_config_arguments(
         parser, shared_path=shared_path, local_path=local_path)
@@ -155,7 +159,7 @@ def build_run_config(parser, args):
             trades=args.trades, anim_delay=args.anim_delay,
             player_ids_repeat_frames=args.player_ids_repeat_frames,
             link_player_idle_frames=args.link_player_idle_frames,
-            trust_pia=args.trust_pia)
+            save_rounds=args.save_rounds, trust_pia=args.trust_pia)
         return configmod.TradeRunConfig(profile, plan, ldn, options)
     except ValueError as exc:
         parser.error(str(exc))

@@ -159,6 +159,8 @@ class SettingsView:
                 str(SESSION / "captures")), "folder", filled=False)]),
                    tr('settings.keeps_a_small_record_of_each_session_when_something_fai_b8e93e', 'Keeps a small record of each session. When something fails, attach the latest file to your report.'),
                    trailing=t.switch(s.capture, lambda e: self.save("capture", e.control.value))),
+            switch("private_logs", tr('settings.private_logs', 'Hide personal details in logs'),
+                   tr('settings.private_logs_detail', 'Masks trainer names, nicknames, trainer IDs, the device half of MAC addresses and your user folder in the logs shown here, so you can share them or record your screen. Turn it off only if a developer asks for the full log.')),
             ft.Row([t.link_button(tr('settings.hide_advanced_settings_82557c', 'Hide advanced settings') if self.show_advanced else tr('settings.show_advanced_settings_c0d5bf', 'Show advanced settings'),
                                   self._toggle_advanced)]),
             *(advanced if self.show_advanced else []),

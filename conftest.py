@@ -20,6 +20,16 @@ for name in ("POKELDN_RADIO", "POKELDN_ESP32_TRACE", "POKELDN_ESP32_BAUD", "POKE
 import pytest  # noqa: E402
 
 
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config):
+    # Windows unicorn commits its code buffer from a vectored handler on each access violation;
+    # faulthandler's handler runs first and walks every thread's frames without the GIL
+    # (unicorn-engine/unicorn#2264), which now and then faults inside a uc_mem_map call.
+    if sys.platform == "win32":
+        import faulthandler
+        faulthandler.disable()
+
+
 @pytest.fixture(autouse=True)
 def _fresh_trade_count():
     """A run is one process; each test starts with no completed trade (pokeldn.ldn.trades_done)."""

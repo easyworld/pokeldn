@@ -24,10 +24,13 @@ ACTIVITY_WONDER_CARD = 21
 
 
 def build_game_data(version_low, trainer_id, ot_name, *, language=linkplayer.LANGUAGE_ENGLISH,
-                    activity=ACTIVITY_TRADE, started=True, partner_info=b"\x00\x00\x00\x00"):
+                    activity=ACTIVITY_TRADE, started=True, partner_info=b"\x00\x00\x00\x00",
+                    national_link=False, national_dex=False, game_clear=False):
     """The 26-byte NI src: serialNo + gname[15] + uname[9]; gname[0:13] is a packed RfuGameData
-    [link_rfu.h:81-93]. `version_low` is gGameVersion (4 FireRed, 5 LeafGreen)."""
-    compat = (language & 0xF) | ((version_low & 0xF) << 10)
+    [link_rfu.h:81-93]. `version_low` is gGameVersion (3 Emerald, 4 FireRed, 5 LeafGreen). Emerald
+    lists a host of another version as not ready without `national_link` [pokeemerald union_room.c:1270]."""
+    compat = ((language & 0xF) | (0x80 if national_link else 0) | (0x100 if national_dex else 0)
+              | (0x200 if game_clear else 0) | ((version_low & 0xF) << 10))
     rgd = bytearray(13)
     rgd[0:2] = (compat & 0xFFFF).to_bytes(2, "little")
     rgd[2:4] = (trainer_id & 0xFFFF).to_bytes(2, "little")     # compatibility.playerTrainerId[2]

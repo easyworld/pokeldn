@@ -48,15 +48,19 @@ IDENT_NAMES = {v: k for k, v in vars(mg).items() if k.startswith("MG_LINKID_")}
 
 def build_link_game_data(link_player, *, version_code, flag_id=0, game_code=b"BPRE",
                          software_version=0, max_stamps=0, card_metadata=b"",
-                         questionnaire=(), easy_chat_profile=()):
+                         questionnaire=(), easy_chat_profile=(), news=False):
     """[decomp:src/mystery_gift.c:337]; a 7-character name spills its 0xFF over
-    playerTrainerId[0] natively, reproduced on purpose."""
+    playerTrainerId[0] natively, reproduced on purpose. An Emerald game code writes Emerald's
+    gift-type bits at +0x0C and +0x10 instead [pokeemerald mystery_gift.c:346]."""
     data = bytearray(mg_script.GAME_DATA_SIZE)
     data[0x00:0x04] = mg.GAME_DATA_VALID_VAR.to_bytes(4, "little")
     data[0x04:0x06] = (1).to_bytes(2, "little")
     data[0x08:0x0C] = (1).to_bytes(4, "little")
     data[0x0C:0x0E] = (1).to_bytes(2, "little")
     data[0x10:0x14] = (version_code & 0xFFFFFFFF).to_bytes(4, "little")
+    if bytes(game_code[:3]) == b"BPE":
+        data[0x0C:0x0E] = (mg_script.EMERALD_GIFT_TYPE_1 | int(news)).to_bytes(2, "little")
+        data[0x10:0x14] = (mg_script.EMERALD_GIFT_TYPE_2 | int(news)).to_bytes(4, "little")
     data[mg_script.GD_OFF_FLAG_ID:mg_script.GD_OFF_FLAG_ID + 2] = (flag_id & 0xFFFF).to_bytes(2, "little")
     if card_metadata:
         meta = bytes(card_metadata)[:36]

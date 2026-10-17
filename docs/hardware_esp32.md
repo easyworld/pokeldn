@@ -19,6 +19,7 @@ host. `pokeldn.ldn.esp32_wlan` gives the LDN library a factory backed by the boa
 | ESP32-S3 | native USB Serial/JTAG | `pokeldn-radio-s3.bin` |
 | ESP32-C3 | native USB Serial/JTAG | `pokeldn-radio-c3.bin` |
 | ESP32-C6 | native USB Serial/JTAG | `pokeldn-radio-c6.bin` |
+| classic ESP32, ESP32-C6 | Bluetooth LE (the iOS app), and USB as above | `pokeldn-radio-ble.bin`, `pokeldn-radio-ble-c6.bin` |
 
 All targets use 2.4 GHz. ESP32-S2 is unsupported. The Seeed Studio XIAO ESP32C3 and XIAO
 ESP32S3 have no onboard antenna and need their supplied external one attached; larger S3 boards
@@ -735,6 +736,7 @@ host writes the COBS stream to `...0102` (write without response) and the board 
 `...0103`. While a central is subscribed to `...0103`, the wire reads and writes there and the cable
 falls silent; unsubscribed, the cable carries the link as before. Framing, CRC and CREDIT are
 unchanged. The board asks for a 15 ms connection interval, the 2M PHY and a 247 byte MTU.
+Its HELLO text ends in `link=ble`, which the Board page shows as the Bluetooth wireless firmware.
 `POKELDN_RADIO=esp32:ble` (or `esp32:ble:NAME`) opens it from any launcher (`pokeldn/ldn/esp32_ble.py`,
 bleak).
 
@@ -769,7 +771,13 @@ run delivered 776 of 796 RX_ETH, yet the joiner still sent 5 T slots a second ag
 On a XIAO ESP32C6 (Bluetooth 5) the same build benches 33.6 KB/s with a 62 ms HELLO round trip, and a
 FireRed joiner trade completed over BLE from a Mac: the joiner kept pace with the console (18 T slots a
 second each), slower than over the cable by the player's account. The C6 BLE image fills the 1 MB app
-partition to within 13 KB.
+partition to within 13 KB. The board advertises only its name: the iOS app scans with no service
+filter and matches `POKELDN-RADIO`.
+
+A XIAO ESP32C6 that asked for 15 ms only at connect ran at 30 ms (61.5 ms per HELLO from an iPhone 13
+Pro, a FireRed room at a crawl); asked again once the central subscribes, it gets 15 ms
+(`ble_itvl_us=15000` in STATUS, 32.1 ms per HELLO). A request at connect arrives while the central
+still discovers services.
 
 On macOS, bleak aborts (SIGABRT) in a process whose responsible app has no Bluetooth grant; a script
 started with `open -n -a Terminal FILE.command` runs under Terminal's.

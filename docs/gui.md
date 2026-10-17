@@ -55,10 +55,8 @@ connection setting powered and enumerated the connected ESP32C6 without repluggi
 | Board disconnects or the user returns from Settings | Refresh detection and permission state, update the guidance and resume setup when the board is ready. |
 
 A board seen only through a CP210x, CH34x or FTDI bridge (a classic ESP32) is named as one the
-phone app cannot drive. Imported `prod.keys` must hold `master_key_00`,
-`aes_kek_generation_source` and `aes_key_generation_source`; an imported `.pk3` must be 80 or 100
-bytes with a matching checksum. The phone has no PKHeX, so a phone import is not checked for
-legality. The received Pokemon is saved through Android's file picker.
+phone app cannot drive. PKHeX runs on the phone, compiled for Android. The received Pokemon is saved
+through Android's file picker.
 
 Settings guidance uses verified manufacturer-specific paths or searchable setting names, with
 a Settings shortcut where Android supports it. The flow presents the relevant next action and
@@ -66,16 +64,27 @@ keeps setup progress visible. Developer tooling such as ADB and wireless debuggi
 separate from user setup.
 
 
-On Android a board behind a CP210x, CH34x or FTDI bridge (a classic ESP32) is named as one the
-phone cannot drive. "Open the folder" saves a zip of the folder where the player picks, and file
-choosers are Android's own.
+On Android "Open the folder" saves a zip of the folder where the player picks, and file choosers are
+Android's own.
+
+## iOS setup
+
+The [iOS app](../examples/ios/README.md) is this interface on an iPhone or iPad, installed with
+AltStore or SideStore. An iPhone cannot open a USB serial device, so the app reaches the board over
+Bluetooth: the board runs the **Bluetooth wireless** firmware, installed once from the desktop app's
+Board page (`pokeldn-radio-ble-c6.bin` for an ESP32-C6, `pokeldn-radio-ble.bin` for a classic ESP32),
+and needs USB only for power. The Board page lists it as "Bluetooth radio" once the phone has
+connected; the first launch asks for Bluetooth access. While the phone holds the board, the board
+answers nothing on its USB cable: close the iOS app before using the board from a computer or an
+Android phone. File choosers are iOS's own and copy the chosen file into the app; the app's files
+are under Files, On My iPhone, pokeldn.
 
 ## Phones
 
 Below 760 points wide the app shows its pages through a bottom tab bar and each page's panels one
 at a time, picked on a switcher above them: Games, Options and Session on the Games page; choosing
 a tool brings its options forward and Start brings the session. Dialogs take the screen's width.
-The Control and Update pages are absent on Android.
+The Control and Update pages are absent on Android and iOS.
 
 ## App language
 
@@ -509,6 +518,24 @@ chosen copy, shows the setting's warning: "PKHeX flags the missing HOME tracker"
 deposited in HOME". The trade offers it like any other
 ([The copy a trade offers](gift_simulated.md#the-copy-a-trade-offers)).
 
+## Private logs
+
+Settings, Hide personal details in logs (on by default) masks, in the session and board logs the app
+shows and copies (`pokeldn/app/redact.py`):
+
+| masked | shown instead | kept |
+|---|---|---|
+| the home folder in a path (`/Users/NAME`, `/home/NAME`, `C:\Users\NAME`) | `~` | the rest of the path |
+| the iOS app container (`/var/mobile/Containers/Data/Application/UUID`) | `<app>` | |
+| the device half of a MAC address, with or without colons | `**:**:**`, `******` | the vendor half (Nintendo, Espressif) |
+| a quoted value (`'…'`, `"…"`, `b'…'`) after `ot_name`, `ht_name`, `OT`, `nickname`, `trainer`, `player` or `name` | `***` | `POKELDN` and `PKLDN` in any case, the program's own names |
+| a value after `TID`, `SID`, `tid`, `sid`, `trainer_id` | `***` | |
+| a trainer name seen once, and the trainer name from Settings, wherever it appears again in the run, as a whole word | `***` | |
+
+A nickname is masked where it stands and nowhere else: it is often the species' own name. Session
+records (`captures/`) carry the raw messages and are not masked. Local link addresses (`169.254.x.x`,
+`127.0.0.x`) identify nobody and stay.
+
 ## Pop-ups
 
 A run the app started, another of its child processes, or the app's own code can put a pop-up over
@@ -641,6 +668,13 @@ always carries the built one. The script needs Flutter, at the version
 deployment target from 11.0 to 12.0: Xcode 27 builds nothing older. The Linux client is Flet's light
 flavor, as Flet's own CI builds it.
 
+## Unreleased titles
+
+A title prepared ahead of its Switch release appears in the Games list, the Bank and the Docs page
+only when the app runs from a source checkout (`pokeldn/app/preview.py`). A packaged release is
+frozen and carries no `.git`, so it never shows one. `POKELDN_PREVIEW=1` shows them anywhere;
+`POKELDN_PREVIEW=0` hides them in a checkout. Its docs page sets `nav_exclude` and `search_exclude`.
+
 ## Run from source
 
 For source development, install Python 3.13 and the .NET 10 SDK:
@@ -683,6 +717,15 @@ idf.py -B build/esp32c3 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c3.bin"
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" set-target esp32c6
 idf.py -B build/esp32c6 -D SDKCONFIG="$PWD/build/esp32c6/sdkconfig" build
 idf.py -B build/esp32c6 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-c6.bin"
+export POKELDN_BLE=1   # the Bluetooth builds for the iOS app (hardware_esp32.md, Bluetooth)
+BLE_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.ble"
+idf.py -B build/ble -D SDKCONFIG="$PWD/build/ble/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" set-target esp32
+idf.py -B build/ble -D SDKCONFIG="$PWD/build/ble/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" build
+idf.py -B build/ble merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-ble.bin"
+idf.py -B build/ble-c6 -D SDKCONFIG="$PWD/build/ble-c6/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" set-target esp32c6
+idf.py -B build/ble-c6 -D SDKCONFIG="$PWD/build/ble-c6/sdkconfig" -D SDKCONFIG_DEFAULTS="$BLE_DEFAULTS" build
+idf.py -B build/ble-c6 merge-bin -o "$POKELDN_IMAGES/pokeldn-radio-ble-c6.bin"
+unset POKELDN_BLE
 cd ../pad
 idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" set-target esp32s3
 idf.py -B build -D SDKCONFIG="$PWD/build/sdkconfig" build
@@ -693,10 +736,10 @@ python scripts/build_unicorn.py
 python scripts/pack_app.py
 ```
 
-The absolute output paths keep the images in `gui/firmware`. The packer requires all five images,
+The absolute output paths keep the images in `gui/firmware`. The packer requires the radio, Bluetooth radio and controller images,
 the client from `scripts/build_client.py` and the Unicorn from `scripts/build_unicorn.py` (needs CMake); the frozen app check verifies all are included and
 that the bundled client carries `flet_drop`. The release workflow builds each target separately
-and supplies all five images to every desktop packer.
+and supplies every image to every desktop packer.
 
 The app version is `pokeldn.__version__`. It appears in Settings and in the macOS and Windows
 package metadata. Update it and `.github/release-notes.md` together before preparing a release.

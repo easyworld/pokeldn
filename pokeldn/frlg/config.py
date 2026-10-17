@@ -18,7 +18,11 @@ from pokeldn.frlg.link import beacon
 VERSIONS = {
     "firered": linkplayer.VERSION_FIRE_RED,
     "leafgreen": linkplayer.VERSION_LEAF_GREEN,
+    "emerald": linkplayer.VERSION_EMERALD,     # docs/rse.md: prepared ahead of a Switch release
+    "ruby": linkplayer.VERSION_RUBY,
+    "sapphire": linkplayer.VERSION_SAPPHIRE,
 }
+RSE_VERSIONS = ("emerald", "ruby", "sapphire")
 LANGUAGES = {
     "japanese": linkplayer.LANGUAGE_JAPANESE,
     "english": linkplayer.LANGUAGE_ENGLISH,
@@ -115,7 +119,16 @@ class TrainerProfile:
         return ni.build_game_data(
             VERSIONS[self.version], self.tid, self.name,
             language=LANGUAGES[self.language], activity=activity,
-            started=started)
+            started=started, **self.national_flags)
+
+    @property
+    def national_flags(self):
+        """The advertised national flags: set for Ruby, Sapphire and Emerald only, so the FireRed and
+        LeafGreen bytes stay the ones retail consoles accepted (docs/rse.md, Joining a host)."""
+        if self.version not in RSE_VERSIONS:
+            return dict(national_link=False, national_dex=False, game_clear=False)
+        return dict(national_link=self.has_completed_game, national_dex=self.has_national_dex,
+                    game_clear=self.has_completed_game)
 
 
 DEFAULT_TRAINER = TrainerProfile(
@@ -136,6 +149,7 @@ class TradePlan:
     anim_delay: int | None = None
     player_ids_repeat_frames: int | None = None
     link_player_idle_frames: int | None = None
+    save_rounds: int | None = None
     trust_pia: bool = False
 
     def __post_init__(self):
@@ -160,6 +174,9 @@ class TradePlan:
                 and (type(self.link_player_idle_frames) is not int
                      or not 0 <= self.link_player_idle_frames <= 600)):
             raise ValueError("link_player_idle_frames must be between 0 and 600")
+        if (self.save_rounds is not None
+                and (type(self.save_rounds) is not int or not 1 <= self.save_rounds <= 12)):
+            raise ValueError("save_rounds must be between 1 and 12")
         if self.offered_slots is not None:
             if len(self.offered_slots) != self.trades:
                 raise ValueError("offered_slots must contain one slot per trade")
@@ -781,10 +798,11 @@ class MysteryGiftRunConfig:
         if not isinstance(self.profile, TrainerProfile):
             raise ValueError("profile must be a TrainerProfile")
         from pokeldn.frlg.gift.file import FilePayload
-        if not isinstance(self.payload,
-                          (MysteryGiftPayload, WonderNewsPayload, BufferScriptPayload, FilePayload)):
-            raise ValueError(
-                "payload must be a MysteryGiftPayload, WonderNewsPayload, BufferScriptPayload or FilePayload")
+        from pokeldn.rse.gifts import EmeraldPayload
+        if not isinstance(self.payload, (MysteryGiftPayload, WonderNewsPayload, BufferScriptPayload,
+                                         FilePayload, EmeraldPayload)):
+            raise ValueError("payload must be a MysteryGiftPayload, WonderNewsPayload, "
+                             "BufferScriptPayload, FilePayload or EmeraldPayload")
         if not isinstance(self.ldn, LdnConfig):
             raise ValueError("ldn must be an LdnConfig")
         if not isinstance(self.role, HostOptions):

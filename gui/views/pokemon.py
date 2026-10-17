@@ -7,13 +7,14 @@ import flet as ft
 
 from pokeldn import pokemon as builder
 from pokeldn.app.command import offers
+from pokeldn.app.settings import GEN3
 from pokeldn.lgpe.session import CODE_PICKER, code_picks
 from gui import drop, theme as t
 from gui.views.sprites import EDGE, MINI, SIZE as SPRITE_SIZE, Sprite
 from gui.views.widgets import PixelActivity
 from pokeldn.app.i18n import t as tr
 
-VERSIONS = {"firered": tr('pokemon.fr_501c26', 'FR'), "leafgreen": tr('pokemon.lg_b870b7', 'LG')}
+VERSIONS = {"firered": "FR", "leafgreen": "LG", "emerald": "E", "ruby": "R", "sapphire": "S"}   # PKHeX's GameVersion names
 ROW_GAP = SPRITE_SIZE + 2 * EDGE - 2 * t.CONTROL_HEIGHT   # the species and nickname boxes and the gap match the tile
 
 
@@ -46,7 +47,7 @@ class PokemonPicker:
                              form=int(self.value.get("options", {}).get("form") or 0))
         self.shiny = t.switch(bool(self.value.get("shiny")), self._shiny)
         self.nickname = t.field(value=self.value.get("nickname", ""), hint=tr('pokemon.nickname_optional_7cbcb9', 'Nickname (optional)'), expand=True,
-                                limit=10 if game == "frlg" else 12,
+                                limit=10 if game in GEN3 else 12,
                                 on_change=lambda e: self._set("nickname", e.control.value))
         self.build_button = t.button(tr('pokemon.build_bdd254', 'Build'), self._build, disabled=True)
         self.options = OfferOptions(self)

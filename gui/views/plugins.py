@@ -37,7 +37,7 @@ def plugin_icon(source: str | bytes = "", size: int = 48) -> ft.Control:
         except OSError:
             source = b""
     if source:
-        image = ft.Image(src=source, width=size, height=size, fit=ft.BoxFit.CONTAIN,
+        image = ft.Image(src=t.image_src(source), width=size, height=size, fit=ft.BoxFit.CONTAIN,
                          filter_quality=ft.FilterQuality.NONE)
         return ft.Container(image, width=size, height=size, border_radius=size * 0.22,
                             clip_behavior=ft.ClipBehavior.ANTI_ALIAS)

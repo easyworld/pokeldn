@@ -27,7 +27,9 @@ def test_cobs_round_trip():
 
 def test_the_usbwatch_report_every_hello_repeats_is_logged_once_per_link():
     report = b"usbwatch: reset reason 11, up 812 ms"
-    frames = [esp32.encode_frame(esp32.MSG_LOG, line) for line in (report, b"joined", report, b"joined")]
+    # A Z-A joiner's scans each sent a HELLO; the board's answer names its uptime at that moment.
+    later = b"usbwatch: reset reason 11, up 108855 ms"
+    frames = [esp32.encode_frame(esp32.MSG_LOG, line) for line in (report, b"joined", later, b"joined")]
 
     class Stream:
         def read(self, n):

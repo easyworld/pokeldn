@@ -64,12 +64,15 @@ static NSString *const TX = @"7a1e0103-5d2c-4c3e-9f4b-504f4b454c44";
 - (void)scan
 {
     [self setState:@"scanning"];
-    [self.central scanForPeripheralsWithServices:@[[CBUUID UUIDWithString:SERVICE]] options:nil];
+    // The board advertises its name only (firmware ble.c); the service UUID would not fit beside it.
+    [self.central scanForPeripheralsWithServices:nil options:nil];
 }
 
 - (void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral
      advertisementData:(NSDictionary *)data RSSI:(NSNumber *)rssi
 {
+    NSString *name = data[CBAdvertisementDataLocalNameKey] ?: peripheral.name;
+    if (![name isEqualToString:@"POKELDN-RADIO"]) return;
     [central stopScan];
     self.board = peripheral;
     peripheral.delegate = self;
@@ -233,9 +236,8 @@ static NSString *const TX = @"7a1e0103-5d2c-4c3e-9f4b-504f4b454c44";
             picker.allowsMultipleSelection = [request hasSuffix:@"1"];
         }
         picker.delegate = self;
-        UIViewController *top = UIApplication.sharedApplication.connectedScenes.allObjects.firstObject
-            ? ((UIWindowScene *)UIApplication.sharedApplication.connectedScenes.allObjects.firstObject).windows.firstObject.rootViewController
-            : nil;
+        UIWindowScene *scene = (UIWindowScene *)UIApplication.sharedApplication.connectedScenes.anyObject;
+        UIViewController *top = scene.windows.firstObject.rootViewController;
         while (top.presentedViewController) top = top.presentedViewController;
         [top presentViewController:picker animated:YES completion:nil];
     });
@@ -277,6 +279,10 @@ static void run_python(void)
     NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
     setenv("POKELDN_IOS_DOCUMENTS", documents.UTF8String, 1);
     setenv("POKELDN_IOS_RADIO", [NSString stringWithFormat:@"socket://127.0.0.1:%d", RADIO_PORT].UTF8String, 1);
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--selftest"]) setenv("POKELDN_IOS_SELFTEST", "1", 1);
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--host-test"]) setenv("POKELDN_IOS_HOSTTEST", "1", 1);
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--profile"]) setenv("POKELDN_IOS_PROFILE", "1", 1);
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--clean"]) setenv("POKELDN_IOS_CLEAN", "1", 1);
     setenv("POKELDN_GUI_WEB", [NSString stringWithFormat:@"%d", GUI_PORT].UTF8String, 1);
 
     PyPreConfig preconfig;
@@ -363,7 +369,6 @@ static void run_python(void)
 @end
 
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
-@property (nonatomic, strong) UIWindow *window;
 @property (nonatomic, strong) RadioBridge *radio;
 @property (nonatomic, strong) FileBridge *files;
 @end
@@ -377,11 +382,25 @@ static void run_python(void)
     NSThread *python = [[NSThread alloc] initWithBlock:^{ run_python(); }];
     python.stackSize = 8 << 20;
     [python start];
-    self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
-    self.window.rootViewController = [ViewController new];
-    [self.window makeKeyAndVisible];
     application.idleTimerDisabled = YES;   // a trade must not lose the screen mid-session
     return YES;
+}
+
+@end
+
+// iOS 27 on a device stops an app with no scene lifecycle at launch (UIKit's
+// NoSceneLifecycleAdoption trap); the simulator does not. Info.plist names this class.
+@interface SceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property (nonatomic, strong) UIWindow *window;
+@end
+
+@implementation SceneDelegate
+
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)options
+{
+    self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+    self.window.rootViewController = [ViewController new];
+    [self.window makeKeyAndVisible];
 }
 
 @end

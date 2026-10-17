@@ -4,9 +4,17 @@ The Android app runs the desktop app's own interface on a phone, with an ESP32-S
 board on the phone's USB port. Every page, game and tool is the code in `gui/` and `pokeldn/`;
 only the shell in this folder is Android's. A OnePlus CPH2621 running Android 16 completed a
 smooth retail FireRed trade with a XIAO ESP32C6 through the earlier diagnostic frontend
-(`MainActivity`, below). The full app on the same phone and board identified the board and completed
-a FireRed host trade, with slow movement: the host sent a median 36 link slots per second against the
-diagnostic frontend's 51.
+(`MainActivity`, below). The full app on the same phone and board completes FireRed host trades at the
+diagnostic frontend's speed. It had been slow (a median 36 link slots per second against 51, and as
+low as 9): the session log auto-scrolls, each scroll event reached `theme.fade`'s handler, and Flet's
+automatic update after the handler re-diffed the whole page (72 to 85 ms, up to 350 times a run) on the
+interpreter the run shares. The handler now turns that automatic update off.
+
+`touch files/data/ui_trace.on` (with `adb shell run-as org.pokeldn.usbprobe`) makes the app write
+`files/data/ui_trace.txt` (`pokeldn.app.sampler.trace_updates`): every Flet patch by control type and
+calling `gui` function, page property changes and browser events, every 10 s. Never sample other
+threads' frames under Chaquopy: dropping a frame there freed a Java object on an unattached thread and
+the app aborted (JNI DeleteRef, JNIEnv from another thread), even after attaching the thread.
 
 ## How it works
 
@@ -24,6 +32,23 @@ diagnostic frontend's 51.
 Below 760 points wide the interface shows a bottom tab bar and one panel at a time
 ([Phones](../../docs/gui.md#phones)). The guided USB setup is the Board page on Android
 ([Android setup requirements](../../docs/gui.md#android-setup-requirements)).
+
+### WebView
+
+Android WebView sets its text zoom to the system font size. With text zoom above 100%, Flutter's web
+engine draws every text so large that it is clipped away: the screens show icons and empty panels,
+and dialogs and the tab bar stretch to the full height (measured at font scale 1.3 and 2.0 on the
+emulator, and reported from Galaxy phones). `PokeldnActivity` sets text zoom to 100%.
+
+The interface needs Android System WebView 119 or later with WebGL. Flutter's web engine draws with
+skwasm only when WebAssembly GC (Chrome 119) and WebGL are present, and otherwise falls back to
+CanvasKit, which draws this interface's text but none of its images. Before loading the interface,
+`PokeldnActivity` probes both in a blank page, logs `WebView <package> <version>, WasmGC, WebGL` under
+the `PokeLDN` tag, and on a failure shows a native screen with a Play Store link to the WebView
+package and a "Continue anyway" button. If the page's loading spinner, which Flutter removes at its
+first frame, is still present after 60 s, the same screen offers the update or "Keep waiting".
+`adb shell am start -n org.pokeldn.usbprobe/.PokeldnActivity --ez oldwebview true` shows the screen
+on any phone.
 
 ## Build
 

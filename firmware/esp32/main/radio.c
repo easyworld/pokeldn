@@ -693,7 +693,12 @@ static void send_info(void)
     esp_read_mac(head + 7, ESP_MAC_WIFI_SOFTAP);
     head[13] = (uint8_t)(chip.revision / 100);
     char text[128];
-    snprintf(text, sizeof(text), "pokeldn-radio " CONFIG_IDF_TARGET " version=%s idf=" IDF_VER,
+#if POKELDN_BLE
+#define LINK_WORD " link=ble"   /* gui/board.py Identity.ble: the Board page names the Bluetooth build */
+#else
+#define LINK_WORD ""
+#endif
+    snprintf(text, sizeof(text), "pokeldn-radio " CONFIG_IDF_TARGET " version=%s idf=" IDF_VER LINK_WORD,
              esp_app_get_description()->version);
     wire_send(MSG_INFO, head, sizeof(head), text, strlen(text));
     usbwatch_report();

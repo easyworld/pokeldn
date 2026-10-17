@@ -99,5 +99,8 @@ def serve(port, files_dir, native_dir):
     _load_unicorn()
     _tuned_runs()
     _shared_trio_loop()
+    if (home / "data" / "ui_trace.on").exists():   # adb shell run-as ... touch files/data/ui_trace.on
+        from pokeldn.app import sampler   # its frame sampler aborts Chaquopy; the update trace is safe
+        sampler.trace_updates(str(home / "data" / "ui_trace.txt"))
     from gui import main
     main.run()
