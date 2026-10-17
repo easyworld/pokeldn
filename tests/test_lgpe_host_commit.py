@@ -257,7 +257,8 @@ def test_the_result_carries_our_own_structure(stage, tmp_path):
 @pytest.mark.parametrize("later", [2, 5])
 def test_each_later_trade_offers_the_next_record_on_its_own_kinds_and_clones(stage, tmp_path, later):
     """Round r answers offers on kind 2 + 2r, commits on 3 + 2r on clone 4 + 3r, and ends on kind
-    4 + 2r; it offers the r-th --next-offer and writes what it received to a numbered file."""
+    4 + 2r; it offers the r-th --next-offer and, once its 2 commit is sent, writes what it
+    received to a numbered file."""
     def record(ec, species):
         plain = bytearray(pb7.BOX_SIZE)
         struct.pack_into("<I", plain, 0, ec)
@@ -287,7 +288,8 @@ def test_each_later_trade_offers_the_next_record_on_its_own_kinds_and_clones(sta
         sent = [reliable3.parse(p)["payload"][16:] for proto, p, _ in stage["sent"]
                 if proto == reliable3.PROTOCOL and reliable3.parse(p)["size"]]
         assert sent[-1] == Path(path).read_bytes()
-        assert Path(tmp_path / f"got-{r + 1}.pb7").read_bytes()[:pb7.BOX_SIZE] == theirs
+        # A shown offer is no trade: its Pokemon is written only at the 2 commit.
+        assert not (tmp_path / f"got-{r + 1}.pb7").exists()
         stage["console_publishes"](3 + 3 * r, ONES)
         stage["run"](0.04)
         assert s.commit_clone is None
@@ -300,6 +302,7 @@ def test_each_later_trade_offers_the_next_record_on_its_own_kinds_and_clones(sta
         stage["console_says"](3 + 2 * r, b"\x01\0\0\0", step=step + 1)
         stage["run"](0.1)
         assert stage["game"]()[-1][::2] == (3 + 2 * r, b"\x02\0\0\0")
+        assert Path(tmp_path / f"got-{r + 1}.pb7").read_bytes()[:pb7.BOX_SIZE] == theirs
         stage["run"](27.1)
         assert stage["game"]()[-1][0] == 4 + 2 * r
         stage["console_says"](4 + 2 * r, theirs, step=step + 2)

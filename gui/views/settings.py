@@ -44,7 +44,7 @@ class SettingsView:
         app.update_listeners.append(self._update_shown)
         self._update_text()
         self.show_advanced = False
-        self.column = ft.Column(spacing=t.GAP, width=760)
+        self.column = ft.Column(spacing=t.GAP, width=None if t.compact else 760, expand=t.compact)
         self.scroll = ft.ListView([ft.Row([self.column], alignment=ft.MainAxisAlignment.CENTER)],
                                   padding=ft.Padding(4, 8, 4, 24), expand=True)
         self.control = t.fade(self.scroll)

@@ -1,6 +1,7 @@
 name: Release
 
-# A tag v* builds the radio firmware and the desktop app for macOS, Windows and Linux, and publishes
+# A tag v* builds the radio firmware, the desktop app for macOS, Windows and Linux, the Android
+# app and the iOS app, and publishes
 # them as a GitHub release. Running it by hand builds the same files as workflow artifacts only.
 on:
   push:
@@ -26,6 +27,13 @@ jobs:
             file: pokeldn-radio-c3.bin
           - target: esp32c6
             file: pokeldn-radio-c6.bin
+          # The Bluetooth host link for the iOS app (docs/hardware_esp32.md, Bluetooth).
+          - target: esp32c6
+            file: pokeldn-radio-ble-c6.bin
+            ble: true
+          - target: esp32
+            file: pokeldn-radio-ble.bin
+            ble: true
     steps:
       - uses: actions/checkout@v7
       - name: Build and merge the image
@@ -33,12 +41,16 @@ jobs:
         run: |
           . "$IDF_PATH/export.sh"
           cd firmware/esp32
-          idf.py set-target ${{ matrix.target }}
-          idf.py build
-          idf.py merge-bin -o "$GITHUB_WORKSPACE/${{ matrix.file }}"
+          if [ "${{ matrix.ble }}" = "true" ]; then
+            export POKELDN_BLE=1
+            set -- -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.ble"
+          fi
+          idf.py "$@" set-target ${{ matrix.target }}
+          idf.py "$@" build
+          idf.py "$@" merge-bin -o "$GITHUB_WORKSPACE/${{ matrix.file }}"
       - uses: actions/upload-artifact@v7
         with:
-          name: firmware-${{ matrix.target }}
+          name: firmware-${{ matrix.target }}${{ matrix.ble && '-ble' || '' }}
           path: ${{ matrix.file }}
 
   # The controller firmware (docs/hardware_pad.md): an S3 over USB, a classic ESP32 over Bluetooth.
@@ -139,7 +151,7 @@ jobs:
           key: unicorn-${{ runner.os }}-${{ hashFiles('requirements.txt', 'scripts/build_unicorn.py') }}
       # The app runs its own build of Flet's client, which takes files dropped on it (scripts/build_client.py).
       - name: Flutter version
-        if: steps.client.outputs.cache-hit != 'true'
+        if: steps.client.outputs.cache-hit != 'true' || runner.os == 'Linux'
         id: flet
         shell: bash
         run: |
@@ -187,8 +199,84 @@ jobs:
           name: ${{ matrix.asset }}
           path: ${{ matrix.asset }}
 
+  # The Android app (examples/android/README.md); scripts/android_release_key.py sets its signing secrets.
+  android:
+    needs: [firmware, pad]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            gui/requirements.txt
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      # AGP 8.13 runs on Gradle 8.13 to 9.5 (examples/android/build.py).
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "9.5.1"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: firmware-*
+          path: gui/firmware
+          merge-multiple: true
+      - name: Install
+        run: python -m pip install -r gui/requirements.txt
+      # build_native.py compiles the Unicorn source this fetches.
+      - name: Fetch the Unicorn source
+        run: python scripts/build_unicorn.py
+      - name: The release key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE }}
+        if: env.KEYSTORE != ''
+        run: |
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "POKELDN_ANDROID_RELEASE_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          GRADLE: gradle
+          POKELDN_ANDROID_RELEASE_PASSWORD: ${{ secrets.ANDROID_RELEASE_PASSWORD }}
+          POKELDN_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          POKELDN_ANDROID_VERSION_NAME: ${{ github.ref_name }}
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          python examples/android/build.py --release
+          cp examples/android/build/outputs/apk/release/pokeldn-release.apk pokeldn-android-arm64.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pokeldn-android-arm64.apk
+          path: pokeldn-android-arm64.apk
+
+  # The iOS app (examples/ios/README.md): unsigned, for AltStore or SideStore to sign on the phone.
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -m pip install setuptools wheel
+          python examples/ios/build.py --device
+          cp examples/ios/build/pokeldn-ios.ipa pokeldn-ios.ipa
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pokeldn-ios.ipa
+          path: pokeldn-ios.ipa
+
   checksums:
-    needs: app
+    needs: [app, android, ios]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8

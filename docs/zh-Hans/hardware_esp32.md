@@ -452,6 +452,30 @@ ESP-IDF v6.1（标签 `v6.1`，提交 `fff9895c82d744c7237be8847347bdd1b07c6643`
 
 桌面应用程序在用于刷新的同一连接上使用 esptool 检测芯片。它在写入之前在芯片的闪存偏移量（ESP32：`0x1000`、S3、C3 和 C6：`0x0`）处验证合并映像的引导加载程序，包括自定义映像。当合并图像以填充开始时，esptool 5.4.0 的 `write_flash` 可以跳过其芯片检查。切勿从 USB 桥 ID 选择固件。 [桌面版本](gui.md) 涵盖了所有四个图像的打包。
 
+<a id="bluetooth"></a>
+
+### 蓝牙
+
+使用 `POKELDN_BLE=1` 构建时，开发板也可通过蓝牙低功耗（BLE）承载主机连接，供无法使用 USB 串口的主机使用：iPhone 应用必须加入 Apple MFi 配件计划才能打开 USB 串口设备，CoreBluetooth 则无此要求。此时开发板的 USB 仅用于供电。
+
+    POKELDN_BLE=1 idf.py -B ../../scratchpad/esp/build-ble \
+        -D SDKCONFIG=../../scratchpad/esp/build-ble/sdkconfig \
+        -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.ble" build
+
+开发板广播名称为 `POKELDN-RADIO`，服务为 `7a1e0101-5d2c-4c3e-9f4b-504f4b454c44`。主机将 COBS 字节流写入 `...0102`（无需响应写入），开发板在 `...0103` 上发送通知。中央设备订阅 `...0103` 时，wire 层改在该连接上读写，数据线不再传输；取消订阅后恢复数据线连接。帧格式、CRC 和 CREDIT 不变。开发板请求 15 毫秒连接间隔、2M PHY 和 247 字节 MTU。任意启动器可通过 `POKELDN_RADIO=esp32:ble`（或 `esp32:ble:NAME`）打开此连接（`pokeldn/ldn/esp32_ble.py`，bleak）。
+
+经典 ESP32 的双模控制器仅留下 32 KB 空闲堆，低于 wire 层的 64 KB 下限，因此 `wire_send` 拒绝全部消息，只有绕过下限的 CREDIT 能到达主机。`sdkconfig.defaults.ble` 改用仅 BLE 的控制器，并将静态 Wi-Fi RX 缓冲区从 25 个减至 10 个；`ble.c` 释放经典蓝牙内存，将接收缓冲区设为 10 KB（FLOW_WINDOW 加一帧）。最后一步前有 60 KB 空闲堆，完成后仍足够。从 Mac 实测，连接并完成 HELLO 需 1.3 至 1.7 秒；连续 200 次 HELLO 的往返为 63 毫秒，约两个连接间隔。
+
+无线模块通过软件共存机制让 Wi-Fi 与蓝牙共享天线，因此每个 BLE 连接事件都会占用游戏机信道的空中时间。对链路循环的影响尚未测量。
+
+从 Mac 经 BLE 主持《火红》时，游戏机曾加入后停在“等待 POKELDN 的回应”，主机仍在等待落后 6 个确认的帧。空中链路正常（`tx_eth_failed=0`），主机链路却拥塞：`wire_dropped=7056`、`refused_queue=3112`、`queue_max=384`、`heap_min=29924`。开发板输出超过通知可承载的速率，384 项队列溢出。其中 8031 条为主机从不读取的诊断 TX_DONE。BLE 下不再发送 TX_DONE，写入线程在队列仍有数据时将多帧合为一个通知；下一次运行没有丢帧（`queue_max=26`），游戏机以不足每秒一帧的速度进入房间。连接间隔 15 至 30 毫秒时，HELLO 往返为 63 毫秒；固定为 15 毫秒（最小等于最大，是 Apple 配件规则中的唯一例外）后降为 32 毫秒。随后从 Mac 经 BLE 主持的《火红》交换完成，玩家认为速度明显改善，游戏机也正常退出。
+
+经 BLE 加入《火红》未能完成 RFU 握手，游戏机显示 2318-0013。链路层数据包为 27 字节时，开发板每秒听到约 217 帧，主机仅收到 6522 帧中的 757 帧。数据长度扩展（251 字节包）将基准速率由 14.1 提高至 28.1 KB/s；下一次加入运行收到 796 条 RX_ETH 中的 776 条，但主机每秒仍只发送 5 个 T 槽位，而游戏机为 30 个，24 帧窗口几乎满载；开发板因堆下限拒绝 581323 条消息（`heap_min=30296`）。经典 ESP32 为蓝牙 4.2 芯片，不支持 2M PHY。
+
+在 XIAO ESP32C6（蓝牙 5）上，相同构建实测为 33.6 KB/s、HELLO 往返 62 毫秒；从 Mac 经 BLE 加入的《火红》交换完成，加入方与游戏机均保持每秒 18 个 T 槽位。玩家反馈仍慢于数据线。C6 的 BLE 镜像距离 1 MB 应用分区上限仅剩 13 KB。
+
+macOS 上，若负责进程所属的应用没有蓝牙授权，bleak 会以 SIGABRT 终止；通过 `open -n -a Terminal FILE.command` 启动的脚本使用 Terminal 的授权。
+
 ### USB 主机链接
 
 S3、C3 和 C6 通过 USB 串行/JTAG 使用相同的 COBS、CRC 和 CREDIT 协议。两个驱动环均为 16 KB。 IDF v6.1的`usb_serial_jtag_write_bytes`将整个帧入队或超时后返回零；作者等待 20 毫秒重试，并在 500 毫秒后没有进展地计算丢弃的消息。 `write_max_us` 包括此等待。读取器在 20 毫秒超时后获取可用字节。 UART 溢出和帧计数器在此路径上保持为零；它们不测量 USB 丢失情况。当 16 KB RX 环已满且不计数时，接收中断会丢弃 64 字节数据包（`usb_serial_jtag.c:144` 忽略 `xRingbufferSendFromISR` 的结果）。 CREDIT 窗口可防止环被填满；那里的损失仅显示为写入超过开发板最后一个信用的字节。

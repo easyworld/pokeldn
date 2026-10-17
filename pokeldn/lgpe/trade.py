@@ -84,7 +84,17 @@ def _answer_commit(args, state, msg, send, tag="[lg]", kind=pb7.COMMIT_MESSAGE):
     if ((msg["body"][:4] == b"\2\0\0\0" or state.get("sent_second_commit"))
             and not state.get("arriving")):
         state["arriving"] = True
+        keep_received(args, state.get("peer_offer"))
         screen.received("lgpe", state.get("peer_offer"))
+
+
+def keep_received(args, peer_offer):
+    """The peer's Pokemon goes to --received once the 2 commit is exchanged, which commits the trade
+    on the console [docs/lgpe_session.md, kind 3], never at the offer: a player who backs out after
+    showing one keeps it, and a received file would be a copy."""
+    if peer_offer and getattr(args, "received", None):
+        from pokeldn.pokemon import save_received
+        save_received("lgpe", args.received, peer_offer)
 
 
 def answer_console(args, state, msg, send, tag="[lg]"):
@@ -121,9 +131,6 @@ def _answer_offer(args, state, msg, send, tag="[lg]", kind=pb7.OFFER_MESSAGE):
     if not pb7.valid(msg["body"]):
         print(f"{tag} offer: the peer's structure did not verify; not answering")
         return
-    if getattr(args, "received", None):
-        from pokeldn.pokemon import save_received
-        save_received("lgpe", args.received, msg["body"])
     state["peer_offer"] = msg["body"]
     plain = pb7.decrypt(msg["body"])
     peer_species = int.from_bytes(plain[8:10], "little")

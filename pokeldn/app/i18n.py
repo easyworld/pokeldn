@@ -1,4 +1,5 @@
 """Community language packs and English fallback; docs/plugins.md, Language packs."""
+import os
 import re
 import string
 import tomllib
@@ -50,8 +51,17 @@ def select(plugin_id: str = "") -> None:
             _strings = candidate.translations
 
 
+# The English strings name the device the app runs on; on Android it is a phone (examples/android).
+_PHONE = re.compile(r"\b(this|your|the) computer\b")
+
+
+def _device(text: str) -> str:
+    return _PHONE.sub(r"\1 phone", text) if os.environ.get("POKELDN_PLATFORM") == "android" else text
+
+
 def t(key: str, default: str, **fmt) -> str:
     """Look up a string and format named values; malformed translations fall back to English."""
+    default = _device(default)
     value = _strings.get(key, default)
     try:
         return value.format(**fmt)

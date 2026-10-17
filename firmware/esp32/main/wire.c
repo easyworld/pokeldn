@@ -15,6 +15,7 @@
 #define WIRE_USB 0
 #include "driver/uart.h"
 #endif
+#include "ble.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -42,7 +43,12 @@ typedef struct {
    Scarlet burst and dropped 337 messages. The floor keeps room for the driver's RX buffers.
    docs/hardware_esp32.md, The serial ceiling. */
 #define WIRE_QUEUE_LENGTH 384
+#if POKELDN_BLE
+/* The BLE controller leaves under 64 KB once the softAP is up; STATUS heap_min shows the margin. */
+#define WIRE_HEAP_FLOOR (32 * 1024)
+#else
 #define WIRE_HEAP_FLOOR (64 * 1024)
+#endif
 #define WIRE_UART_EVENTS 64
 
 static QueueHandle_t s_out;
@@ -255,6 +261,25 @@ static void writer(void *arg)
         }
         encoded[code_at] = code;
         encoded[out++] = 0;
+        if (ble_linked()) {
+#if POKELDN_BLE
+            /* One notification per frame capped the link at its event rate: frames gather here and
+               leave together once the queue is empty or the batch would pass a notification. */
+            static uint8_t batch[2048];
+            static size_t held;
+            if (held + out > sizeof(batch)) {
+                if (!ble_write(batch, held)) atomic_fetch_add(&s_dropped, 1);
+                held = 0;
+            }
+            memcpy(batch + held, encoded, out);
+            held += out;
+            if (!uxQueueMessagesWaiting(s_out) || held >= 244) {
+                if (!ble_write(batch, held)) atomic_fetch_add(&s_dropped, 1);
+                held = 0;
+            }
+#endif
+            continue;
+        }
 #if WIRE_USB
         write_usb(encoded, out);
 #else
@@ -347,19 +372,25 @@ static void reader(void *arg)
     bool overflow = false;
     for (;;) {
         const int64_t turn = esp_timer_get_time();
+        int n;
+#if POKELDN_BLE
+        if (ble_linked()) n = ble_read(chunk, sizeof(chunk), pdMS_TO_TICKS(20)); else
+#endif
+        {
 #if WIRE_USB
         /* The USB driver returns whatever is buffered as soon as there is any, so one call does both. */
-        const int n = usb_serial_jtag_read_bytes(chunk, sizeof(chunk), pdMS_TO_TICKS(20));
+        n = usb_serial_jtag_read_bytes(chunk, sizeof(chunk), pdMS_TO_TICKS(20));
 #else
         /* uart_read_bytes waits its timeout again for every ring item until `length` is met: a
            host trickling 21-byte commands every 15 ms was read 461 ms late. Wait for one byte,
            then take what is buffered. docs/hardware_esp32.md, The serial ceiling. */
         size_t buffered = 0;
         uart_get_buffered_data_len(WIRE_UART, &buffered);
-        const int n = buffered
+        n = buffered
             ? uart_read_bytes(WIRE_UART, chunk, buffered < sizeof(chunk) ? buffered : sizeof(chunk), 0)
             : uart_read_bytes(WIRE_UART, chunk, 1, pdMS_TO_TICKS(20));
 #endif
+        }
         raise_max(&s_read_max_us, esp_timer_get_time() - turn);
         /* Idle, the reader repeats its count every 100 ms: a host whose window stays shut under
            a repeated count knows the rest was lost on the line, and a silent board is busy. */

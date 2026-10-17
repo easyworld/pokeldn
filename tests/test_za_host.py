@@ -263,6 +263,7 @@ def test_the_joiner_answers_the_hosts_pick_and_not_its_cursor(tmp_path, capsys):
     assert offers()[1][:-1] == offer[:-1]
 
     assert game.traded_at is None
+    assert not list(tmp_path.glob("theirs*"))     # a pick can still be withdrawn: no file before the trade
     commit_at = t
     game.on_message(za_join.GAME_RELIABLE,
                     reliable.build_reliable(seq, seq, bytes.fromhex("0104b90100"),
@@ -290,6 +291,7 @@ def test_the_joiner_answers_the_hosts_pick_and_not_its_cursor(tmp_path, capsys):
         t += 0.02
         game.pump(HOST_VAR, JOINER_VAR, t)
     assert offers()[-1] == second[:-1] + bytes([za_host.OFFER_PICK])
+    assert len(list(tmp_path.glob("theirs*"))) == 1
     seq += 1
     game.on_message(za_join.GAME_RELIABLE,
                     reliable.build_reliable(seq, seq, bytes.fromhex("0104b90000"),
@@ -298,6 +300,7 @@ def test_the_joiner_answers_the_hosts_pick_and_not_its_cursor(tmp_path, capsys):
         t += 0.02
         game.pump(HOST_VAR, JOINER_VAR, t)
     assert game.trades == 2 and game.queue_done
+    assert len(list(tmp_path.glob("theirs*"))) == 2
     assert za.pokemon.read((tmp_path / "theirs-2.pa9").read_bytes())["species"] == 4
     # the app ticks its queue off by the line each completed trade prints
     counts = [n for line in capsys.readouterr().out.splitlines()

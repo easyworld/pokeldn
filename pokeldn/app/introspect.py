@@ -1,5 +1,6 @@
 """Reads an entry point's own argparse parser, so every flag it accepts can be shown without a copy."""
 import argparse
+import importlib
 import importlib.util
 import os
 from dataclasses import dataclass
@@ -18,6 +19,9 @@ class Flag:
 
 
 def _load(script: str):
+    if os.environ.get("POKELDN_PLATFORM") == "android" and script.startswith("bin/"):
+        # The APK carries the launchers compiled only (runner._execute, examples/android).
+        return importlib.import_module("bin." + os.path.basename(script)[:-3])
     path = os.path.join(ROOT, script)
     name = f"_pokeldn_entry_{os.path.basename(script)[:-3]}"
     spec = importlib.util.spec_from_file_location(name, path)

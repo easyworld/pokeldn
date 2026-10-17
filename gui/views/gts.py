@@ -67,8 +67,8 @@ class GtsView:
         self.note = t.text("", 12, t.MUTED)
         self.picker = t.dropdown([(ANY, tr('gts.any_pokemon_b21058', 'Any Pokemon'))], ANY, self._pick, enable_filter=True, editable=True,
                                  menu_height=320)
-        self.control = ft.Row([
-            t.panel(ft.Column([
+        self.panes = t.Panes(
+            (tr('gts.pane_gts', 'GTS'), "globe", t.panel(ft.Column([
                 t.panel_header(tr('gts.gts_c530c8', 'GTS'), t.icon_button("refresh", lambda e: self._browse(), tr('gts.look_again_d36fee', 'Look again'))),
                 ft.Container(ft.Column([
                     self.status,
@@ -79,15 +79,15 @@ class GtsView:
                     t.section(tr('gts.yours_54b26f', 'Yours'), self.mine),
                 ], spacing=12, scroll=ft.ScrollMode.AUTO, expand=True), padding=ft.Padding(14, 4, 14, 14),
                     expand=True),
-            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
-            t.fade(ft.ListView([ft.Container(self.heading, padding=ft.Padding(4, 14, 4, 0)), self.grid],
-                               spacing=12, padding=ft.Padding(0, 0, 0, 24), expand=True)),
-            t.panel(ft.Column([
+            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH)),
+            (tr('gts.pane_listings', 'Listings'), "search", t.fade(ft.ListView([ft.Container(self.heading, padding=ft.Padding(4, 14, 4, 0)), self.grid],
+                               spacing=12, padding=ft.Padding(0, 0, 0, 24), expand=True))),
+            (tr('gts.pane_listing', 'Listing'), "label", t.panel(ft.Column([
                 t.panel_header(tr('gts.listing_fc7f1a', 'Listing')),
                 ft.Container(ft.Column([self.detail, self.note], spacing=8, expand=True),
                              padding=ft.Padding(18, 8, 18, 18), expand=True),
-            ], spacing=0, expand=True), width=t.SESSION_WIDTH),
-        ], spacing=t.GAP, expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+            ], spacing=0, expand=True), width=t.SESSION_WIDTH)))
+        self.control = self.panes.control
 
     @property
     def client(self) -> Service:
@@ -204,6 +204,7 @@ class GtsView:
             bgcolor=t.SELECTED if active else None, on_click=lambda e, i=state["id"]: self._select(i))
 
     def _select(self, key) -> None:
+        self.panes.show(1, update=False)
         self.selected = key
         self.note.value = ""
         self.render()

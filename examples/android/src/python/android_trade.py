@@ -57,13 +57,14 @@ def run(usb, ui):
     _cancel.clear()
     offer = folder / 'offer.pk3'
     manifest = json.loads((folder / 'offer.json').read_text())
-    if hashlib.sha256(offer.read_bytes()).hexdigest() != manifest['sha256'] or manifest['legal'] is not True:
-        raise ValueError('The offer differs from the record validated by desktop PKHeX')
+    # A desktop import records PKHeX legality; a phone import records only its checksum (android_app).
+    if hashlib.sha256(offer.read_bytes()).hexdigest() != manifest['sha256'] or manifest['legal'] is False:
+        raise ValueError('The offer differs from the record that was checked on import')
     keys = folder / 'prod.keys'
     if not keys.is_file():
         raise ValueError('Switch keys have not been provisioned into the app')
-    ui.report('Offering %s, level %s, OT %s (validated on desktop)' %
-              (manifest['species'], manifest['level'], manifest['ot']))
+    ui.report('Offering %s, level %s, OT %s (%s)' % (manifest['species'], manifest['level'], manifest['ot'],
+              'validated on desktop' if manifest['legal'] else 'checksum checked on the phone'))
 
     from android_probe import AndroidStream
     from pokeldn.ldn import esp32, esp32_wlan

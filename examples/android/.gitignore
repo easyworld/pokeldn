@@ -7,3 +7,4 @@
 *.apk
 *.keystore
 *.pstats
+/jniLibs/

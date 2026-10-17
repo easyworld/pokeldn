@@ -325,19 +325,30 @@ class Radio:
         """`fast_baud` defaults to POKELDN_ESP32_BAUD, else 921600; 0 keeps the rate the board
         answers at. `left_at`: more rates an earlier process may have left the board at.
         `radio.info` is the board's HELLO reply."""
-        import serial
         run_baud = int(os.environ.get("POKELDN_ESP32_BAUD", "921600"))
         if fast_baud is None:
             fast_baud = run_baud
-        s = serial.Serial()
-        s.port = port
-        s.baudrate = baud
-        s.timeout = 0.02
-        s.write_timeout = WRITE_TIMEOUT
-        # Most ESP32 boards reset on a DTR/RTS edge; keep both released so opening does not.
-        s.dtr = False
-        s.rts = False
-        s.open()
+        if port == "ble" or port.startswith("ble:"):
+            # Bluetooth LE has no line rate: the board's BAUD would be acknowledged and ignored.
+            from pokeldn.ldn import esp32_ble
+            s = esp32_ble.BleStream(port[4:] or esp32_ble.NAME)
+            fast_baud, left_at = 0, ()
+        elif port.startswith("socket://"):
+            # The iOS app's Bluetooth bridge (examples/ios): a byte stream with no line rate.
+            import serial
+            s = serial.serial_for_url(port, timeout=0.02, write_timeout=WRITE_TIMEOUT)
+            fast_baud, left_at = 0, ()
+        else:
+            import serial
+            s = serial.Serial()
+            s.port = port
+            s.baudrate = baud
+            s.timeout = 0.02
+            s.write_timeout = WRITE_TIMEOUT
+            # Most ESP32 boards reset on a DTR/RTS edge; keep both released so opening does not.
+            s.dtr = False
+            s.rts = False
+            s.open()
         radio = cls(s, log=log, on_lost=on_lost)
         # Windows opens a COM port exclusively: a handle left open here refuses the retry
         # (PermissionError 13, Access is denied).

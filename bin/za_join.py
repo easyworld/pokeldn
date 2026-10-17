@@ -237,6 +237,11 @@ class GameStreams:
             if item[1] == LAST_STEP:
                 self.traded_at = elapsed
                 self.trades += 1
+                # Written once the trade completes; a pick can still be withdrawn.
+                if getattr(self.args, "offer_out", None) and self.received is not None:
+                    pokemon_service.save_received(
+                        "za", pokemon_service.trade_path(self.args.offer_out, self.trades),
+                        self.received)
                 show_done()
                 screen.received("za", self.received)
                 self.arriving = True
@@ -277,11 +282,6 @@ class GameStreams:
             self.host_offers += 1
             if inner[-1:] == bytes([OFFER_PICK]):
                 self.received = bytes(inner)
-            # A preview is the console's cursor on its box; only its pick is what it trades.
-            if (getattr(self.args, "offer_out", None) and len(inner) == za.pokemon.OFFER_SIZE
-                    and inner[-1] == OFFER_PICK):
-                pokemon_service.save_received(
-                    "za", pokemon_service.trade_path(self.args.offer_out, self.trades + 1), inner)
             if inner[-1:] == bytes([OFFER_PICK]) and self.offer and not self.picked:
                 self.picked = True
                 self.scheduled.append((elapsed + 1.5, self.offer))

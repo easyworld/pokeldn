@@ -720,6 +720,60 @@ S3, C3 and C6: `0x0`) before writing, including custom images. esptool 5.4.0's `
 chip check when a merged image starts with padding. Never choose firmware from a USB bridge ID.
 [Desktop builds](gui.md) covers packaging all four images.
 
+### Bluetooth
+
+A build with `POKELDN_BLE=1` also carries the host link over Bluetooth LE, for a host with no USB
+serial: an iPhone app cannot open a USB serial device without Apple's MFi accessory program, and
+CoreBluetooth needs nothing of the kind. The board then needs USB only for power.
+
+    POKELDN_BLE=1 idf.py -B ../../scratchpad/esp/build-ble \
+        -D SDKCONFIG=../../scratchpad/esp/build-ble/sdkconfig \
+        -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.ble" build
+
+The board advertises as `POKELDN-RADIO` with service `7a1e0101-5d2c-4c3e-9f4b-504f4b454c44`: the
+host writes the COBS stream to `...0102` (write without response) and the board notifies its own on
+`...0103`. While a central is subscribed to `...0103`, the wire reads and writes there and the cable
+falls silent; unsubscribed, the cable carries the link as before. Framing, CRC and CREDIT are
+unchanged. The board asks for a 15 ms connection interval, the 2M PHY and a 247 byte MTU.
+`POKELDN_RADIO=esp32:ble` (or `esp32:ble:NAME`) opens it from any launcher (`pokeldn/ldn/esp32_ble.py`,
+bleak).
+
+On a classic ESP32 the dual-mode controller left 32 KB of free heap, under the wire's 64 KB floor, so
+`wire_send` refused every message and only CREDIT (which bypasses the floor) reached the host.
+`sdkconfig.defaults.ble` takes the BLE-only controller and 10 static Wi-Fi RX buffers instead of 25,
+and `ble.c` releases the Classic Bluetooth memory and sizes its receive buffer at 10 KB (FLOW_WINDOW
+plus one frame): 60 KB free before that last step, enough after it. Measured from a Mac: connect and
+HELLO in 1.3 to 1.7 s, 63 ms per HELLO round trip (200 in a row), about two connection intervals.
+
+The radio shares its antenna between Wi-Fi and Bluetooth (software coexistence), so every BLE
+connection event takes air time from the console's channel. What that costs a link loop is unmeasured.
+
+A FireRed host over BLE from a Mac: the console joined and sat on "awaiting POKELDN's response"
+while the host held frames for acks 6 behind. The air was clean (`tx_eth_failed=0`); the link to the
+host was not: `wire_dropped=7056`, `refused_queue=3112`, `queue_max=384`, `heap_min=29924`. The
+board's messages to the host outrun what its notifications carry, and the 384-entry queue overflows.
+8031 of them were TX_DONE, a diagnostic the host never reads. Over BLE the board sends no TX_DONE and
+the writer gathers frames into one notification while its queue holds more: the next run dropped
+nothing (`queue_max=26`) and the console reached the room at under one frame a second. At a 15 to
+30 ms interval a HELLO round trip took 63 ms; at 15 ms (min = max, the one exception in Apple's
+accessory rules) it takes 32 ms, and a FireRed host trade completed over BLE from a Mac at a pace the
+player called much better, the console leaving cleanly after it.
+
+A FireRed joiner over BLE did not finish its RFU handshake; the console showed 2318-0013. With 27-byte
+link-layer packets the board heard about 217 frames a second and the host received 757 of 6522.
+Data length extension (251-byte packets) doubles the bench from 14.1 to 28.1 KB/s, and the next joiner
+run delivered 776 of 796 RX_ETH, yet the joiner still sent 5 T slots a second against the console's
+30 with its 24-frame window nearly full, and the board refused 581323 messages at the heap floor
+(`heap_min=30296`). The classic ESP32 is a Bluetooth 4.2 part with no 2M PHY.
+
+On a XIAO ESP32C6 (Bluetooth 5) the same build benches 33.6 KB/s with a 62 ms HELLO round trip, and a
+FireRed joiner trade completed over BLE from a Mac: the joiner kept pace with the console (18 T slots a
+second each), slower than over the cable by the player's account. The C6 BLE image fills the 1 MB app
+partition to within 13 KB.
+
+On macOS, bleak aborts (SIGABRT) in a process whose responsible app has no Bluetooth grant; a script
+started with `open -n -a Terminal FILE.command` runs under Terminal's.
+
 ### The USB host link
 
 The S3, C3 and C6 use the same COBS, CRC and CREDIT protocol over USB Serial/JTAG. Both driver rings are

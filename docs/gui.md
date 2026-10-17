@@ -40,11 +40,11 @@ window-manager behavior remains unverified.
 
 ## Android setup requirements
 
-The Android GUI requires a guided USB setup flow. The [developer prototype](../examples/android/README.md)
-contains the current native USB frontend. On the tested OnePlus CPH2621, enabling
-the phone's OTG connection setting powered and enumerated the connected ESP32C6 without
-replugging the cable. The current Android prototype has a USB permission prompt; the full
-guided flow remains to be implemented.
+The [Android app](../examples/android/README.md) is this interface on a phone. Its Board page
+follows the table below; it reads the USB state again when a board is plugged or unplugged, when
+Android's USB prompt closes and when the player returns from Settings. A native-USB board
+(`303a:1001`) opens the app when plugged in. On the tested OnePlus CPH2621, enabling the phone's OTG
+connection setting powered and enumerated the connected ESP32C6 without replugging the cable.
 
 | detected state | required guidance |
 |---|---|
@@ -54,10 +54,28 @@ guided flow remains to be implemented.
 | Board answers the handshake | Show the detected board and firmware, then allow the game workflow to continue. |
 | Board disconnects or the user returns from Settings | Refresh detection and permission state, update the guidance and resume setup when the board is ready. |
 
+A board seen only through a CP210x, CH34x or FTDI bridge (a classic ESP32) is named as one the
+phone app cannot drive. Imported `prod.keys` must hold `master_key_00`,
+`aes_kek_generation_source` and `aes_key_generation_source`; an imported `.pk3` must be 80 or 100
+bytes with a matching checksum. The phone has no PKHeX, so a phone import is not checked for
+legality. The received Pokemon is saved through Android's file picker.
+
 Settings guidance uses verified manufacturer-specific paths or searchable setting names, with
 a Settings shortcut where Android supports it. The flow presents the relevant next action and
 keeps setup progress visible. Developer tooling such as ADB and wireless debugging remains
 separate from user setup.
+
+
+On Android a board behind a CP210x, CH34x or FTDI bridge (a classic ESP32) is named as one the
+phone cannot drive. "Open the folder" saves a zip of the folder where the player picks, and file
+choosers are Android's own.
+
+## Phones
+
+Below 760 points wide the app shows its pages through a bottom tab bar and each page's panels one
+at a time, picked on a switcher above them: Games, Options and Session on the Games page; choosing
+a tool brings its options forward and Start brings the session. Dialogs take the screen's width.
+The Control and Update pages are absent on Android.
 
 ## App language
 

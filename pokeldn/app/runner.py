@@ -47,6 +47,10 @@ def child(argv: list[str]) -> None:
     utf8_output()
     if sys.stdin and (os.environ.get("POKELDN_MANAGED_RUN") or os.environ.get("POKELDN_POPUPS")):
         threading.Thread(target=_read_the_app, daemon=True).start()
+    _execute(argv)
+
+
+def _execute(argv: list[str]) -> None:
     mode, target, *args = argv
     if mode == "--run":
         path = os.path.join(ROOT, target)
@@ -55,6 +59,12 @@ def child(argv: list[str]) -> None:
             plugins.load()
         sys.argv = [path, *args]
         sys.path.insert(0, os.path.dirname(path))
+        if os.environ.get("POKELDN_PLATFORM") == "android" and target.startswith("bin/"):
+            # Chaquopy ships the launchers compiled, with no source file runpy could run (examples/android).
+            module = "bin." + os.path.splitext(os.path.basename(target))[0]
+            sys.modules.pop(module, None)   # imported once to read its flags (introspect)
+            runpy.run_module(module, run_name="__main__", alter_sys=True)
+            return
         runpy.run_path(path, run_name="__main__")
     else:
         sys.argv = [target, *args]
@@ -97,17 +107,19 @@ class Process:
     def running(self) -> bool:
         return self.proc.poll() is None
 
-    def _pump(self) -> None:
+    def _take(self, line: str) -> None:
         from pokeldn import popup
+        before, message = popup.read(line) if self.popups is not None else (line, None)
+        if message is None:
+            self.on_line(line)
+            return
+        if before.strip():
+            self.on_line(before)
+        self.popups.take(message)
+
+    def _pump(self) -> None:
         for line in self.proc.stdout:
-            line = line.rstrip("\n")
-            before, message = popup.read(line) if self.popups is not None else (line, None)
-            if message is None:
-                self.on_line(line)
-                continue
-            if before.strip():
-                self.on_line(before)
-            self.popups.take(message)
+            self._take(line.rstrip("\n"))
         self.proc.stdout.close()
         with self.stdin_lock:
             if not self.proc.stdin.closed:
@@ -147,6 +159,134 @@ class Process:
                 return
             except subprocess.TimeoutExpired:
                 continue
+
+
+class InProcess(Process):
+    """A run on this interpreter's own thread, where no second interpreter can start (Android, docs/gui.md).
+    One at a time: it holds the process's stdout, argv, environment and working directory while it runs."""
+
+    current: "InProcess | None" = None
+
+    def __init__(self, argv: list[str], cwd: str, env: dict, on_line: Callable[[str], None],
+                 on_exit: Callable[[int], None], bluetooth: bool = False, popups=None, label: str = ""):
+        if InProcess.current is not None:
+            raise RuntimeError("A run is already in progress.")
+        self.on_line, self.on_exit = on_line, on_exit
+        self.code: int | None = None
+        self.stopping = False
+        self.started = time.monotonic()
+        if popups is not None:
+            env = dict(env, POKELDN_POPUPS="1")
+        self.popups = popups.program(label, self.send) if popups is not None else None
+        InProcess.current = self
+        self.thread = threading.Thread(target=self._main, args=(argv, cwd, env), name="pokeldn-run", daemon=True)
+        self.thread.start()
+
+    @property
+    def running(self) -> bool:
+        return self.code is None
+
+    def _main(self, argv, cwd, env) -> None:
+        import traceback
+        saved = dict(os.environ), os.getcwd(), list(sys.argv), list(sys.path), sys.stdout, sys.stderr
+        lines = _Lines(self._take)
+        code = 0
+        try:
+            os.environ.clear()
+            os.environ.update(env)
+            os.chdir(cwd)
+            sys.stdout = sys.stderr = lines
+            for hook in _before_run:
+                hook()
+            _execute(argv)
+        except SystemExit as error:
+            if isinstance(error.code, int) or error.code is None:
+                code = error.code or 0
+            else:
+                lines.write(f"{error.code}\n")
+                code = 1
+        except KeyboardInterrupt:
+            code = 0 if self.stopping else 130
+        except BaseException:
+            lines.write(traceback.format_exc())
+            code = 1
+        finally:
+            lines.flush()
+            environ, cwd, sys.argv[:], sys.path[:], sys.stdout, sys.stderr = saved
+            os.environ.clear()
+            os.environ.update(environ)
+            os.chdir(cwd)
+            for hook in _after_run:
+                try:
+                    hook()
+                except Exception:   # cleanup never hides the run's own exit code
+                    pass
+            InProcess.current = None
+            self.code = code
+            if self.popups is not None:
+                self.popups.ended()
+            self.on_exit(code)
+
+    def send(self, message: dict) -> None:
+        from pokeldn import popup
+        if self.running:
+            popup.receive(popup.line(message))
+
+    def stop(self) -> None:
+        """The KeyboardInterrupt a closed stdin raises in a child, raised in the run's thread instead."""
+        import ctypes
+        if not self.running:
+            return
+        self.stopping = True
+        for hook in list(_closing):
+            hook()
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(self.thread.ident), ctypes.py_object(KeyboardInterrupt))
+
+
+class _Lines:
+    """A run's stdout and stderr, cut into lines for the session panel."""
+
+    encoding = "utf-8"
+
+    def __init__(self, take: Callable[[str], None]):
+        self.take, self.partial, self.lock = take, "", threading.Lock()
+
+    def write(self, text: str) -> int:
+        with self.lock:
+            *done, self.partial = (self.partial + text).split("\n")
+        for line in done:
+            self.take(line)
+        return len(text)
+
+    def flush(self) -> None:
+        with self.lock:
+            rest, self.partial = self.partial, ""
+        if rest:
+            self.take(rest)
+
+    def isatty(self) -> bool:
+        return False
+
+    def reconfigure(self, **_) -> None:
+        pass
+
+
+_before_run: list[Callable[[], None]] = []
+_after_run: list[Callable[[], None]] = []
+
+
+def before_run(hook: Callable[[], None]) -> None:
+    """Runs `hook` on the run's thread before each in-process run starts."""
+    _before_run.append(hook)
+
+
+def after_run(hook: Callable[[], None]) -> None:
+    """Runs `hook` after each in-process run: state a child process would have taken with it (the radio)."""
+    _after_run.append(hook)
+
+
+if os.environ.get("POKELDN_PLATFORM") in ("android", "ios"):   # neither starts a second Python
+    Process = InProcess   # noqa: F811
 
 
 def base_env(settings, port: str, trace: str | None = None) -> dict:

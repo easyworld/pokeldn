@@ -96,6 +96,29 @@ public final class UsbStream implements AutoCloseable {
         }
     }
 
+    /** Bytes received and not yet read. */
+    public synchronized int available() {
+        int count = remainder.length;
+        for (byte[] chunk : incoming) count += chunk.length;
+        return count;
+    }
+
+    /** CDC SET_CONTROL_LINE_STATE: bit 0 DTR, bit 1 RTS. The native USB peripheral resets the chip on
+     *  the sequence esptool sends (ESP-IDF, USB Serial/JTAG controller). */
+    public void setLines(boolean dtr, boolean rts) throws IOException {
+        int value = (dtr ? 1 : 0) | (rts ? 2 : 0);
+        if (connection.controlTransfer(0x21, 0x22, value, control.getId(), null, 0, 1000) < 0)
+            throw new IOException("CDC line state failed");
+    }
+
+    public void setBaud(int baud) throws IOException {
+        byte[] coding = {(byte)baud, (byte)(baud >> 8), (byte)(baud >> 16), (byte)(baud >> 24), 0, 0, 8};
+        if (connection.controlTransfer(0x21, 0x20, 0, control.getId(), coding, 7, 1000) != 7)
+            throw new IOException("CDC line coding failed");
+    }
+
+    public boolean isClosed() { return closed || readFailure != null || writeFailure != null; }
+
     public int write(byte[] bytes) throws IOException {
         if (!queuedWrites) return writeNow(bytes);
         if (closed) throw new IOException("USB stream closed");

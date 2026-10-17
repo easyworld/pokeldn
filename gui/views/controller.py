@@ -107,23 +107,23 @@ class ControllerView:
         self.pad = ft.Column(spacing=18, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True)
         self.editor = ft.ListView(spacing=14, padding=ft.Padding(18, 8, 18, 18), expand=True)
         self.footer = ft.Column(spacing=8, tight=True)
-        self.control = ft.Row([
-            t.panel(ft.Column([
+        self.panes = t.Panes(
+            (tr('controller.pane_macros', 'Macros'), "bulletlist", t.panel(ft.Column([
                 t.panel_header(tr('controller.macros_866dcd', 'Macros'),
                                t.icon_button("plus", lambda e: self.new(), tr('controller.new_macro_b9a983', 'New macro')),
                                t.icon_button("upload", self._import, tr('controller.import_a_pokemacro_file_13a934', 'Import a .pokemacro file')),
                                t.icon_button("folder", lambda e: open_folder(str(macros.library())),
                                              tr('controller.open_the_macros_folder_10afa1', 'Open the macros folder'))),
                 t.fade(self.list),
-            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
-            t.fade(ft.ListView([self.status, self.pad], spacing=t.GAP, padding=ft.Padding(0, 0, 0, 24),
-                               expand=True)),
-            t.panel(ft.Column([
+            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH)),
+            (tr('controller.pane_controller', 'Controller'), "joystick", t.fade(ft.ListView([self.status, self.pad], spacing=t.GAP, padding=ft.Padding(0, 0, 0, 24),
+                               expand=True))),
+            (tr('controller.pane_macro', 'Macro'), "code", t.panel(ft.Column([
                 t.panel_header(tr('controller.macro_cdf16e', 'Macro')),
                 self.editor,
                 ft.Container(self.footer, padding=ft.Padding(18, 0, 18, 18)),
-            ], spacing=0, expand=True), width=t.SESSION_WIDTH),
-        ], spacing=t.GAP, expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+            ], spacing=0, expand=True), width=t.SESSION_WIDTH)))
+        self.control = self.panes.control
         self.render_all()
         app.board_listeners.append(lambda: self.visible and self.render_status())
 

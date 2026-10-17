@@ -23,7 +23,7 @@ from pokeldn.host_support import open_output
 from pokeldn import pokemon as pokemon_service
 from pokeldn.ldn import clone, pia3, pia4, reliable3, station4, station9, sync_clock
 from pokeldn.lgpe import pb7
-from pokeldn.lgpe.trade import (TRADE_IN_PROGRESS, _answer_offer, _send_step,
+from pokeldn.lgpe.trade import (keep_received, TRADE_IN_PROGRESS, _answer_offer, _send_step,
                                 _warn_if_mid_trade, show_offer)
 from pokeldn import receiver_gift
 from pokeldn.app import screen
@@ -277,7 +277,9 @@ def main(argv=None):
             if time.monotonic() - t0 >= args.seconds:
                 # Stopping between offer and result makes the console refuse the next trade for
                 # 600 s of play: hold until the exchange is settled or the console has left.
-                if not TRADE_IN_PROGRESS["offer"] or session.trade.get("done"):
+                # This session's own flag: TRADE_IN_PROGRESS is the process's, which a joiner in
+                # the same process (tests/test_esp32.py) clears.
+                if not session.trade.get("mid_trade") or session.trade.get("done"):
                     break
                 if time.monotonic() - t0 >= args.seconds + args.grace:
                     break
@@ -565,6 +567,7 @@ class Session:
                 self.committed_2 = True
                 step = _send_step(self.trade, self.send, self.commit_kind, b"\x02\0\0\0")
                 self.publish_step()
+                keep_received(self.args, self.trade.get("peer_offer"))
                 screen.received("lgpe", self.trade.get("peer_offer"))
                 # A retail host sent its result 26.8 s after this (docs/lgpe_session.md).
                 self.result_clones_at = now + self.args.result_after - 0.5
@@ -667,7 +670,7 @@ class Session:
             print(f"[lgh] game: {self.args.offer} is {len(raw)} bytes, not {pb7.BOX_SIZE}")
             return
         body = raw if pb7.valid(raw) else pb7.encrypt(raw)
-        TRADE_IN_PROGRESS["offer"] = True
+        self.trade["mid_trade"] = TRADE_IN_PROGRESS["offer"] = True
         self.led = True
         step = _send_step(self.trade, self.send, self.offer_kind, body)
         print(f"[lgh] offer: *** SENT {len(body)} B step {step} *** {self.args.offer}, unprompted")
@@ -850,8 +853,6 @@ class Session:
             self.trade["done"] = False
             if pb7.valid(msg["body"]):
                 self.trade["peer_offer"] = msg["body"]
-                if self.args.received:
-                    pokemon_service.save_received("lgpe", self.args.received, msg["body"])
             print(f"[lgh] offer: the peer answered ours under step {msg['step']}")
             if self.args.lead is not None:
                 self.lead_vote_at = time.monotonic() + self.args.lead
@@ -861,8 +862,6 @@ class Session:
                 self.console_offer = msg
                 self.trade["peer_offer"] = msg["body"]
                 self.trade["done"] = False
-                if self.args.received:
-                    pokemon_service.save_received("lgpe", self.args.received, msg["body"])
                 self.partner.offer(msg["body"])
         elif msg["kind"] == self.offer_kind:
             before = self.trade.get("answered_step", 0)
@@ -877,6 +876,8 @@ class Session:
             print(f"[lgh] game: the console's commit carries {value}")
             if value == 1:
                 self.peer_committed = True
+            elif value == 2:   # the console sent the 2: that commits the trade on its side
+                keep_received(self.args, self.trade.get("peer_offer"))
         elif msg["kind"] == self.result_kind:
             if self.trade.get("done"):
                 print(f"[lgh] game: kind {self.result_kind} after the completed trade; "
@@ -887,7 +888,7 @@ class Session:
             self.trade["done"] = True
             show_done()
             screen.arrived()
-            TRADE_IN_PROGRESS["offer"] = TRADE_IN_PROGRESS["commit"] = False
+            TRADE_IN_PROGRESS["offer"] = TRADE_IN_PROGRESS["commit"] = self.trade["mid_trade"] = False
             print("[lgh] game: *** THE RESULT *** the trade has gone through on the console")
             self.send_result()
             if self.partner is not None:
@@ -1110,7 +1111,7 @@ class Session:
             r = reliable3.parse(pl)
             if r and r["size"] and r["payload"][0] == mp.LEAVE_REQUEST and not self.peer_left:
                 self.peer_left = True
-                TRADE_IN_PROGRESS["offer"] = TRADE_IN_PROGRESS["commit"] = False
+                TRADE_IN_PROGRESS["offer"] = TRADE_IN_PROGRESS["commit"] = self.trade["mid_trade"] = False
                 self.send(reliable3.build_ack(r["sequence"] + 1), mp.PROTOCOL, port=1)
                 for _ in range(2):
                     self.send(mp.build_leave_response(HOST_INDEX), mp.PROTOCOL,

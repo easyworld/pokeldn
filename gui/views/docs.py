@@ -66,15 +66,15 @@ class DocsView:
         self.markdown = MarkdownDocument(app, self._link)
         self.scroll = ft.ListView([ft.Container(self.markdown.control, width=860)], padding=ft.Padding(32, 24, 32, 32),
                                   expand=True)
-        self.control = ft.Row([
-            t.panel(ft.Column([
+        self.panes = t.Panes(
+            (tr('docs.pane_pages', 'Pages'), "bulletlist", t.panel(ft.Column([
                 t.panel_header(tr('docs.docs_7af023', 'Docs'), t.icon_button("external-link",
                                                      lambda e: self.app.page.run_task(self.app.open_url, SITE),
                                                      tr('docs.open_the_docs_website_a6f6df', 'Open the docs website'))),
                 t.fade(self.nav),
-            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
-            t.surface(t.fade(self.scroll), radius=20, expand=True),
-        ], spacing=t.GAP, expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH)),
+            (tr('docs.pane_read', 'Read'), "book-open", t.surface(t.fade(self.scroll), radius=20, expand=True)))
+        self.control = self.panes.control
         self.show("guide", update=False)
 
     def enter(self, doc: str = "", **_) -> None:
@@ -125,6 +125,8 @@ class DocsView:
             self.render_nav()
             self.nav.update()
             return
+        if not folder:   # a phone brings the page forward; a folder's row only unfolds it
+            self.panes.show(1, update=False)
         self.show(file)
 
     async def _link(self, e) -> None:

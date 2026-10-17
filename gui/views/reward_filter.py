@@ -137,7 +137,7 @@ class RewardFilter:
         self._render()
 
     def _name(self, item: int) -> str:
-        return self.names.get(item, f"Item {item}")
+        return self.names.get(item, f"道具 {item}")
 
     def _render(self, update: bool = True) -> None:
         count = len(self.rows)

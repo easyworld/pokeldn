@@ -12,7 +12,7 @@ import serial
 from gui import board, theme
 from gui.popups import Dialogs
 from pokeldn import plugins, pokemon, popup
-from pokeldn.app import popups, settings, update
+from pokeldn.app import android, ios, popups, settings, update
 from pokeldn.app.paths import SESSION
 from gui.views.widgets import on_ui
 from pokeldn.app.i18n import t as tr
@@ -48,6 +48,10 @@ class App:
         pokemon.SERVICE.home_tracker = SERVICE.home_tracker = self.settings.home_tracker
         self.plugin_stopped = plugins.turn_off_the_one_that_stopped(self.settings)   # and watches this start
         self.picker = ft.FilePicker()
+        if android.active():   # the web view's picker gives no paths
+            self.picker = android.Picker()
+        if ios.active():
+            self.picker = ios.Picker()
         self.clipboard = ft.Clipboard()
         self.launcher = ft.UrlLauncher()
         self.process = None        # the running session or flash
@@ -109,6 +113,8 @@ class App:
         present = board.ports() if present is None else present
         for device in set(self.identities) - {p.device for p in present}:
             self.identities.pop(device)   # unplugged: check again when it returns
+        if not present and android.active():
+            return self.android_status()
         if not present:
             hidden = board.bridges_without_port() if sys.platform.startswith("linux") else []
             if hidden:
@@ -159,6 +165,16 @@ class App:
                                tr('app.install_the_wireless_firmware_on_the_board_page_if_you__f58486', "Install the Wireless firmware on the Board page. If you just installed it, press the board's RESET (RST) button."),
                                port)
         return BoardStatus("checking", tr('app.checking_the_board_f7ce4a', 'Checking the board'), tr('app.asking_the_board_for_its_firmware_21d622', 'Asking the board for its firmware.'), port)
+
+    def android_status(self) -> BoardStatus:
+        """The phone's USB state before any firmware answers (docs/gui.md, Android setup requirements)."""
+        state = android.usb_state()
+        titles = {"missing": tr('app.no_board_plugged_in_0ea8e5', 'No board plugged in'),
+                  "bridge": tr('app.android_bridge_board', 'This board needs a computer'),
+                  "permission": tr('app.android_allow_usb', 'Allow USB access'),
+                  "denied": tr('app.android_usb_refused', 'USB access was refused')}
+        return BoardStatus("denied" if state in ("permission", "denied") else "missing", titles.get(state, ""),
+                           android.usb_guidance(state))
 
     def check_board(self, device: str, blink: bool = False, log=None) -> None:
         """Ask the board's firmware for its identity in the background; opening the port can restart it."""

@@ -22,6 +22,7 @@
 #include "led.h"
 #include "private_wifi.h"
 #include "usbwatch.h"
+#include "ble.h"
 #include "wire.h"
 
 #define PROTOCOL_VERSION 1
@@ -268,6 +269,8 @@ static void tx_done(uint8_t ifidx, uint8_t *data, uint16_t *length, bool acked)
             atomic_fetch_add(&s_tx_queued_n, 1);
         }
     }
+    /* Diagnostic only; over BLE it crowded the console's own RX_ETH out of the queue. */
+    if (ble_linked()) return;
     uint8_t head[12];
     memcpy(head, &now, 4);
     memcpy(head + 4, &queued, 4);
@@ -837,6 +840,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_wifi_start());
     esp_wifi_set_ps(WIFI_PS_NONE);
     start_sniffer();
+#if POKELDN_BLE
+    ble_start();
+#endif
     wire_start(command);
     usbwatch_start();
     led_start(led_state, button_pressed);

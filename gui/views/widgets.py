@@ -253,6 +253,10 @@ def open_folder(path: str) -> None:
     import subprocess
     import sys
     os.makedirs(path, exist_ok=True)
+    from pokeldn.app import android
+    if android.active():   # no file manager to show it in: the folder goes, zipped, where the player saves it
+        android.save_folder(path)
+        return
     if sys.platform == "win32":
         os.startfile(path)
     else:

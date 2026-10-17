@@ -1,0 +1,23 @@
+{
+  "name": "pokeldn",
+  "identifier": "io.pokeldn.app",
+  "sourceURL": "https://raw.githubusercontent.com/Decryptu/pokeldn/main/.github/altstore/source.json",
+  "subtitle": "Trade and send gifts to Pokemon games over local wireless",
+  "description": "pokeldn speaks Nintendo Switch local wireless to Pokemon games on a real console: trades in both roles, Mystery Gifts and more, for FireRed and LeafGreen through Legends Z-A.\n\nThe radio is an ESP32 board running pokeldn's Bluetooth radio firmware; the phone talks to it over Bluetooth. You supply prod.keys dumped from your own console.",
+  "iconURL": "https://raw.githubusercontent.com/Decryptu/pokeldn/main/gui/assets/icon.png",
+  "website": "https://github.com/Decryptu/pokeldn",
+  "tintColor": "#47AEFA",
+  "apps": [
+    {
+      "name": "pokeldn",
+      "bundleIdentifier": "io.pokeldn.app",
+      "developerName": "Decryptu",
+      "subtitle": "Trade and send gifts to Pokemon games over local wireless",
+      "localizedDescription": "pokeldn speaks Nintendo Switch local wireless to Pokemon games on a real console: trades in both roles, Mystery Gifts and more, for FireRed and LeafGreen through Legends Z-A.\n\nThe radio is an ESP32 board running pokeldn's Bluetooth radio firmware; the phone talks to it over Bluetooth. You supply prod.keys dumped from your own console.",
+      "iconURL": "https://raw.githubusercontent.com/Decryptu/pokeldn/main/gui/assets/icon.png",
+      "tintColor": "#47AEFA",
+      "category": "games",
+      "versions": []
+    }
+  ]
+}

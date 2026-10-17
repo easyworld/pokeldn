@@ -40,6 +40,8 @@ def test_raid_gallery_renders_chinese_species_without_changing_event_keys():
     RaidEventPicker._fill(picker, [event], "")
     assert dropdown.options[1].key == event.key
     assert "波荡水、铁斑叶" in dropdown.options[1].text
+    assert dropdown.options[1].content.controls[0].value == "波荡水"
+    assert "Walking Wake" not in dropdown.options[1].text
 
 
 def test_choice_card_includes_help_for_the_saved_selection():
@@ -566,7 +568,7 @@ def test_start_on_another_tool_stops_the_running_session_then_starts(tmp_path, m
     monkeypatch.setattr(SessionPanel, "_tick", lambda self: None)
     first, second = (next(t for t in TOOLS if t.key == key) for key in ("swsh-join", "pla-host"))
     panel = SessionPanel.__new__(SessionPanel)
-    panel.__dict__.update(app=FakeApp(), games=SimpleNamespace(values={}, extra={}, visible=False, game=SimpleNamespace(
+    panel.__dict__.update(app=FakeApp(), games=SimpleNamespace(values={}, extra={}, visible=False, panes=SimpleNamespace(show=lambda *a, **k: None), game=SimpleNamespace(
         name="game", key="swsh")), log=SimpleNamespace(add=lambda line: None, clear=lambda: None),
         received=SimpleNamespace(), transfer=SimpleNamespace(), partner=SimpleNamespace(), run=None,
         running_tool=None, restart=False, stopping=False, traded=0)
@@ -1375,6 +1377,21 @@ def test_banked_and_remote_summaries_keep_player_nicknames():
     assert summary_text("皮卡丘 · 等级 5 · “Pikachu”") == "皮卡丘 · 等级 5 · “Pikachu”"
 
 
+def test_bank_import_names_and_locations_are_chinese_and_keep_custom_box_names():
+    from gui.views.bank import ImportDialog
+    from pokeldn.app.bank import ImportedPokemon
+    app = SimpleNamespace(settings=SimpleNamespace(sprites=False))
+    view = SimpleNamespace(app=app, STATES=ImportDialog.STATES)
+    for where, expected in (("Party, slot 1", "同行队伍，第 1 个位置"),
+                            ("Box 2, slot 3", "盒子 2，第 3 个位置"),
+                            ("Eevee, slot 4", "Eevee，第 4 个位置")):
+        record = ImportedPokemon(where, "Pikachu", 25, False, "banked", "sv", "")
+        control = ImportDialog._pokemon(view, record)
+        texts = [c.value for c in raid_controls(control) if isinstance(c, ft.Text)]
+        assert "皮卡丘" in texts and expected in texts
+        assert record.species == "Pikachu" and record.where == where
+
+
 def test_raid_gallery_labels_use_chinese_without_changing_folder_keys():
     from gui.localization import raid_label
     from pokeldn.app.events_gallery import title
@@ -2051,11 +2068,20 @@ def test_find_a_raid_offers_its_default_seeds_from_any_first_seed(monkeypatch):
     app = SimpleNamespace(page=SimpleNamespace(show_dialog=shown.append, pop_dialog=lambda: None),
                           ui=lambda f: f())
     monkeypatch.setattr(raid_search, "FAST", False)       # no warm-up thread
+    monkeypatch.setattr(pokemon.threading, "Thread", lambda target, daemon: SimpleNamespace(start=target))
+    monkeypatch.setattr(ft.Dropdown, "update", lambda self: None)
     picker = raid_seed.RaidSeedPicker(app, "", lambda _v: None,
                                       lambda: {"version": "violet", "map_name": "paldea", "progress": "6star",
                                                "content": "standard"}, lambda _c: None)
     picker._open(None)
     controls = list(raid_controls(shown[0].content))
+    species = next(c for c in controls if isinstance(c, ft.Dropdown)
+                   and any(o.key == "460" for o in c.options))
+    expected = {str(s["id"]): s["name"] for s in pokemon.SERVICE.species("sv")}
+    assert {o.key: o.text for o in species.options if o.key != "-"} == {
+        str(s): expected[str(s)] for s, _ in raid_search.species()}
+    species.value = "460"
+    assert next(o.text for o in species.options if o.key == species.value) == "暴雪王"
     labels = [c for c in controls if isinstance(c, ft.Column) and c.controls and isinstance(c.controls[0], ft.Container)
               and isinstance(c.controls[0].content, ft.Text)]
     first = next(c.controls[1] for c in labels if c.controls[0].content.value == "起始种子")
@@ -2083,6 +2109,7 @@ def test_the_finder_greys_out_the_size_marks_an_event_rules_out(monkeypatch):
                           ui=lambda f: f())
     monkeypatch.setattr(raid_search, "FAST", False)
     monkeypatch.setattr(ft.Dropdown, "update", lambda self: None)
+    monkeypatch.setattr(pokemon.threading, "Thread", lambda target, daemon: SimpleNamespace(start=target))
     base = dict(form=0, ability=0, flawless_ivs=0, level=12, capture_level=12, moves=[33, 0, 0, 0], tera=1,
                 rate=1, fixed_rewards="1", lottery_rewards="1", boss_desc=[500] + [0] * 36, evs=[0] * 6, rom=0,
                 group=1, capture_rate=1, ivs=None, gender=None, nature=None, shiny=0, held_item=0, time=None)
@@ -2093,6 +2120,12 @@ def test_the_finder_greys_out_the_size_marks_an_event_rules_out(monkeypatch):
     picker = raid_seed.RaidSeedPicker(app, "", lambda _v: None, lambda: context, lambda _c: None)
     picker._open(None)
     dropdowns = [c for c in raid_controls(shown[0].content) if isinstance(c, ft.Dropdown)]
+    species = next(d for d in dropdowns if any(o.key == "25" for o in d.options))
+    assert {o.key: o.text for o in species.options} == {"-": "未设置", "25": "皮卡丘", "6": "喷火龙"}
+    version = next(d for d in dropdowns if any(o.key == "scarlet" for o in d.options))
+    assert {o.key: o.text for o in version.options if o.key != "any"} == {"scarlet": "朱", "violet": "紫"}
+    crystal = next(d for d in dropdowns if any(o.key == "1" and "星" in o.text for o in d.options))
+    assert all("star" not in o.text for o in crystal.options)
     size = next(d for d in dropdowns if d.options[0].text == "不限体型证章")
     stars = next(d for d in dropdowns if d.options[0].text == "任意星级")
     greyed = lambda: [o.text for o in size.options if o.disabled]

@@ -134,8 +134,9 @@ class RaidEventPicker:
         options = [ft.DropdownOption(key=NONE, text=tr('raid_event.no_event_a_standard_raid_562e51', 'No event, a standard raid'))]
         for entry in (reversed(events) if newest else events):
             species = "、".join(translate(name) for name in entry.species)
-            options.append(ft.DropdownOption(key=entry.key, text=tr('raid_event._75414c', '{value0} · {value1}', value0=entry.title, value1=species), content=ft.Column([
-                t.text(entry.title, 13, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+            title = raid_label(entry.title)
+            options.append(ft.DropdownOption(key=entry.key, text=tr('raid_event._75414c', '{value0} · {value1}', value0=title, value1=species), content=ft.Column([
+                t.text(title, 13, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                 t.text(species, 11, t.MUTED, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
             ], spacing=0, tight=True)))
         key = self.view.values.get(self.field.key) or ""

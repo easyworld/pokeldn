@@ -37,6 +37,9 @@ CONTROL_RADIUS = 8
 GAP = 12
 SIDEBAR_WIDTH = 254
 SESSION_WIDTH = 360
+# A window narrower than this (a phone) shows one panel at a time and a bottom tab bar (docs/gui.md, Phones).
+COMPACT_WIDTH = 760
+compact = False
 
 
 def system_font_family() -> str | None:
@@ -113,6 +116,40 @@ TOOLBAR_ITEM = 32   # the icon buttons are this size
 TOOLBAR_INSET = 4
 
 
+class Panes:
+    """A page's panels: side by side on a computer; on a phone one at a time, picked by name on a
+    switcher above them. `show` brings one forward, as choosing a tool brings its options."""
+
+    def __init__(self, *panes: tuple[str, str, ft.Control]):
+        self.panes = list(panes)
+        self.index = 0
+        if not compact:
+            self.control = ft.Row([p[2] for p in panes], spacing=GAP, expand=True,
+                                  vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+            return
+        # Every pane stays on the page, hidden or not: a view updates its panes while another shows.
+        self.holders = [ft.Container(pane, expand=True, visible=i == 0) for i, (_, _, pane) in enumerate(panes)]
+        for _, _, pane in panes:
+            pane.width, pane.expand = None, True
+        self.switcher = ft.Container()
+        self.control = ft.Column([self.switcher, *self.holders], spacing=8, expand=True)
+        self._render()
+
+    def _render(self) -> None:
+        self.switcher.content = notch(segmented([(str(i), title, icon) for i, (title, icon, _) in enumerate(self.panes)],
+                                                str(self.index), lambda value: self.show(int(value))))
+
+    def show(self, index: int, update: bool = True) -> None:
+        if not compact or index == self.index:
+            return
+        self.index = index
+        for i, holder in enumerate(self.holders):
+            holder.visible = i == index
+        self._render()
+        if update and self.control.page:
+            self.control.update()
+
+
 def notch(*controls: ft.Control) -> ft.Row:
     """A small glass toolbar centred over the content; its groups are split by hairlines.
     Its corners are concentric with its items': outer radius = item radius + the even inset."""
@@ -174,6 +211,12 @@ def card(title: str, body: ft.Control | None = None, description: str = "",
 
 
 def dialog(**kwargs) -> ft.AlertDialog:
+    content = kwargs.get("content")
+    if compact and isinstance(content, ft.Container) and (content.width or 0) > 280:
+        content.width = None     # a phone's dialog is as wide as the screen allows
+    if compact:
+        kwargs.setdefault("inset_padding", ft.Padding(14, 24, 14, 24))
+        kwargs.setdefault("actions_overflow_button_spacing", 8)
     return ft.AlertDialog(bgcolor=PANEL, elevation=24,
                           shape=ft.RoundedRectangleBorder(
                               radius=20, side=ft.BorderSide(1, ft.Colors.with_opacity(0.08, "#FFFFFF"))),

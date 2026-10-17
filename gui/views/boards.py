@@ -13,7 +13,7 @@ import flet as ft
 from gui import board
 from gui.app import NO_FIRMWARE, PORT_BUSY, PORT_DENIED
 from pokeldn.pad import service
-from pokeldn.app import runner
+from pokeldn.app import android, runner
 from pokeldn.app.paths import SESSION
 from gui import drop, theme as t
 from gui.views.widgets import CodeBlock, Log, PixelActivity
@@ -52,6 +52,7 @@ class BoardView:
     def __init__(self, app):
         self.app = app
         self.ports: list[board.Port] = []
+        self.usb_changes = 0        # Android: plugs, unplugs and USB prompt answers seen so far
         self.selected: str = ""
         self.visible = False
         self.downloading = False
@@ -66,16 +67,16 @@ class BoardView:
         self.log = Log(app.page, tr('boards.checks_and_installs_show_their_output_here_effc3a', 'Checks and installs show their output here.'))
         self.progress = ft.ProgressBar(value=None, color=t.BLUE, bgcolor=t.FIELD, height=4, border_radius=2)
         self.progress_text = t.text("", 12, t.MUTED)
-        self.control = ft.Row([
-            t.panel(ft.Column([
+        self.panes = t.Panes(
+            (tr('boards.pane_boards', 'Boards'), "usb", t.panel(ft.Column([
                 t.panel_header(tr('boards.boards_4fcd39', 'Boards'), t.icon_button("refresh", lambda e: self.scan(), tr('boards.look_again_d36fee', 'Look again'))),
                 t.fade(self.list),
-            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
-            t.fade(ft.ListView([self.detail], padding=ft.Padding(0, 0, 0, 24), expand=True)),
-            t.panel(ft.Column([t.panel_header(tr('boards.activity_38da15', 'Activity')),
+            ], spacing=0, expand=True), width=t.SIDEBAR_WIDTH)),
+            (tr('boards.pane_board', 'Board'), "cpu", t.fade(ft.ListView([self.detail], padding=ft.Padding(0, 0, 0, 24), expand=True))),
+            (tr('boards.pane_activity', 'Activity'), "bulletlist", t.panel(ft.Column([t.panel_header(tr('boards.activity_38da15', 'Activity')),
                                ft.Container(self.log.control, padding=16, expand=True)],
-                              spacing=0, expand=True), width=t.SESSION_WIDTH),
-        ], spacing=t.GAP, expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+                              spacing=0, expand=True), width=t.SESSION_WIDTH)))
+        self.control = self.panes.control
         app.board_listeners.append(self._checked)
 
     # The boards present, polled while the page is open so a board shows up when it is plugged in
@@ -100,7 +101,9 @@ class BoardView:
                     self.app.hidden_bridges = hidden
                     self.app.ui(self.scan)
                     continue
-            if self.visible and [p.device for p in present] != [p.device for p in self.ports]:
+            usb = android.changes() if android.active() else 0
+            if self.visible and ([p.device for p in present] != [p.device for p in self.ports] or usb != self.usb_changes):
+                self.usb_changes = usb
                 self.app.ui(self.scan)
 
     def keys(self) -> list[str]:
@@ -115,6 +118,8 @@ class BoardView:
             self.selected = self.app.radio_port(self.ports) or (keys[0] if keys else "")
         self._check_selected()
         self.render()
+        if not keys:   # on a phone the guidance and its buttons come forward
+            self.panes.show(1, update=False)
         if update:
             self.control.update()
 
@@ -214,6 +219,7 @@ class BoardView:
         self.detail.controls = cards
 
     def _select(self, key: str) -> None:
+        self.panes.show(1, update=False)
         if not self.installing:
             self.progress_text.value = ""
         self.selected = key
@@ -223,11 +229,17 @@ class BoardView:
 
     def empty_card(self) -> ft.Control:
         status = self.app.board_status(self.ports)
-        return t.surface(ft.Container(ft.Row([
+        rows = [ft.Row([
             t.pixel_icon("usb", size=48, color=t.FAINT),
             ft.Column([t.text(status.title, 17, weight=ft.FontWeight.W_600),
                        t.text(status.detail, 13, t.MUTED)], spacing=2, expand=True),
-        ], spacing=14), padding=ft.Padding(18, 16, 18, 18)))
+        ], spacing=14, vertical_alignment=ft.CrossAxisAlignment.START)]
+        if android.active():   # the two things a phone's player can fix from here
+            actions = ([t.button(tr('boards.android_allow_usb', 'Allow USB access'), lambda e: android.ask_permission(), "usb")]
+                       if status.state == "denied" else
+                       [t.secondary_button(tr('boards.android_settings', 'Open Settings'), lambda e: android.open_settings(), "gear")])
+            rows.append(ft.Row(actions, alignment=ft.MainAxisAlignment.END))
+        return t.surface(ft.Container(ft.Column(rows, spacing=14), padding=ft.Padding(18, 16, 18, 18)))
 
     def header(self, f: Facts) -> ft.Control:
         """Name, firmware and version, one status line and the one action that status calls for."""
@@ -592,6 +604,10 @@ class BoardView:
                                       "external-link")
 
         lines = [t.text(tr('boards.try_another_cable_or_usb_port_many_cables_only_charge_d90a3a', 'Try another cable or USB port. Many cables only charge.'), 13)]
+        if android.active():   # Bridge.java drives native USB only
+            lines += [t.text(tr('boards.android_boards', "A phone drives an ESP32-S3, C3 or C6 through its native USB port, the one marked USB. A classic ESP32 needs a computer."), 13, t.MUTED),
+                      t.text(tr('boards.android_adapter', "A phone with a USB-C socket needs a USB-C cable or an OTG adapter; a USB-A board cable alone does not fit."), 13, t.MUTED)]
+            return t.card(tr('boards.board_not_listed_or_not_answering_1a424c', 'Board not listed, or not answering?'), ft.Column(lines, spacing=8))
         if sys.platform == "win32":
             lines += [
                 t.text(tr('boards.windows_needs_the_driver_for_the_board_s_usb_chip_print_d650ec', "Windows needs the driver for the board's USB chip, printed on the chip next to the USB socket (CP2102 or CH340):"), 13),

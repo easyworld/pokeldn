@@ -523,6 +523,9 @@ the console host's first kind 4 is its first slot: `bin/lgpe_join.py` answers it
 selection with its next `--offer`, answers the commit on kind 5, and takes kind 6 as that trade's
 end; after its last record it answers nothing.
 
+Both launchers write a trade's received record when the 2 commit is exchanged, sent or received,
+since that commits the trade on the console; an offer shown and then withdrawn writes nothing.
+
 A console host runs each later trade as the first: the next party pair announced before its first
 kind 4, a kind 4 step per selection, the commit clone at its confirmation, the commit on kind 5, and
 the following pair announced before kind 6. `bin/lgpe_host.py --lead` plays a console host's part,

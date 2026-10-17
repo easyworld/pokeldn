@@ -204,16 +204,16 @@ def main(argv=None):
         for payload, src_ip in transport.recv():
             s = sessions.get(src_ip)
             if s is not None:
-                before, picked = s.console_offer, s.console_pick
+                before, done = s.console_offer, s.trades
                 s.receive(payload, src_ip)
                 if s.console_offer is not None and s.console_offer is not before:
                     print(f"[za-host] the console offers {describe_offer(s.console_offer)}")
                     if state["done_at"] is not None and state["back_at"] is None:
                         state["back_at"] = time.time()
-                if args.offer_out and s.console_pick is not picked:
+                if args.offer_out and s.trades > done and s.console_pick is not None:
+                    # Written once the trade completes; a pick can still be withdrawn.
                     pokemon_service.save_received(
-                        "za", pokemon_service.trade_path(args.offer_out, s.trades + 1),
-                        s.console_pick)
+                        "za", pokemon_service.trade_path(args.offer_out, s.trades), s.console_pick)
         for s in list(sessions.values()):
             for data, ip in s.tick():
                 transport.send(data, ip)

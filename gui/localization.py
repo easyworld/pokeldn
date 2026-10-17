@@ -39,6 +39,14 @@ def translate(value: str) -> str:
     outfit = re.fullmatch(r"Puts the (.+) in the wardrobe", value)
     if outfit:
         return "在衣柜中添加" + translate(outfit[1]) + "。"
+    location = re.fullmatch(r"(.+), slot (\d+)", value)
+    if location:
+        box, slot = location.groups()
+        if box == "Party":
+            box = "同行队伍"
+        elif re.fullmatch(r"Box \d+", box):
+            box = "盒子 " + box[4:]
+        return f"{box}，第 {slot} 个位置"
     card_id_error = re.fullmatch(r"The card id is 1 to (\d+)\.", value)
     if card_id_error:
         return f"卡片 ID 必须为 1 至 {card_id_error[1]}。"
@@ -69,9 +77,6 @@ def translate(value: str) -> str:
         ('card (\\d+) gave it in (.+) alone, never to a save in (.+)', '卡片 \\1 仅面向\\2发放，无法提供给\\3存档'),
         ('card (\\d+) gave it to (.+) alone, never to (.+)', '卡片 \\1 仅面向\\2发放，无法提供给\\3'),
 
-        ('Party, slot (\\d+)', '同行队伍，第 \\1 个位置'),
-        ('Box (\\d+), slot (\\d+)', '盒子 \\1，第 \\2 个位置'),
-        ('(.+), slot (\\d+)', '\\1，第 \\2 个位置'),
         ('Left its (.+) behind', '已移除携带道具：\\1'),
         ('Forgot (.+)', '已忘记：\\1'),
         ('(.+) is in no game HOME can send it to\\.', 'HOME 可传入的游戏中均不存在 \\1。'),

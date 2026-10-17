@@ -51,13 +51,14 @@ class PokemonPicker:
         self.build_button = t.button(tr('pokemon.build_bdd254', 'Build'), self._build, disabled=True)
         self.options = OfferOptions(self)
         self.result = ft.Container()
+        species = t.labeled_control(tr('pokemon.species_56205e', 'Species'), self.species, expand=True)
+        level_shiny = [t.labeled_control(tr('pokemon.level_170930', 'Level'), self.level),
+                       t.labeled_control(tr('pokemon.shiny_039a0a', 'Shiny'), ft.Container(
+                           self.shiny, width=64, height=t.CONTROL_HEIGHT, alignment=ft.Alignment.CENTER))]
+        top = ([ft.Row([species]), ft.Row(level_shiny, spacing=10)] if t.compact else   # a phone: species takes the line
+               [ft.Row([species, *level_shiny], spacing=10, vertical_alignment=ft.CrossAxisAlignment.START)])
         form = pokemon_header(self.sprite.control, [
-            ft.Row([t.labeled_control(tr('pokemon.species_56205e', 'Species'), self.species, expand=True),
-                    t.labeled_control(tr('pokemon.level_170930', 'Level'), self.level),
-                    t.labeled_control(tr('pokemon.shiny_039a0a', 'Shiny'), ft.Container(
-                        self.shiny, width=64, height=t.CONTROL_HEIGHT,
-                        alignment=ft.Alignment.CENTER))],
-                   spacing=10, vertical_alignment=ft.CrossAxisAlignment.START),
+            *top,
             ft.Row([self.nickname, self.build_button], spacing=10,
                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ])

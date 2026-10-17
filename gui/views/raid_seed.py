@@ -121,7 +121,7 @@ def reward_chips(names: dict[int, str] | None, rewards) -> ft.Control:
     for item, quantity in rewards:
         totals[item] = totals.get(item, 0) + quantity
     return ft.Row([ft.Container(ft.Row([
-        t.text(names.get(item, f"Item {item}"), 12, t.SOFT),
+        t.text(names.get(item, f"道具 {item}"), 12, t.SOFT),
         t.text(f"×{quantity}", 12, t.BLUE, weight=ft.FontWeight.W_700)], spacing=6, tight=True),
         padding=ft.Padding(10, 4, 10, 4), border_radius=999, bgcolor=ft.Colors.with_opacity(0.06, "#FFFFFF"))
         for item, quantity in totals.items()], spacing=6, run_spacing=6, wrap=True)
@@ -309,7 +309,7 @@ class RaidSeedPicker:
             # Only what the event spawns: its games, Paldea, its dens and the progresses they draw at.
             games = raid_event.versions(event)
             version = choose(([("any", tr('raid_seed.any_game_44475d', 'Any game'))] if len(games) > 1 else [])
-                             + [(v, v.title()) for v in games], current["version"])
+                             + [(v, VERSIONS[v]) for v in games], current["version"])
             region = choose([("paldea", tr('raid_seed.paldea_14c1fa', 'Paldea'))], "paldea")
             region.disabled = True
             dens = raid_event.dens(event)
@@ -318,10 +318,10 @@ class RaidSeedPicker:
             story = choose([("any", tr('raid_seed.any_progress_92dec4', 'Any progress')),
                             *((key, label) for key, label in PROGRESS if key in stages)], current["progress"])
             crystal = choose(([("any", tr('raid_seed.any_den_110e59', 'Any den'))] if len(dens) > 1 else [])
-                             + [(str(d.group), d.label) for d in dens], str(current["group"]))
+                             + [(str(d.group), raid_label(d.label)) for d in dens], str(current["group"]))
             star_levels = sorted({s for d in dens for s in d.stars})
         species = NamePicker(self.app, "sv", "species", "", lambda _v: changed(),
-                             names=[{"id": s, "name": n} for s, n in raid_search.species(event)]).control
+                             names=[{"id": s, "name": translate(n)} for s, n in raid_search.species(event)]).control
         stars = choose([("any", tr('raid_seed.any_stars_c3a446', 'Any stars')), *((str(n), tr('raid_seed.stars_0dc50f', '{value0} stars', value0=n)) for n in star_levels)], "any")
         tera = choose([("any", tr('raid_seed.any_tera_type_b8f9f7', 'Any Tera type')), *((str(i), n) for i, n in enumerate(TERA_TYPES))], "any")
         nature = choose([("any", tr('raid_seed.any_nature_c9ac32', 'Any nature')), *((str(i), n) for i, n in enumerate(NATURES))], "any")

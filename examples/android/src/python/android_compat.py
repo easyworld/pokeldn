@@ -2,6 +2,7 @@ import ctypes
 import errno
 import os
 import socket
+import threading
 from pathlib import Path
 
 
@@ -15,6 +16,30 @@ def performance_cpu():
     if not capacities:
         return None
     return max(capacities, key=lambda cpu: (capacities[cpu], -cpu))
+
+
+def clear_core(cpu):
+    """Moves every thread of this process off `cpu`, except the caller; -> {tid: its old mask}."""
+    me = threading.get_native_id()
+    moved = {}
+    for name in os.listdir('/proc/self/task'):
+        tid = int(name)
+        try:
+            mask = os.sched_getaffinity(tid)
+            if tid != me and cpu in mask and len(mask) > 1:
+                os.sched_setaffinity(tid, mask - {cpu})
+                moved[tid] = mask
+        except OSError:      # a thread that ended meanwhile
+            pass
+    return moved
+
+
+def restore(moved):
+    for tid, mask in moved.items():
+        try:
+            os.sched_setaffinity(tid, mask)
+        except OSError:
+            pass
 
 
 def install():

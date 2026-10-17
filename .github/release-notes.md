@@ -1,10 +1,11 @@
-# pokeldn 0.29.1
+# pokeldn 0.30.0
 
 这款桌面应用通过 USB 连接的 ESP32 无线开发板，与 Switch 或 Switch 2 上的七组宝可梦游戏进行交换，无需在游戏机上安装任何内容。
 
 ## 更新内容
 
-- 提升通过 USB 向开发板上传数据的速度。应用现在会将仍在写入的帧所收到的开发板确认计入流量控制，避免每发送几帧就等待约 20 毫秒；在 ESP32-S3 上的持续上传速度由约 0.3 MB/s 提升至 0.5 MB/s。此修复由 capito27 贡献。
+- 新增 Android 应用 `pokeldn-android-arm64.apk`，在手机上使用同一套界面，通过 USB-C 数据线或 OTG 转接头连接开发板。需要 Android 8 或更高版本的 64 位 ARM 手机。安装 APK，在欢迎界面选择 `prod.keys`，再连接开发板并允许访问。
+- 《朱／紫》《传说 Z-A》和《Let's Go！皮卡丘／伊布》现在仅在交换完成后保存接收的宝可梦；对方展示后撤回的宝可梦不再被误存为已接收。
 
 无线固件仍为 1.6.2，手柄固件仍为 1.3.0，无需更新开发板。
 
@@ -17,9 +18,10 @@ pokeldn 是非官方的爱好者项目，与任天堂及宝可梦公司无关，
 | macOS，Apple 芯片 | `pokeldn-macos-arm64.zip` |
 | Windows，x64 | `pokeldn-windows-x64.zip` |
 | Linux，x64 | `pokeldn-linux-x64.tar.gz` |
+| Android，arm64 | `pokeldn-android-arm64.apk` |
 
 各平台应用均包含 PKHeX.Core，以及经典 ESP32、ESP32-S3、ESP32-C3 和 ESP32-C6 的固件。所需组件已随包提供或无需额外安装，因此运行应用时无需另行安装 Python、.NET 或 ESP-IDF。请自行准备 `prod.keys`。
-单独提供的 `pokeldn-radio*.bin`（无线）和 `pokeldn-pad*.bin`（手柄）是合并后的固件镜像，手动刷写时使用地址 `0x0`；应用会为连接的芯片选择正确镜像。`SHA256SUMS` 包含全部九个下载文件的校验和。
+单独提供的 `pokeldn-radio*.bin`（无线）和 `pokeldn-pad*.bin`（手柄）是合并后的固件镜像，手动刷写时使用地址 `0x0`；应用会为连接的芯片选择正确镜像。`SHA256SUMS` 包含全部十个下载文件的校验和。
 
 ## 首次运行
 

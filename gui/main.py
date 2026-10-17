@@ -53,7 +53,14 @@ SETTINGS = ("settings", tr('main.settings_74a883', 'Settings'), "gear")
 UPDATE = ("update", tr('main.update_c1c100', 'Update'), "download")
 
 
+ANDROID = os.environ.get("POKELDN_PLATFORM") == "android"
+IOS = os.environ.get("POKELDN_PLATFORM") == "ios"
+if ANDROID or IOS:   # no Bluetooth controller and no self-update on a phone (examples/android, examples/ios)
+    PAGES = tuple(p for p in PAGES if p[0] != "controller")
+
+
 def main(page: ft.Page) -> None:
+    t.compact = bool(page.width) and page.width < t.COMPACT_WIDTH
     page.title = "pokeldn"
     page.theme_mode = ft.ThemeMode.DARK
     page.theme = page.dark_theme = t.app_theme(system_fonts=not page.web)
@@ -105,6 +112,14 @@ def main(page: ft.Page) -> None:
     def item(entry) -> ft.Control:
         key, label, icon = entry
         active = key == current["key"]
+        if t.compact:
+            color = t.RED if active else t.MUTED
+            return ft.Container(ft.Column([
+                t.pixel_icon(icon, size=24, color=color),
+                t.text(label, 10, color, weight=ft.FontWeight.W_500, no_wrap=True),
+            ], spacing=1, horizontal_alignment=ft.CrossAxisAlignment.CENTER), expand=True,
+                padding=ft.Padding(0, 7, 0, 6), border_radius=12, on_click=lambda e, k=key: navigate(k),
+                bgcolor=ft.Colors.with_opacity(0.12, t.RED) if active else None)
         fresh = key == "update" or (key == "plugins" and bool(app.plugin_updates))
         color = t.RED if active else t.GREEN if fresh else t.MUTED
         return ft.Semantics(selected=active, button=True, label=label, exclude_semantics=True,
@@ -118,8 +133,11 @@ def main(page: ft.Page) -> None:
             tooltip=tr('main.plugin_updates_1cc5ea', 'Plugin updates') if key == "plugins" and app.plugin_updates else label))
 
     def render_rail() -> None:
+        if t.compact:
+            tabs.controls = [item(p) for p in (*PAGES, PLUGINS, SETTINGS)]
+            return
         rail.controls = [item(p) for p in PAGES]
-        bottom.controls = [item(UPDATE)] * bool(app.update) + [item(PLUGINS), item(SETTINGS)]
+        bottom.controls = [item(UPDATE)] * bool(app.update and not (ANDROID or IOS)) + [item(PLUGINS), item(SETTINGS)]
 
     def navigate(key: str, **kwargs) -> None:
         if key == "update":
@@ -140,6 +158,15 @@ def main(page: ft.Page) -> None:
 
     app.navigate = navigate
     page.on_keyboard_event = page_key     # set once, before a code box takes the focus
+    tabs = ft.Row(spacing=2)
+    if t.compact:
+        bar = t.glass(ft.Container(tabs, padding=4), radius=18)
+        window = t.backdrop(ft.Column([content, bar], spacing=8, expand=True))
+        window.padding = ft.Padding(8, 8, 8, 8)
+        page.add(window)
+        navigate("games")
+        compact_start(app)
+        return
     side = t.panel(ft.Column([
         ft.Container(ft.Image(src="logo.svg", width=28, height=32), padding=ft.Padding(0, 16, 0, 18)),
         rail,
@@ -176,6 +203,18 @@ def main(page: ft.Page) -> None:
         app.check_plugin_updates()
     from gui.views.gts import resume
     resume(app)      # a listing or an offer left open is answered while the app runs
+
+
+def compact_start(app: App) -> None:
+    """The phone's start: the same first-run notices, without the desktop's update and viewer housekeeping."""
+    if not os.path.isfile(os.path.expanduser(app.settings.keys)):
+        welcome(app)
+    elif app.plugin_stopped:
+        plugin_stopped_notice(app)
+    if app.settings.check_updates:
+        app.check_plugin_updates()
+    from gui.views.gts import resume
+    resume(app)
 
 
 def prune_viewers() -> None:
@@ -349,23 +388,26 @@ def welcome(app: App) -> None:
         ft.Container(height=6),
         t.step_list([
             tr('main.choose_prod_keys_dumped_from_your_own_console_the_keys__07399e', 'Choose prod.keys dumped from your own console. The keys decrypt local wireless messages and stay on this computer.'),
+            tr('main.android_board_step', 'Plug an ESP32-S3, C3 or C6 into the phone with a USB data cable.') if ANDROID else
+            tr('main.ios_board_step', 'Power an ESP32-C6, S3 or C3 running the Bluetooth radio firmware; the app finds it on its own.') if IOS else
             tr('main.plug_in_your_esp32_with_a_usb_data_cable_0b0ddf', 'Plug in your ESP32 with a USB data cable.'),
             tr('main.pick_a_game_choose_a_tool_and_follow_the_console_steps_a4a338', 'Pick a game, choose a tool and follow the console steps.'),
         ]),
         ft.Row([t.link_button(tr('main.read_the_setup_guide_d201fc', 'Read the setup guide'), instructions)]),
     ], spacing=8, tight=True)
+    note = t.text(tr('main.drop_prod_keys_here_or_add_keys_later_in_settings_b49b46', 'Drop prod.keys here, or add keys later in Settings.') if drop.AVAILABLE else
+                  tr('main.add_keys_later_in_settings_8bc2f9', 'Add keys later in Settings.'), 12, t.FAINT, expand=not t.compact)
+    buttons = [t.secondary_button(tr('main.later_73b6e4', 'Later'), close),
+               t.button(tr('main.choose_prod_keys_782614', 'Choose prod.keys'), choose, "key")]
+    footer = (ft.Column([note, ft.Row(buttons, spacing=8, alignment=ft.MainAxisAlignment.END)], spacing=10) if t.compact
+              else ft.Row([note, *buttons], spacing=8))
     app.page.show_dialog(t.dialog(
-        modal=True, content_padding=0, actions_padding=0, inset_padding=32,
+        modal=True, content_padding=0, actions_padding=0, inset_padding=14 if t.compact else 32,
         clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         semantics_label=tr('main.welcome_to_pokeldn_319d9e', 'Welcome to pokeldn'),
         content=drop.target(ft.Container(ft.Column([
             ft.Container(body, padding=ft.Padding(28, 22, 18, 8)),
-            ft.Container(ft.Row([
-                t.text(tr('main.drop_prod_keys_here_or_add_keys_later_in_settings_b49b46', 'Drop prod.keys here, or add keys later in Settings.') if drop.AVAILABLE else
-                       tr('main.add_keys_later_in_settings_8bc2f9', 'Add keys later in Settings.'), 12, t.FAINT, expand=True),
-                t.secondary_button(tr('main.later_73b6e4', 'Later'), close),
-                t.button(tr('main.choose_prod_keys_782614', 'Choose prod.keys'), choose, "key"),
-            ], spacing=8), padding=ft.Padding(28, 12, 24, 24)),
+            ft.Container(footer, padding=ft.Padding(28, 12, 24, 24)),
         ], spacing=0, tight=True), width=500, border_radius=20), dropped),
     ))
 

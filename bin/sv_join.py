@@ -1325,12 +1325,13 @@ async def run_session(args, keys, host_ip, host_mac, our_ip, our_mac, record):
                             body = stage.host_offers[offers_seen]
                             offers_seen += 1
                             print(f"[sv] {host_ip}: offers {describe_offer(body)}")
-                            if args.offer_out:
-                                path = pokemon_service.trade_path(args.offer_out, offers_seen)
-                                pokemon_service.save_received("sv", path, body)
-                                print(f"[sv] the host's offer written to {path}")
                         if stage.trades > trades_done:
                             trades_done = stage.trades
+                            if args.offer_out and stage.host_offers:
+                                # Written once the trade completes; an offer can still be withdrawn.
+                                path = pokemon_service.trade_path(args.offer_out, trades_done)
+                                pokemon_service.save_received("sv", path, stage.host_offers[-1])
+                                print(f"[sv] the received record written to {path}")
                             show_done()
                             screen.received("sv", (stage.host_offers or [None])[-1])
                             record(rec="trade_done", n=trades_done, t=time.time())

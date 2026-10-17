@@ -300,10 +300,13 @@ def test_the_joiner_answers_a_console_hosts_trades_in_turn_from_its_queue(tmp_pa
     for step in range(2, 13):
         assert console(2, step, box(16 + step, step)) == [(2, step, box(133, 0x1000))]
     assert console(3, 13, one) == [(3, 13, one)]
+    # A shown offer is no trade: a player backing out here keeps the Pokemon, so no file yet.
+    assert not (tmp_path / "got.pb7").exists()
     assert console(3, 14, two) == [(3, 14, two)]
     assert console(4, 15, box(25, 15)) == [(4, 15, box(1, 0x1001))]
     assert console(4, 16, box(132, 16)) == [(4, 16, box(1, 0x1001))]
     assert console(5, 17, one) == [(5, 17, one)]
+    assert not (tmp_path / "got-2.pb7").exists()
     assert console(5, 18, two) == [(5, 18, two)]
     assert console(6, 19, box(25, 19)) == []
     assert console(6, 20, box(95, 20)) == [] and console(7, 21, one) == []

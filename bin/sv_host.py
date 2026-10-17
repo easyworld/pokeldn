@@ -617,15 +617,18 @@ def main(argv=None):
             if ip in stages:
                 stages[ip].partner.hear(fields)
 
-    def report_offer(ip, body, n):
+    def report_offer(ip, body):
         try:
             print(f"[sv] {ip}: offers {pokemon.describe(pokemon.from_wire(body))}")
         except ValueError as exc:
             print(f"[sv] {ip}: offered {len(body)} bytes that do not read as a record: {exc}")
-        if args.offer_out:
+
+    def keep_received(ip, body, n):
+        """Written once the trade completes; an offer can still be withdrawn."""
+        if args.offer_out and body is not None:
             path = pokemon_service.trade_path(args.offer_out, n)
             pokemon_service.save_received("sv", path, body)
-            print(f"[sv] {ip}: offer written to {path}")
+            print(f"[sv] {ip}: received record written to {path}")
 
     game_data = binascii.unhexlify(args.game_data) if args.game_data else None
     if args.code and game_data is None:
@@ -1464,9 +1467,11 @@ def main(argv=None):
                                     while offers_seen.get(src_ip, 0) < len(st.joiner_offers):
                                         n = offers_seen.get(src_ip, 0) + 1
                                         offers_seen[src_ip] = n
-                                        report_offer(src_ip, st.joiner_offers[n - 1], n)
+                                        report_offer(src_ip, st.joiner_offers[n - 1])
                                     if st.trades > trades_done.get(src_ip, 0):
                                         trades_done[src_ip] = st.trades
+                                        keep_received(src_ip, (st.joiner_offers or [None])[-1],
+                                                      st.trades)
                                         show_done()
                                         screen.received("sv", (st.joiner_offers or [None])[-1])
                                         if st.done:

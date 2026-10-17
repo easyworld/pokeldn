@@ -104,11 +104,11 @@ class GamesView:
                                  t.icon_button("book-open", self._open_doc, tr('games.read_the_docs_for_this_game_ca6165', 'Read the docs for this game'))),
                          top=0, left=0, right=0),
         ], expand=True)
-        self.control = ft.Row([
-            t.panel(ft.Column([t.panel_header(tr('games.games_d9dae7', 'Games')), t.fade(self.tree)], spacing=0, expand=True), width=t.SIDEBAR_WIDTH),
-            center,
-            self.session.control,
-        ], spacing=t.GAP, expand=True, vertical_alignment=ft.CrossAxisAlignment.STRETCH)
+        self.panes = t.Panes(
+            (tr('games.pane_games', 'Games'), "gamepad", t.panel(ft.Column([t.panel_header(tr('games.games_d9dae7', 'Games')), t.fade(self.tree)], spacing=0, expand=True), width=t.SIDEBAR_WIDTH)),
+            (tr('games.pane_options', 'Options'), "sliders-horizontal", center),
+            (tr('games.pane_session', 'Session'), "play", self.session.control))
+        self.control = self.panes.control
         self.select(self.game, self.tool, update=False)
 
     def enter(self, game: str = "", tool: str = "", **_) -> None:
@@ -279,6 +279,11 @@ class GamesView:
         if update:
             self.control.update()
 
+    def pick(self, game: Game, tool: Tool) -> None:
+        """A tool chosen in the list; on a phone its options come forward."""
+        self.panes.show(1, update=False)
+        self.select(game, tool)
+
     def render_tree(self) -> None:
         rows = []
         for game in self.catalog:
@@ -304,7 +309,7 @@ class GamesView:
                         t.badge(tr('games.soon_cf0ee3', 'Soon'), t.FAINT) if tool.unavailable else ft.Container(),
                     ], spacing=10), padding=ft.Padding(24, 7, 8, 7), border_radius=12, tooltip=tool.summary,
                         bgcolor=t.SELECTED if active else None,
-                        on_click=lambda e, g=game, x=tool: self.select(g, x)))
+                        on_click=lambda e, g=game, x=tool: self.pick(g, x)))
                 rows.append(ft.Container(height=6))
         self.tree.controls = rows
 
@@ -993,6 +998,7 @@ class SessionPanel:
                                           runner.base_env(s, port, trace), self._line, self._exited,
                                           popups=self.app.popups, label=tool.name)
         self.run = (self.app.process, stamp, self.games.game.key)
+        self.games.panes.show(2)
         threading.Thread(target=self._tick, daemon=True).start()
         self.refresh()
 
