@@ -2203,7 +2203,7 @@ OPTION_HELP.update({
     "--raid-partner-progress": "搭档池对应的团体战解锁阶段；等级为我方出战宝可梦的五分之四。默认跟随团体战剧情进度，黑色结晶或七星活动使用六星阶段。",
 })
 
-OPTION_HELP.update({'--gift-event': '每次提供的宝可梦所对应的神秘礼物卡片，按提供顺序指定 PKHeX 活动数据库中的键值。', '--for-receiver': '交换时按接收游戏机的存档重新生成以接收玩家为初训家的礼物；优先读取玩家在此存档捕获的宝可梦，其次读取会话中的训练家信息。无法识别时使用设置中的原始训练家。', '--print-packets': '打印收发的每个数据包；无论是否启用，--capture 文件都会记录这些数据包。'})
+OPTION_HELP.update({'--gift-event': '每次提供的宝可梦所对应的神秘礼物卡片，按提供顺序指定 PKHeX 活动数据库中的键值。', '--for-receiver': '交换时按接收游戏机的存档重新生成以接收玩家为初训家的礼物；优先读取玩家在此存档捕获的宝可梦，其次读取会话中的训练家信息。无法识别时使用设置中的初训家。', '--print-packets': '打印收发的每个数据包；无论是否启用，--capture 文件都会记录这些数据包。'})
 
 HELP.update({'0 male, 1 female: the gender in that record, whose look follows it': '0 为男，1 为女：记录中的性别，角色外观随之调整。'})
 

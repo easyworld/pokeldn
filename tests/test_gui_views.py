@@ -1043,6 +1043,24 @@ def test_all_gift_presets_outfits_and_summaries_have_chinese_display():
         assert all(re.search(r'[\u4e00-\u9fff]', line) for line in lines), lines
 
 
+@pytest.mark.parametrize("pattern,ball_id", [("Poke", 4), ("Great", 3), ("Ultra", 2)])
+def test_ball_guy_clothing_keeps_the_character_and_ball_pattern_in_both_pickers(pattern, ball_id):
+    from gui.localization import SERVICE, event_label
+    from gui.views.gifts import GiftBuilder
+    from pokeldn.swsh import events
+
+    ball = next(n["name"] for n in SERVICE.names("swsh", "balls") if n["id"] == ball_id)
+    expected = f"休闲 T 恤（阿球·{ball}）"
+    view = object.__new__(GiftBuilder)
+    view.value = {"build": {"outfits": []}}
+    view.number_field = lambda *args, **kwargs: ft.Container()
+    clothing = view.swsh_clothing()
+    assert expected in [c.value for c in walk(clothing) if isinstance(c, ft.Text)]
+    card = next(c for c in events.load() if c["label"].startswith(f"Casual Tee ({pattern} Ball Guy)"))
+    assert event_label("swsh", card).startswith(expected)
+    assert card["group"] == "Clothing"
+
+
 def test_static_gift_validation_messages_are_translated():
     import ast
     import re

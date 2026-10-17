@@ -35,7 +35,7 @@ def test_remote_gts_facts_use_pkhex_chinese_names_and_leave_trainer_names(monkey
     view = SimpleNamespace(app=None)
     card = view_gts.GtsView._about(view, shown, "swsh")
     text = "\n".join(c.value for c in walk(card) if isinstance(c, ft.Text))
-    for term in ("皮卡丘", "胆小", "静电", "精灵球", "电气球", "十万伏特", "原始训练家：East"):
+    for term in ("皮卡丘", "胆小", "静电", "精灵球", "电气球", "十万伏特", "初训家：East"):
         assert term in text
     assert shown["held_item"] == "Light Ball" and shown["ot"] == "East"
 

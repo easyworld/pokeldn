@@ -88,5 +88,6 @@ def test_localized_prose_has_no_deferred_translation_notices_or_known_mistransla
     text = localized.read_text(encoding="utf-8")
     prose = re.sub(r"(`+).*?\1", "", text, flags=re.S)
     for phrase in ("本节已随上游更新", "暂保留英文", "墨盒", "盒式磁带", "董事会",
-                   "西班牙火红", "电动汽车", "粉蝶巴基斯坦", "究极球球男"):
+                   "西班牙火红", "电动汽车", "粉蝶巴基斯坦", "究极球球男",
+                   "球种人", "球球人", "球球阿伯"):
         assert phrase not in prose, (localized.name, phrase)

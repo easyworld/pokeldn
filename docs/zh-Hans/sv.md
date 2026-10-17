@@ -623,7 +623,7 @@ Reliable 0x7C（一个站）和BroadcastReliable 0x80（每个站）的端口2�
 
 其他所有内容均按发送状态保留。一个空名称作为种类名称返回，如《剑 神秘礼物》记录（`docs/swsh_gift.md`）中那样。
 
-原始训练家与接收存档相同的记录保留当前训练家标志 0，姓名为空，与传说 Z-A 一致（[接收记录的改写](za.md#what-the-trade-writes-into-a-received-record)）。按实机紫的训练家生成的神秘礼物，通过该存档捕获的宝可梦识别训练家（[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)），交换回来后确实如此。
+初训家与接收存档相同的记录保留当前训练家标志 0，姓名为空，与传说 Z-A 一致（[接收记录的改写](za.md#what-the-trade-writes-into-a-received-record)）。按实机紫的训练家生成的神秘礼物，通过该存档捕获的宝可梦识别训练家（[按接收玩家生成](gift_simulated.md#made-for-the-receiving-player)），交换回来后确实如此。
 
 ### 加入搜索游戏机：一次交换，以及什么决定了座位
 

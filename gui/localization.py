@@ -184,7 +184,7 @@ def translate(value: str) -> str:
         (r"Card id (\d+): a console takes it once", r"卡片 ID \1：只能领取一次"),
         (r"Card id (\d+): a console takes it again", r"卡片 ID \1：允许重复领取"),
         (r"Card id (\d+): a console takes it once for its date, at most ten such cards a day", r"卡片 ID \1：每个日期可领取一次，每天最多十张此类卡片"),
-        (r"Original trainer (.+)", r"原始训练家：\1"),
+        (r"Original trainer (.+)", r"初训家：\1"),
         (r"Puts (\d+) pieces? of clothing in the wardrobe; the player gets the version for their own character", r"向衣柜添加 \1 件服装，玩家收到对应自身角色的版本"),
         (r"Built for (.+)", r"目标版本：\1"),
         (r"News “(.*)”", r"新闻“\1”"),
