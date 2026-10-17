@@ -467,7 +467,7 @@ class OfferOptions:
 
     def _label(self) -> None:
         count = sum(1 for k, v in self.chosen.items() if (v if isinstance(v, dict) else v is not None))
-        self.label.value = tr('pokemon.set_f4c8f3', '{value0} set', value0=count) if count else "random"
+        self.label.value = tr('pokemon.set_f4c8f3', '{value0} set', value0=count) if count else tr('pokemon.random_67bc48', 'Random')
 
     def _toggle(self, e) -> None:
         self._show(not self.open)

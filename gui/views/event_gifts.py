@@ -5,7 +5,7 @@ picked in order, each made fresh and legal for the app's trainer, then offered b
 
 from gui.localization import event_text
 from gui.localization import summary as pokemon_summary, summary_text
-from gui.localization import SERVICE, translate
+from gui.localization import SERVICE, error_message, translate
 from pokeldn.app.i18n import t as tr
 
 import threading
@@ -103,7 +103,7 @@ class EventGiftPicker:
         try:
             events, error = SERVICE.gift_events(self.game, self.app.settings.trainer(self.game)), ""
         except Exception as exc:
-            events, error = [], str(exc) or type(exc).__name__
+            events, error = [], error_message(exc) or type(exc).__name__
 
         def show():
             if error:
@@ -205,7 +205,7 @@ class EventGiftPicker:
                                 "encounter": info["encounter"], "moves": info["moves"], "ot": info["ot"],
                                 "your_ot": info["your_ot"], "handled": info.get("handled", False)}, ""
             except Exception as exc:
-                value, error = None, str(exc) or type(exc).__name__
+                value, error = None, error_message(exc) or type(exc).__name__
 
             def done():
                 self.busy = False

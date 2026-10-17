@@ -2,7 +2,7 @@
 file, then a summary of what the console gets. Each game's form lives in its builder module."""
 
 from gui.localization import event_text, event_label, gift_description
-from gui.localization import SERVICE, translate
+from gui.localization import SERVICE, error_message, translate
 from pokeldn.app.i18n import t as tr
 
 import asyncio
@@ -150,8 +150,8 @@ class GiftBuilder:
             body.insert(0, t.grid(tiles))
             intro = getattr(self.module, "GROUP_INTROS", {}).get(group, "")
             if intro:
-                body.insert(0, t.text(intro, 12, t.MUTED))
-            sections.append(t.section(group, ft.Column(body, spacing=10)))
+                body.insert(0, t.text(translate(intro), 12, t.MUTED))
+            sections.append(t.section(translate(group), ft.Column(body, spacing=10)))
         return ft.Column(sections, spacing=14)
 
     def _tile(self, label, summary, active, on_click, settings=False, warning="", species_id=0,
@@ -330,7 +330,8 @@ class GiftBuilder:
     def editor(self) -> ft.Control:
         self.previews = []
         kind = self.state.get("kind")
-        kinds = t.segmented(list(self.module.KINDS), kind, lambda k: self.edit("kind", k, rebuild=True))
+        kinds = t.segmented([(key, translate(label), icon) for key, label, icon in self.module.KINDS],
+                            kind, lambda k: self.edit("kind", k, rebuild=True))
         form = getattr(self, f"{self.game}_{kind}")()
         return ft.Column([kinds, form], spacing=14)
 
@@ -534,8 +535,7 @@ class GiftBuilder:
                           t.link_button(tr('gifts.homebrew_bc49b9', 'Homebrew') if page == "https://brew.sh" else tr('gifts.arm_s_download_page_2fdb32', "Arm's download page"),
                                         lambda e: run(self.app.open_url, page))], spacing=8)
         return t.surface(ft.Column([
-            t.text("Typing assembly here needs the free GNU Arm assembler. Install it once: "
-                   f"{steps}. A prebuilt .bin works without it.", 12, t.AMBER),
+            t.text(tr('gifts.assembler_install_hint', 'Typing assembly here needs the free GNU Arm assembler. Install it once: {value0}. A prebuilt .bin works without it.', value0=steps), 12, t.AMBER),
             *([how] if how else []), actions], spacing=8), padding=12)
 
     def _check(self, e) -> None:
@@ -549,7 +549,7 @@ class GiftBuilder:
                 result, color = translate(frlg.checked(code).describe()), t.GREEN
                 dump = "\n".join(code[i:i + 16].hex(" ") for i in range(0, min(len(code), 256), 16))
             except (OSError, ValueError) as exc:
-                result, color, dump = str(exc), t.RED, ""
+                result, color, dump = error_message(exc), t.RED, ""
 
             def show():
                 self.check_line.value, self.check_line.color, self.hex_view.value = result, color, dump
@@ -607,7 +607,7 @@ class GiftBuilder:
                 forms = SERVICE.options(self.game, species, self.app.settings.trainer(self.game))["forms"]
                 error = ""
             except Exception as exc:
-                forms, error = [], str(exc) or type(exc).__name__
+                forms, error = [], error_message(exc) or type(exc).__name__
 
             def show():
                 if (self.forms is not box or box.data is not request or self.state is not state
@@ -828,7 +828,7 @@ class GiftBuilder:
             else:
                 self.show_summary()
         except (OSError, ValueError, pokemon.BuilderError) as exc:
-            self.status.value, self.status.color = str(exc), t.RED
+            self.status.value, self.status.color = error_message(exc), t.RED
         finally:
             self.save_button.disabled = False
             if self.games.tool is tool:

@@ -6,7 +6,7 @@ event spawns."""
 VERSIONS = {'scarlet': '朱', 'violet': '紫'}
 REGIONS = {'paldea': '帕底亚', 'kitakami': '北上乡', 'blueberry': '蓝莓学园'}
 from gui.localization import raid_label
-from gui.localization import SERVICE, translate
+from gui.localization import SERVICE, error_message, translate
 from pokeldn.app.i18n import t as tr
 
 import random
@@ -236,7 +236,7 @@ class RaidSeedPicker:
             try:
                 raid = raid_search.generate(seed, context)
             except ValueError as exc:       # an event this context cannot spawn
-                self.seed.error, raid = str(exc), None
+                self.seed.error, raid = error_message(exc), None
             if raid is not None:
                 boss = translate(raid_encounter.tables()["species_names"][str(raid.species)])
                 rewards = ft.Container(reward_chips(None, raid.rewards))
@@ -423,7 +423,7 @@ class RaidSeedPicker:
                 if rank.value == "rewards" and not filters["rewards"]:
                     raise ValueError(tr('raid_seed.most_desired_rewards_ranks_by_the_wanted_rewards_open_r_a0bf6d', 'Most desired rewards ranks by the wanted rewards: open Rewards and add one.'))
             except ValueError as exc:
-                status.value, status.color = str(exc), t.RED
+                status.value, status.color = error_message(exc), t.RED
                 status.update()
                 return
             cancel.clear()
@@ -448,7 +448,7 @@ class RaidSeedPicker:
                                                stop_at_first=first_only.value, **filters)
                     self.app.ui(lambda: done(found, cancel.is_set()))
                 except Exception as exc:
-                    message = str(exc)
+                    message = error_message(exc)
 
                     def failed():
                         if not closed.is_set():

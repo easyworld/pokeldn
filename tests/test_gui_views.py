@@ -491,14 +491,22 @@ def test_the_gift_builder_renders_every_mode_and_kind_and_exports_what_it_shows(
     builder.value["mode"] = "preset"
     for preset in module.PRESETS:
         builder.value["preset"] = preset.key
-        builder.cards()
+        cards = builder.cards()
+        shown = [c.value for card in cards for c in walk(card) if isinstance(c, ft.Text)]
+        for group in {p.group for p in module.PRESETS}:
+            assert translate(group) in shown and group not in shown
+        for intro in getattr(module, "GROUP_INTROS", {}).values():
+            assert translate(intro) in shown and intro not in shown
         for member in getattr(preset, "members", ()):   # every boost ticked: refused, still drawn
             builder.value["options"][preset.key]["on"].append(member.key)
             builder.cards()
     builder.value["mode"] = "build"
     for kind, *_ in module.KINDS:
         builder.state["kind"] = kind
-        builder.cards()
+        cards = builder.cards()
+        shown = [c.value for card in cards for c in walk(card) if isinstance(c, ft.Text)]
+        assert {translate(label) for _, label, _ in module.KINDS} <= set(shown)
+        assert not {label for _, label, _ in module.KINDS} & set(shown)
         assert builder.status.color != view_module.t.RED or kind == "code", builder.status.value
     builder.state["kind"] = module.KINDS[0][0]
     builder.commit = lambda rebuild=False: None

@@ -855,7 +855,7 @@ LABELS = {
  'The random number generator': '随机数生成器',
  'Joining and the Pia layer': '加入流程与 Pia 层',
  'The game protocol': '游戏协议',
- 'The Union Room trade': '联盟房间交换',
+ 'The Union Room trade': '联合房间交换',
  'The sync framework': '同步框架',
  'The cartridge and the session': '卡带与会话',
  "The Let's Go cartridge and session": "Let's Go 卡带与会话",

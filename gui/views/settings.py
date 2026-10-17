@@ -194,9 +194,9 @@ class SettingsView:
         release, state = self.app.update, self.app.update_state
         self.update_state.value = {
             "checking": tr('settings.checking_2e5f79', 'Checking...'),
-            "current": f"You have the latest version ({__version__}).",
+            "current": tr('settings.latest_version', 'You have the latest version ({value0}).', value0=__version__),
             "offline": tr('settings.github_did_not_answer_check_your_connection_c1e29b', 'GitHub did not answer. Check your connection.'),
-            "available": f"pokeldn {release.version} is available." if release else "",
+            "available": tr('settings.version_available', 'pokeldn {value0} is available.', value0=release.version) if release else "",
         }.get(state, "")
         self.update_state.color = t.GREEN if state == "available" else t.MUTED
 

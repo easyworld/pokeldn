@@ -2,7 +2,7 @@
 (pokeldn.app.events_gallery), downloaded, checked and updated; the event the raid comes from,
 searchable by its name or its bosses'; and the override for a boss a save catches once."""
 
-from gui.localization import raid_label, translate
+from gui.localization import error_message, raid_label, translate
 from pokeldn.app.i18n import t as tr
 
 import threading
@@ -126,7 +126,7 @@ class RaidEventPicker:
 
     def _fill(self, events, error: str) -> None:
         if error:
-            self.dropdown.hint_text = tr('raid_event.the_events_could_not_be_read_523a5c', 'The events could not be read: {value0}', value0=error)
+            self.dropdown.hint_text = tr('raid_event.the_events_could_not_be_read_523a5c', 'The events could not be read: {value0}', value0=error_message(error))
             self.dropdown.update()
             return
         self.events = events
@@ -257,6 +257,7 @@ class RaidEventPicker:
 
     def _failed(self, error: str, retry) -> None:
         self.busy.visible = self.bar.visible = False
-        self.status.value, self.status.color = f"{error[:1].upper()}{error[1:]}", t.RED
+        message = error_message(error)
+        self.status.value, self.status.color = f"{message[:1].upper()}{message[1:]}", t.RED
         self.actions.controls = [t.secondary_button(tr('raid_event.try_again_d8b839', 'Try again'), lambda _e: retry())]
         self.control.update()

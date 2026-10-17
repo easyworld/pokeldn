@@ -102,7 +102,7 @@ class DocsView:
 
         def walk(items, depth):
             for p in items:
-                rows.append(self.row(p.title, p.file, depth, bool(p.children)))
+                rows.append(self.row(translate(p.title), p.file, depth, bool(p.children)))
                 if p.children and p.file in self.open_parents:
                     walk(p.children, depth + 1)
         walk(self.tree, 0)

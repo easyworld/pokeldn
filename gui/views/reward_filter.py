@@ -2,7 +2,7 @@
 must give of it, chosen among what the raids searched can give (pokeldn.sv.raid_search). Folded,
 the list is kept and leaves the search alone."""
 
-from gui.localization import SERVICE, translate
+from gui.localization import SERVICE, error_message, translate
 from pokeldn.app.i18n import t as tr
 
 import threading
@@ -94,7 +94,7 @@ class RewardFilter:
                 scope, narrow = self.scope()
                 choices, error = raid_search.reward_choices(scope, **narrow), ""
             except ValueError as exc:
-                choices, error = {}, str(exc)
+                choices, error = {}, error_message(exc)
             names = self.names or item_names()
 
             def show():

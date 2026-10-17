@@ -201,10 +201,20 @@ def translate(value: str) -> str:
             for fragment in ("Overworld and battles", "Overworld only", "Battles only"):
                 result = result.replace(fragment, LABELS[fragment])
             # These strings embed literal user or trainer text, so keep their values intact.
-            if pattern.startswith(("News", "Says", "Original trainer")):
+            if pattern.startswith(("News", "Says", "Original trainer", "unknown button", "(.+): unknown field",
+                                   "not a macro file:")):
                 return result
             return names(result).replace(", shiny", "，异色").replace(", can Gigantamax", "，允许超极巨化").replace(" (an egg)", "（蛋）")
     return names(value)
+
+
+def error_message(error: Exception | str) -> str:
+    """Translate app errors without rewriting paths or unrecognized diagnostic text as species names."""
+    value = str(error)
+    if isinstance(error, OSError):
+        return value
+    translated = translate(value)
+    return value if translated == names(value) else translated
 
 
 class DisplayService(Service):
