@@ -5,6 +5,7 @@ from gui.localization import translate
 import os
 import shutil
 import threading
+import time
 from pathlib import Path
 
 import flet as ft
@@ -14,6 +15,8 @@ from gui import theme as t
 from gui.views.widgets import open_folder
 from pokeldn import plugins
 from pokeldn.ldn import radios
+from pokeldn.app import plugin_sources as sources
+from pokeldn.app import library
 from pokeldn.app import plugin_store as store
 from pokeldn.app.paths import SESSION
 
@@ -71,7 +74,11 @@ class PluginsView:
                                   padding=ft.Padding(4, 8, 4, 24), expand=True)
         self.control = drop.target(ft.Container(t.fade(self.scroll), expand=True), self._dropped,
                                    glow=lambda: self.zone)
-        self.downloading = ""      # the plugin whose update is downloading
+        self.downloading = ""      # the plugin whose package is downloading
+        self.tab = "installed"
+        self.source_field = t.field(hint=tr('plugins.source_hint', 'OWNER/REPO or https://...'), mono=True,
+                                    expand=True, on_submit=lambda e: self._add_source())
+        self.adding = False
         app.plugin_update_listeners.append(lambda: self.render(update=self.column.page is not None))
         self.render()
 
@@ -95,6 +102,22 @@ class PluginsView:
             t.button(tr('plugins.add_a_plugin_98bbc5', 'Add a plugin'), self._pick, "plus"),
         ], spacing=10), padding=ft.Padding(4, 12, 0, 0))
         self.zone = self._zone(compact=bool(rows))
+        listings = self._listings()
+        available = sum(len(s.entries) for s in listings)
+        tabs = t.segmented([
+            ("installed", tr('plugins.tab_installed', 'Installed · {value0}', value0=len(rows)), "plug"),
+            ("browse", tr('plugins.tab_browse', 'Browse · {value0}', value0=available), "package"),
+            ("sources", tr('plugins.tab_sources', 'Sources · {value0}', value0=len(listings)), "globe"),
+        ], self.tab, self._tab, wrap=True)
+        tabs = ft.Container(tabs, padding=4, border_radius=999, bgcolor=ft.Colors.with_opacity(0.05, "#FFFFFF"))
+        if self.tab == "browse":
+            self.column.controls = [header, ft.Row([tabs]), self.notice, *self._browse(listings)]
+        elif self.tab == "sources":
+            self.column.controls = [header, ft.Row([tabs]), self.notice, *self._sources(listings)]
+        if self.tab != "installed":
+            if update:
+                self.column.update()
+            return
         installed = t.section(
             tr('plugins.installed_b9a401', 'Installed · {value0}', value0=len(rows)) if rows else tr('plugins.installed_f8b32f', 'Installed'),
             ft.Column([*rows, t.text(tr('plugins.this_pokeldn_runs_plugin_api_4e68e6', 'This pokeldn runs plugin API {value0}.{value1}.', value0=plugins.API_VERSION, value1=plugins.API_LEVEL),
@@ -103,7 +126,7 @@ class PluginsView:
                 t.icon_button("refresh", self._refresh, tr('plugins.look_for_changes_and_updates_0fa28f', 'Look for changes and updates')),
                 t.icon_button("folder", self._open_folder, tr('plugins.open_the_plugins_folder_77e53c', 'Open the plugins folder')),
             ], spacing=0))
-        self.column.controls = [header, self.notice, self.zone, *([installed] if rows else []),
+        self.column.controls = [header, ft.Row([tabs]), self.notice, self.zone, *([installed] if rows else []),
                                 *self._radio_card()]
         if update:
             self.column.update()
@@ -131,8 +154,8 @@ class PluginsView:
         local = plugin.folder is not None and plugin.folder.parent == plugins.folder()
         forced = plugins.named(plugin)
         on = state is not None
-        meta = " · ".join(x for x in (f"Version {plugin.version}" if plugin.version else "",
-                                      f"by {plugin.author}" if plugin.author else "",
+        meta = " · ".join(x for x in (tr('plugins.version_label', 'Version {value0}', value0=plugin.version) if plugin.version else "",
+                                      tr('plugins.author_label', 'by {value0}', value0=plugin.author) if plugin.author else "",
                                       f"plugin API {plugins.api_text(plugin.api)}") if x)
         lines: list[ft.Control] = [
             ft.Row([t.text(plugin.name, 14, weight=ft.FontWeight.W_600), self._status(plugin, state)],
@@ -154,16 +177,20 @@ class PluginsView:
             lines.append(t.badge(translate(plugin.error), t.RED, "warning-diamond"))
         level, message = plugins.compatibility(plugin.api)
         if level == "deprecated":
-            lines.append(t.badge(message, t.AMBER, "warning-diamond"))
+            lines.append(t.badge(translate(message), t.AMBER, "warning-diamond"))
         available = self.app.plugin_updates.get(plugin.id)
         if available is not None and local:
             busy = self.downloading == plugin.id
             lines.append(ft.Row([
                 t.chip(tr('plugins.version_is_out_5d779b', 'Version {value0} is out', value0=available.version), "upload", t.GREEN),
                 t.button(tr('plugins.downloading_37b345', 'Downloading') if busy else tr('plugins.update_to_e0a321', 'Update to {value0}', value0=available.version),
-                         lambda e, a=available, p=plugin: self._download(a, p), "download", color=t.GREEN,
+                         lambda e, a=available, p=plugin: self._download(a, p.name), "download", color=t.GREEN,
                          disabled=bool(self.downloading)),
             ], spacing=8, wrap=True))
+        origin = store.origin(plugin) if local else ""
+        if origin:
+            lines.append(t.badge(tr('plugins.from_source', 'From {value0}', value0=sources.label(
+                self._listing(origin))), t.FAINT, "globe"))
         if forced:
             lines.append(t.badge(tr('plugins.loaded_from_pokeldn_plugins_it_is_on_while_that_variabl_36c4f8', 'Loaded from POKELDN_PLUGINS: it is on while that variable names it.'), t.FAINT))
         elif plugin.entry_point is not None:
@@ -212,7 +239,7 @@ class PluginsView:
 
     def _adds(self, state: plugins.Plugin) -> list[ft.Control]:
         names = {g.key: g.name for g in plugins.games()}
-        chips = [t.chip(tr('plugins.tool_d0d814', '{value0} · {value1} tool{value2}', value0=g.name, value1=len(g.tools), value2='s' * (len(g.tools) != 1)), "gamepad", t.BLUE)
+        chips = [t.chip(tr('plugins.tool_d0d814', '{value0} · {value1} tool{value2}', value0=g.name, value1=len(g.tools), value2=tr('plugins.plural_suffix', 's') * (len(g.tools) != 1)), "gamepad", t.BLUE)
                  for g in state.games]
         chips += [t.chip(tr('plugins.in_8e5a60', '{value0} in {value1}', value0=tool.name, value1=names.get(game, game)), "arrows-horizontal", t.BLUE)
                   for game, tool in state.tools]
@@ -243,6 +270,166 @@ class PluginsView:
                 return game.key, game.tools[0].key
         return (state.tools[0][0], state.tools[0][1].key) if state.tools else None
 
+    # Sources
+
+    def _tab(self, key: str) -> None:
+        self.tab = key
+        self.render(update=True)
+
+    def _listings(self) -> list:
+        """Every followed source, as last read in this run or from the cache."""
+        read = {s.url: s for s in getattr(self.app, "plugin_sources", [])}
+        return [read.get(url) or sources.cached(url) for url in sources.followed()]
+
+    def _listing(self, url: str):
+        return next((s for s in getattr(self.app, "plugin_sources", []) if s.url == url), None) or sources.cached(url)
+
+    def _browse(self, listings: list) -> list[ft.Control]:
+        found = {p.id: p for p in plugins.discover()
+                 if p.folder is not None and p.folder.parent == plugins.folder()}
+        out = []
+        for source in listings:
+            rows: list[ft.Control] = [self._entry_row(source, e, found.get(e.id)) for e in source.entries]
+            if source.error:
+                rows.insert(0, t.badge(translate(source.error), t.AMBER, "warning-diamond"))
+            if not source.entries and not source.error:
+                rows.append(t.text(tr('plugins.source_unread', 'Not read yet. Press refresh to read it.')
+                                   if not source.fetched else tr('plugins.source_empty', 'This source lists no plugins.'),
+                                   12, t.FAINT))
+            out.append(t.section(sources.label(source), ft.Column(rows, spacing=8), trailing=t.icon_button(
+                "refresh", self._refresh, tr('plugins.read_sources_again', 'Read the sources again'))))
+        return out
+
+    def _entry_row(self, source, entry, current: plugins.Plugin | None) -> ft.Control:
+        state = sources.state(entry, current)
+        meta = " · ".join(x for x in (tr('plugins.version_label', 'Version {value0}', value0=entry.version), tr('plugins.author_label', 'by {value0}', value0=entry.author) if entry.author else "",
+                                      store.size_text(entry.size) if entry.size else "") if x)
+        lines: list[ft.Control] = [t.text(entry.name, 14, weight=ft.FontWeight.W_600), t.text(meta, 12, t.FAINT)]
+        if entry.description:
+            lines.append(t.text(entry.description, 12, t.MUTED))
+        busy = self.downloading == entry.id
+
+        def available():
+            from pokeldn.app.plugin_updates import Available
+            return Available(entry.id, entry.version, entry.download, entry.homepage or source.homepage,
+                             entry.sha256, source.url)
+        actions: list[ft.Control] = []
+        if state == "incompatible":
+            lines.append(t.badge(translate(plugins.compatibility(entry.api)[1]), t.RED, "warning-diamond"))
+        elif state == "install":
+            actions.append(t.button(tr('plugins.downloading_37b345', 'Downloading') if busy else tr('plugins.install_569ca4', 'Install'),
+                                    lambda e: self._download(available(), entry.name), "download",
+                                    disabled=bool(self.downloading)))
+        elif state == "update":
+            actions.append(t.button(tr('plugins.downloading_37b345', 'Downloading') if busy else tr('plugins.update_to_e0a321', 'Update to {value0}', value0=entry.version),
+                                    lambda e: self._download(available(), entry.name), "download", color=t.GREEN,
+                                    disabled=bool(self.downloading)))
+        else:
+            actions.append(t.chip(tr('plugins.installed_f8b32f', 'Installed') if state == "installed" else
+                                  tr('plugins.newer_installed', 'Version {value0} installed', value0=current.version),
+                                  "check", t.GREEN))
+        if current is not None:
+            actions.append(t.icon_button("trash", lambda e, p=current: self._confirm_remove(p),
+                                         tr('plugins.remove_c3812f', 'Remove'), color=t.RED))
+        if entry.homepage:
+            actions.append(t.icon_button("external-link", lambda e: self.app.page.run_task(self.app.open_url, entry.homepage),
+                                         tr('plugins.visit_its_page_ffc99d', 'Visit its page')))
+        icon = ft.Container(ft.Image(src=entry.icon, width=48, height=48, fit=ft.BoxFit.CONTAIN,
+                                     error_content=plugin_icon()), width=48, height=48, border_radius=48 * 0.22,
+                            clip_behavior=ft.ClipBehavior.ANTI_ALIAS) if entry.icon else plugin_icon()
+        return t.surface(ft.Container(ft.Row([
+            icon, ft.Column(lines, spacing=4, expand=True),
+            ft.Row(actions, spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        ], spacing=14, vertical_alignment=ft.CrossAxisAlignment.START), padding=ft.Padding(16, 14, 12, 14)))
+
+    def _sources(self, listings: list) -> list[ft.Control]:
+        add = t.card(tr('plugins.add_a_source', 'Add a source'), ft.Row([
+            self.source_field,
+            t.button(tr('plugins.adding_source', 'Reading') if self.adding else tr('plugins.add_5e2ed1', 'Add'),
+                     lambda e: self._add_source(), "plus", disabled=self.adding),
+        ], spacing=8), tr('plugins.source_explained', 'A source is a list of plugins someone publishes. Its plugins appear '
+                          'under Browse, and their updates on their cards. Following a source means trusting its '
+                          'publisher; every install still shows the risk screen.'))
+        rows = []
+        for source in listings:
+            facts = [tr('plugins.source_count', '{value0} plugin{value1}', value0=len(source.entries),
+                        value1=tr('plugins.plural_suffix', 's') * (len(source.entries) != 1))]
+            if source.fetched:
+                facts.append(tr('plugins.source_read', 'read {value0}', value0=time.strftime(
+                    "%Y-%m-%d %H:%M", time.localtime(source.fetched))))
+            lines: list[ft.Control] = [
+                ft.Row([t.text(sources.label(source), 14, weight=ft.FontWeight.W_600),
+                        *([t.chip(tr('plugins.built_in', 'Built in'), "check", t.BLUE)] if source.built_in else [])],
+                       spacing=10, wrap=True),
+                t.text(source.url, 11, t.FAINT, selectable=True, font_family=t.MONO),
+                t.text(" · ".join(facts), 12, t.MUTED)]
+            if source.error:
+                lines.append(t.badge(translate(source.error), t.AMBER, "warning-diamond"))
+            actions = []
+            if source.homepage:
+                actions.append(t.icon_button("external-link", lambda e, u=source.homepage: self.app.page.run_task(
+                    self.app.open_url, u), tr('plugins.visit_its_page_ffc99d', 'Visit its page')))
+            if not source.built_in:
+                actions.append(t.icon_button("trash", lambda e, s=source: self._remove_source(s),
+                                             tr('plugins.remove_source', 'Stop following'), color=t.RED))
+            rows.append(t.surface(ft.Container(ft.Row([
+                t.tinted(t.pixel_icon("globe", size=24), t.BRAND_BLUE),
+                ft.Column(lines, spacing=4, expand=True), ft.Row(actions, spacing=0),
+            ], spacing=14, vertical_alignment=ft.CrossAxisAlignment.START), padding=ft.Padding(16, 14, 8, 14))))
+        return [add, t.section(tr('plugins.followed_sources', 'Followed'), ft.Column(rows, spacing=8), trailing=t.icon_button(
+            "refresh", self._refresh, tr('plugins.read_sources_again', 'Read the sources again')))]
+
+    def _add_source(self) -> None:
+        text = (self.source_field.value or "").strip()
+        if self.adding or not text:
+            return
+        self.adding = True
+        self.render(update=True)
+
+        def work():
+            try:
+                source, error = sources.add(text), ""
+            except sources.SourceError as failure:
+                source, error = None, str(failure)
+            self.app.ui(lambda: done(source, error))
+
+        def done(source, error):
+            self.adding = False
+            if source is None:
+                self.render(update=True)
+                self.error_dialog(tr('plugins.source_not_added', 'The source was not added'), error)
+                return
+            self.source_field.value = ""
+            self.app.plugin_sources = [*[s for s in self.app.plugin_sources if s.url != source.url], source]
+            self.say(tr('plugins.source_added', '{value0} added: {value1} plugin{value2} under Browse.',
+                        value0=sources.label(source), value1=len(source.entries),
+                        value2=tr('plugins.plural_suffix', 's') * (len(source.entries) != 1)), t.BLUE, "globe")
+            self.app.check_plugin_updates()
+            self.render(update=True)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _remove_source(self, source) -> None:
+        def done(e):
+            self.app.page.pop_dialog()
+            try:
+                sources.remove(source.url)
+            except sources.SourceError as error:
+                self.error_dialog(tr('plugins.source_not_removed', 'The source was not removed'), str(error))
+                return
+            self.app.plugin_sources = [s for s in self.app.plugin_sources if s.url != source.url]
+            self.say(tr('plugins.source_removed', '{value0} removed.', value0=sources.label(source)), t.MUTED, "trash")
+            self.render(update=True)
+
+        self.app.page.show_dialog(t.dialog(
+            title=ft.Row([t.pixel_icon("globe", size=24, color=t.RED),
+                          t.text(tr('plugins.remove_source_q', 'Stop following {value0}?', value0=sources.label(source)), 18, expand=True)],
+                         spacing=12),
+            content=t.text(tr('plugins.remove_source_body', 'Its plugins leave Browse. The ones you installed from it stay '
+                              'installed, and no longer get updates from it.'), 13, t.MUTED, width=420),
+            actions=[t.secondary_button(tr('plugins.cancel_19766e', 'Cancel'), lambda e: self.app.page.pop_dialog()),
+                     t.button(tr('plugins.remove_c3812f', 'Remove'), done, "trash", color=t.RED)]))
+
     # Actions
 
     def say(self, text: str, color: str = t.GREEN, icon: str = "check", action: tuple | None = None) -> None:
@@ -272,9 +459,9 @@ class PluginsView:
         self._reload(tr('plugins.plugins_reloaded_looking_for_updates_ad41be', 'Plugins reloaded. Looking for updates.'))
         self.app.check_plugin_updates()
 
-    def _download(self, available, plugin: plugins.Plugin) -> None:
+    def _download(self, available, name: str) -> None:
         from pokeldn.app import plugin_updates
-        self.downloading = plugin.id
+        self.downloading = available.plugin
         self.render(update=True)
 
         def work():
@@ -288,9 +475,9 @@ class PluginsView:
             self.downloading = ""
             self.render(update=True)
             if path is None:
-                self.error_dialog(tr('plugins.did_not_download_31974e', '{value0} {value1} did not download', value0=plugin.name, value1=available.version), error)
+                self.error_dialog(tr('plugins.did_not_download_31974e', '{value0} {value1} did not download', value0=name, value1=available.version), error)
             else:
-                self.open_file(str(path), expected=plugin)
+                self.open_file(str(path), expected=available.plugin, origin=available.source, name=name)
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -364,19 +551,21 @@ class PluginsView:
                                                  allowed_extensions=[store.EXTENSION],
                                                  file_type=ft.FilePickerFileType.CUSTOM)
         if files and files[0].path:
-            self.open_file(files[0].path, expected=plugin)
+            self.open_file(files[0].path, expected=plugin.id, name=plugin.name)
 
-    def open_file(self, path: str, expected: plugins.Plugin | None = None) -> None:
-        """Reads a package and shows what it is with its risks; nothing is installed before the user accepts."""
+    def open_file(self, path: str, expected: str = "", origin: str = "", name: str = "") -> None:
+        """Reads a package and shows what it is with its risks; nothing is installed before the user accepts.
+        `expected` is the plugin id the file must carry; `origin` the source listing it came from."""
         try:
             package = store.read(path)
         except store.PackageError as error:
             self.error_dialog(tr('plugins.cannot_be_installed_be6812', '{value0} cannot be installed', value0=os.path.basename(path)), str(error))
             return
-        if expected is not None and package.id != expected.id:
-            self.error_dialog(tr('plugins.a_different_plugin_a99fbe', 'A different plugin'), tr('plugins.is_not_an_update_of_1b4f96', '{value0} is {value1}, not an update of {value2}.', value0=os.path.basename(path), value1=package.name, value2=expected.name))
+        if expected and package.id != expected:
+            self.error_dialog(tr('plugins.a_different_plugin_a99fbe', 'A different plugin'), tr('plugins.is_not_an_update_of_1b4f96', '{value0} is {value1}, not an update of {value2}.', value0=os.path.basename(path), value1=package.name, value2=name or expected))
             return
-        self.consent(package, store.compare(package, store.installed(package.id)), store.installed(package.id))
+        current = store.installed(package.id)
+        self.consent(package, store.compare(package, current), current, origin)
 
     def error_dialog(self, title: str, message: str) -> None:
         self.app.page.show_dialog(t.dialog(
@@ -385,7 +574,7 @@ class PluginsView:
             content=t.text(translate(message), 13, t.MUTED, width=420, selectable=True),
             actions=[t.button(tr('plugins.ok_565339', 'OK'), lambda e: self.app.page.pop_dialog())]))
 
-    def consent(self, package: store.Package, action: str, current: plugins.Plugin | None) -> None:
+    def consent(self, package: store.Package, action: str, current: plugins.Plugin | None, origin: str = "") -> None:
         """The risk screen every install, update and first turn-on goes through."""
         trust = store.trust(package)
         stranger = trust in ("changed", "dropped")     # not the author of the copy seen before
@@ -415,11 +604,11 @@ class PluginsView:
             if not (state["accepted"] and state["stranger"]):
                 return
             close()
-            self._accepted(package, action, current, state["enable"])
+            self._accepted(package, action, current, state["enable"], origin)
 
         go.on_click = confirm
-        meta = " · ".join(x for x in (f"Version {package.version}" if package.version else "",
-                                      f"by {package.author}" if package.author else tr('plugins.by_an_unnamed_author_da6876', 'by an unnamed author')) if x)
+        meta = " · ".join(x for x in (tr('plugins.version_label', 'Version {value0}', value0=package.version) if package.version else "",
+                                      tr('plugins.author_label', 'by {value0}', value0=package.author) if package.author else tr('plugins.by_an_unnamed_author_da6876', 'by an unnamed author')) if x)
         lines: list[ft.Control] = [
             ft.Row([
                 plugin_icon(package.icon or (current.icon if current else ""), 56),
@@ -444,7 +633,13 @@ class PluginsView:
             lines.append(t.badge(*version_note))
         level, message = plugins.compatibility(package.api)
         if level == "deprecated":
-            lines.append(t.badge(message, t.AMBER, "warning-diamond"))
+            lines.append(t.badge(translate(message), t.AMBER, "warning-diamond"))
+        if origin:
+            lines.append(t.badge(tr('plugins.listed_by', 'Listed by {value0}; the file matches its listing.',
+                                    value0=sources.label(self._listing(origin))), t.FAINT, "globe"))
+        if package.library:
+            lines.append(t.badge(tr('plugins.keeps_files_in', 'Keeps its files in {value0}. Removing the plugin leaves them there.',
+                                    value0=library.shown(plugins.library_path(package.library))), t.BLUE, "folder"))
         if package.source:
             lines.append(t.badge(tr('plugins.files_886156', '{value0} · {value1} files · {value2}', value0=os.path.basename(package.source), value1=package.files, value2=store.size_text(package.size)), t.FAINT, "archive"))
         lines.append(self._signature(package, trust))
@@ -509,13 +704,13 @@ class PluginsView:
                             padding=16, border_radius=14, bgcolor=ft.Colors.with_opacity(0.06, color),
                             border=ft.Border.all(1, ft.Colors.with_opacity(0.25, color)))
 
-    def _accepted(self, package: store.Package, action: str, current, enable: bool) -> None:
+    def _accepted(self, package: store.Package, action: str, current, enable: bool, origin: str = "") -> None:
         if action == "enable":
             store.accept(current, package.key)
             self._toggle(current, True)
             return
         try:
-            store.install(package)
+            store.install(package, origin)
         except (OSError, store.PackageError) as error:
             self.error_dialog(tr('plugins.was_not_installed_b59499', '{value0} was not installed', value0=package.name), str(error))
             return
@@ -561,6 +756,9 @@ class PluginsView:
                          spacing=12),
             content=ft.Column([
                 t.text(tr('plugins.its_files_are_deleted_from_this_computer_and_its_tools__3d0fb7', 'Its files are deleted from this computer and its tools leave the Games page. A session it is running keeps going until it ends.'), 13, t.MUTED),
+                *([t.badge(tr('plugins.library_stays', 'Its library stays: {value0}.',
+                              value0=library.shown(plugins.library_path(plugin.library))), t.MUTED, "folder")]
+                  if plugin.library else []),
                 *([checkbox(tr('plugins.also_delete_what_it_saved_otherwise_installing_it_again_75d934', 'Also delete what it saved ({value0}); otherwise installing it again finds it.', value0=store.size_text(store.kept_data(plugin.id))), False,
                             lambda value: state.update(data=value))] if kept else []),
             ], spacing=12, tight=True, width=420),

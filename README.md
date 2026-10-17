@@ -93,7 +93,8 @@ Contributors to this repository (GitHub does not list contributors on a fork):
   filter, its full seed search, its ranking by rewards and its size mark filter, and the Tera Raid
   NPC partners: their draw from the RaidPoint and the host's choice of them; Simulated Mystery Gifts
   made for the receiving save, pop-ups for programs, Pokemon HOME's gifts among Sword/Shield's
-  official events, a Tera Raid boss's scripted actions, and Legends Arceus's trainer gender
+  official events, a Tera Raid boss's scripted actions, Legends Arceus's trainer gender, and the
+  ESP32 credit for a frame still being written, near doubling USB upload speed
 - [elsardine6k7](https://github.com/elsardine6k7): friendship in the Pokemon builder, Showdown sets and
   the Simulated Mystery Gift queue
 - [junkmailkeep](https://github.com/junkmailkeep): Mystery Gift sprites and form previews in the gift

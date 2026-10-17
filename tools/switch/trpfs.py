@@ -6,8 +6,11 @@ the caller passes. docs/za.md "The personal table".
 
 import os
 import struct
+import sys
 
-from pokeldn.switch import nso
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from pokeldn.switch import nso  # noqa: E402
 
 FNV_BASIS = 0xCBF29CE484222645
 FNV_PRIME = 0x100000001B3

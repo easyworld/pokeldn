@@ -1,7 +1,8 @@
-"""Pop-ups a program shows in the app (docs/gui.md, Pop-ups): an acknowledgement, with one button, or a
-confirmation, with agree and disagree, Esc or a click outside dismissing it.
+"""Pop-ups a program shows in the app (docs/gui.md, Pop-ups): an acknowledgement, with one button, a
+confirmation, with agree and disagree, or a choice among several options; Esc or a click outside dismisses
+the last two.
 
-Opening one never waits: `acknowledge` and `confirm` return the pop-up's id at once, and the player's answer comes
+Opening one never waits: `acknowledge`, `confirm` and `choose` return the pop-up's id at once, and the player's answer comes
 later as a callback, which may fire at any time. Callbacks run on the pop-up thread (the one reading the app's
 answers) unless `set_dispatcher` hands them to the program's own loop. `cancel(id)` closes a pop-up; no callback
 of a pop-up fires once `cancel`, or a pop-up opened again under its id, has returned, but one an earlier answer
@@ -24,7 +25,8 @@ import uuid
 PREFIX = "[popup] "
 LIMIT = 32                          # pop-ups a program may hold unanswered
 TONES = ("info", "warning", "error")
-ANSWERS = {"ack": ("ack",), "confirm": ("agree", "disagree", "dismiss")}
+ANSWERS = {"ack": ("ack",), "confirm": ("agree", "disagree", "dismiss"), "choose": ("dismiss",)}
+CHOICES = 8                         # options a choice may offer; each one's answer is its index, "0".."7"
 
 _lock = threading.RLock()           # orders the messages of one id, whatever thread sends them
 _live: dict[str, "_Popup"] = {}     # id -> the pop-up open under it, until answered or cancelled
@@ -60,6 +62,19 @@ def confirm(title: str, text: str, agree: str, disagree: str, *, id: str | None 
                  {"agree": on_agree, "disagree": on_disagree, "dismiss": on_dismiss}, tone)
 
 
+def choose(title: str, text: str, options, *, id: str | None = None, on_choice=None, on_dismiss=None,
+           tone: str = "info") -> str:
+    """Asks the player to pick one of `options`, 2 to CHOICES labels, each a button; -> the pop-up's id.
+    `on_choice(index)` fires with the index of the one pressed; Esc and a click outside fire `on_dismiss`.
+    See `confirm` for `id` and `tone`."""
+    options = [str(o) for o in options]
+    if not 2 <= len(options) <= CHOICES or not all(options):
+        raise ValueError(f"a choice offers 2 to {CHOICES} named options")
+    callbacks = {str(i): (None if on_choice is None else lambda i=i: on_choice(i)) for i in range(len(options))}
+    return _open("choose", id, {"title": title, "text": text}, {**callbacks, "dismiss": on_dismiss}, tone,
+                 options=options)
+
+
 def cancel(id: str) -> None:
     """Closes the pop-up `id`; its callbacks never fire. An answered or unknown id is nothing to cancel."""
     with _lock:
@@ -81,7 +96,7 @@ def set_dispatcher(dispatch) -> None:
     _dispatch = dispatch
 
 
-def _open(kind, id, fields, callbacks, tone):
+def _open(kind, id, fields, callbacks, tone, **extra):
     if tone not in TONES:
         raise ValueError(f"a pop-up's tone is one of {', '.join(TONES)}, not {tone!r}")
     with _lock:
@@ -92,7 +107,7 @@ def _open(kind, id, fields, callbacks, tone):
         if available():                 # with no app, nothing ever answers one
             _live[id] = popup
         _send({"op": "open", "id": id, "n": popup.n, "kind": kind, **{k: str(v) for k, v in fields.items()},
-               "tone": tone})
+               "tone": tone, **extra})
     return id
 
 
@@ -102,7 +117,7 @@ def answered(message: dict) -> None:
     id, n, answer = str(message.get("id")), message.get("n"), message.get("answer")
     with _lock:
         popup = _live.get(id)
-        if popup is None or popup.n != n or answer not in ANSWERS[popup.kind]:
+        if popup is None or popup.n != n or answer not in popup.callbacks:
             return
         del _live[id]
     _fire(popup.callbacks.get(answer))
@@ -155,8 +170,9 @@ def _send(message):
         sys.stdout.write(line(message) + "\n")      # one write: a line another thread prints cannot split it
         sys.stdout.flush()
     elif message["op"] == "open":
-        buttons = (f"{message['agree']} / {message['disagree']}" if message["kind"] == "confirm"
-                   else message["label"])
+        buttons = {"confirm": lambda: f"{message['agree']} / {message['disagree']}",
+                   "choose": lambda: " / ".join(message["options"]),
+                   "ack": lambda: message["label"]}[message["kind"]]()
         print(f"[pop-up] {message['title']}: {message['text']} [{buttons}]", flush=True)
 
 

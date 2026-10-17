@@ -6,7 +6,7 @@ title: Plugins
 
 # 插件
 
-插件可以在不修改 pokeldn 的情况下添加工具、游戏和无线通信后端。插件由 Python 文件和 `plugin.toml` 组成，以单个 `.pokeplugin` 文件分发，用户可在应用的“插件”页面添加。本项目不分发、审核第三方插件，也不提供插件支持。
+插件可以在不修改 pokeldn 的情况下添加工具、游戏和无线通信后端，也可加入或主持自己的 LDN 网络。插件由 Python 文件和 `plugin.toml` 组成，以单个 `.pokeplugin` 文件分发，用户可在应用的“插件”页面添加。本项目不分发、审核第三方插件，也不提供插件支持。
 
 代码：`pokeldn/plugins.py`（加载器和 API）、`pokeldn/app/plugin_store.py`（插件包）、`pokeldn/ldn/radios.py`（无线通信后端查询）、`gui/views/plugins.py`（页面）。
 
@@ -17,7 +17,7 @@ title: Plugins
 ## 安装插件
 
 1. 打开侧边菜单底部的“插件”。
-2. 将 `.pokeplugin` 文件拖到页面上，或点击“添加插件”选择文件。
+2. 在“浏览”中点击已关注来源所列插件的“安装”；也可在“已安装”页拖入 `.pokeplugin` 文件，或点击“添加插件”选择文件。
 3. 阅读插件内容和风险，勾选确认项，再点击“安装”。
 
 插件工具立即显示在游戏页，带插头图标和“来自插件…”标注。各插件卡片提供启用开关和菜单，可打开工具、从新文件更新、查看文件夹、访问页面及移除。每次安装或更新都重新显示风险说明。手动复制到插件目录的插件显示“手动添加”，首次启用时也需确认相同说明。
@@ -25,6 +25,46 @@ title: Plugins
 如果插件在启动时使应用关闭或无响应，应用下次启动会停用该插件并显示其名称。移除插件时会询问是否一并删除插件保存的数据。
 
 插件在 pokeldn 内以 Python 运行，与应用具有相同的文件、密钥、网络和开发板访问权限。插件包安装并启用之前，其中的代码不会运行。
+
+<a id="sources"></a>
+
+### 来源
+
+来源是他人发布的 JSON 插件列表。“插件”页的“来源”标签用于关注来源；“浏览”列出其中的全部插件，提供“安装”“更新到 N”“已安装”和移除按钮。应用默认关注 `Decryptu/pokeldn-decrypt-plugins`，此内置来源无法移除。移除其他来源不会移除已经从中安装的插件。
+
+| 在“来源”中输入 | 读取的列表 |
+|---|---|
+| `OWNER/REPO` 或 `https://github.com/OWNER/REPO` | `https://raw.githubusercontent.com/OWNER/REPO/HEAD/pokeldn-source.json` |
+| 以 `.json` 结尾的 HTTPS 地址 | 该文件 |
+| 其他 HTTPS 地址 | 对应文件夹中的 `pokeldn-source.json` |
+
+```json
+{
+  "schema": 1,
+  "name": "My plugins",
+  "homepage": "https://github.com/me/my-plugins",
+  "plugins": [
+    {"id": "my-plugin", "name": "My plugin", "version": "1.0.0", "api": "1.6",
+     "description": "...", "author": "me",
+     "download": "https://github.com/me/my-plugins/releases/download/my-plugin-1.0.0/my-plugin-1.0.0.pokeplugin",
+     "sha256": "64 hex digits", "size": 46302,
+     "icon": "https://.../icon.png", "homepage": "https://..."}
+  ]
+}
+```
+
+必须提供 `id`、`version`、HTTPS `download` 和包的 `sha256`；缺少其中一项或 ID 重复的条目会被忽略。其他 `schema` 版本的列表会被拒绝。下载文件的 SHA-256 与列表不同，会在读取前被拒绝；插件包 ID 与条目不同，会在显示风险确认页前被拒绝。列表不能证明作者身份：风险提示和签名检查与从文件安装时相同。
+
+应用启动时（“设置 → 更新”已启用）和页面刷新时读取全部已关注来源，将最近一次列表缓存到 `plugins/.source-cache/`，来源不响应时显示缓存。关注列表保存在 `plugins/.sources.json`。已安装插件会记录来源，并从该来源获取更新；从文件安装的插件先从首个列出它的来源获取更新，再尝试自身的 `updates` 地址。
+
+`scripts/plugin_source.py` 以与应用相同的方式读取插件包并生成列表：
+
+```bash
+python scripts/plugin_source.py my-plugin-1.0.0.pokeplugin -o pokeldn-source.json --name "My plugins" \
+    --download "https://github.com/me/my-plugins/releases/download/{id}-{version}/{file}"
+```
+
+已列出的更高版本条目会保留。
 
 <a id="guardrails"></a>
 
@@ -38,7 +78,7 @@ title: Plugins
 
 | 拒绝 | 允许 |
 |---|---|
-| 删除、清空、移动或覆盖插件文件夹以外的文件 | 在插件自身文件夹、数据文件夹、会话文件夹、日志文件夹和临时文件夹内进行这些操作 |
+| 删除、清空、移动或覆盖插件文件夹以外的文件 | 在插件自身文件夹、数据文件夹、资料库、会话文件夹、日志文件夹和临时文件夹内进行这些操作 |
 | 直接或通过 shell 命令启动 `rm`、`del`、`rd`、`Remove-Item`、`shred`、`dd`、`format`、`mkfs`、`diskutil`、`diskpart`、`sudo`、`su` 等程序，或执行带有 `-delete`、`--no-preserve-root` 的命令 | 启动其他程序 |
 | | 在任意位置创建新文件 |
 
@@ -73,7 +113,10 @@ homepage = "https://example.org/my-plugin"   # optional, opened from the plugin'
 updates = "https://github.com/you/my-plugin" # optional, where newer versions are published (Updates)
 api = "1.1"                 # required: the plugin API it needs (see Versions); 1 means 1.0
 icon = "icon.png"           # optional; a square PNG, 96 x 96 looks sharp
+library = "My files"        # optional (1.7): a folder the player sees, see A library
+library_sort = "name"       # optional (1.8): its order until the player picks one, see A library
 module = "plugin"           # optional; the module holding register()
+exclude = ["tests"]         # optional; folders and files pack_plugin.py leaves out of the package
 ```
 
 <a id="pluginpy"></a>
@@ -128,6 +171,9 @@ if __name__ == "__main__":
 | 返回其他代码或抛出异常 | 会话失败，输出中显示堆栈 |
 | 收到 `KeyboardInterrupt` | 玩家按了停止；应在 15 秒内退出，否则进程被结束 |
 | 打开弹窗（`pokeldn.popup`，1.2） | 覆盖当前页面显示，返回玩家回答 |
+| 请求从多个选项中选择（`pokeldn.popup.choose`，1.7） | 每个选项显示一个按钮，返回所选索引 |
+| 报告进度（`pokeldn.progress.show(done, total, title, unit)`，1.7） | 在会话面板中以进度条代替日志行，显示速率与剩余时间（[进度](gui.md#progress)） |
+| 显示状态卡片或标注资料库文件（`pokeldn.panel`，1.8） | 显示在工具页，任务结束后保留（[状态卡片](#status-cards-18)） |
 
 弹窗不会等待玩家：`acknowledge` 和 `confirm` 立即返回 ID，回答通过稍后的回调到达，可能随时在另一线程触发。脚本应保留自身状态，在回答到达时处理，并继续原有工作：
 
@@ -185,7 +231,57 @@ popup.cancel(asked)                     # no use for the answer any more: the po
 
 更新会替换插件文件夹。设置、缓存和需要长期保存的内容应放在 `register` 提供的 `api.data`，或工具脚本调用 `pokeldn.plugins.data_folder("my-plugin")` 获得的目录中：它位于应用数据目录的 `plugin-data/<id>`，更新时保留，只有用户要求时才随插件移除。
 
-`help=` 在输入框下显示说明，`default=` 填充默认值，`hidden=True` 将其移到高级页。内置工具的字段及 `Field` 其他选项见 `pokeldn/app/catalog.py`。工具的 `fixed` 参数可包含 `{ot}`、`{tid}`、`{sid}`、`{language}`、`{gender}`（设置中的训练家）、`{received}`（已接收文件夹）及 `{stamp}`（启动时间）。 API 1.5 新增 `Field.identity`，为标签会被翻译的位置参数提供稳定的设置键值。
+<a id="a-library-17"></a>
+
+### 资料库（1.7）
+
+插件可在 `plugin.toml` 中指定由玩家管理的文件目录，例如备份和下载文件：`library = "My files"` 对应 `Documents/pokeldn/My files`（设置 `POKELDN_DATA` 时为数据目录下的 `My files`）。在 `register` 中使用 `api.library`，或在工具脚本中调用 `pokeldn.plugins.library_folder("my-plugin")`，可获取该目录，首次使用时创建。
+
+| 资料库 | 行为 |
+|---|---|
+| 防护机制 | 与数据目录一样，允许在其中写入、替换、重命名和删除 |
+| 安装页 | 显示目录名称 |
+| 移除插件 | 保留目录及其中全部文件 |
+| 游戏页 | 在插件工具下列出文件；玩家可通过按钮或拖放添加文件，也可重命名、删除。以 `.` 开头和以 `.part` 结尾的文件不会显示：可先写入这类临时文件，再以完整文件替换 |
+| 排序 | 可按名称、日期、大小升序或降序排列，并为每个插件保存选择。未选择时使用 `plugin.toml` 的 `library_sort`（1.8：`name`、`name-desc`、`date`、`date-desc`、`size`、`size-desc`），否则默认 `date-desc`，最新在前。名称采用自然排序，数字串按数值比较且忽略大小写，因此 `v65536` 在 `v131072` 前，`20.5.0` 在 `23.0.1` 前 |
+| 文件标注 | `pokeldn.panel.annotate`（1.8，[状态卡片](#status-cards-18)） |
+| 目录名 | 最多 40 个字母、数字、空格、点、连字符或下划线；拒绝 pokeldn 自用目录（`Bank`、`Saves`、`Received` 等）、Windows 设备名及其他已加载插件的资料库名称 |
+
+`help=` 在输入框下显示说明，`default=` 填充默认值，`hidden=True` 将其移到高级页。内置工具的字段及 `Field` 其他选项见 `pokeldn/app/catalog.py`。工具的 `fixed` 参数可包含 `{ot}`、`{tid}`、`{sid}`、`{language}`、`{gender}`（设置中的训练家）、`{received}`（已接收文件夹）、`{stamp}`（启动时间）以及 1.7 新增的 `{keys}`（设置中指定的 `prod.keys` 文件）。脚本解析器接收 `--keys` 时，即使不使用此占位符，也会收到该文件路径。 API 1.5 新增 `Field.identity`，为标签会被翻译的位置参数提供稳定的设置键值。
+
+<a id="status-cards-18"></a>
+
+### 状态卡片（1.8）
+
+任务可在工具页顶部、输入字段上方留下卡片，也可标注资料库文件。`pokeldn.panel` 将其打印为 `[panel]` 行，因此源码运行和发行版行为相同；应用将其保存在数据目录的 `plugin-panels/<id>.json` 中，任务结束后保留，移除插件时删除。在应用外只打印该行。
+
+```python
+from pokeldn import panel, plugins
+
+icon = plugins.data_folder("my-plugin") / "icons" / "0100abcd.png"
+panel.show("console", "Pokémon: Let's Go, Pikachu!", [
+    "Group\tcapito27's Switch · 1 of 8 consoles",
+    "System version\t23.0.1",
+], image=icon, chips=[("Version", "1.0.2")], tone="ok")
+panel.annotate("Game 1.0.2.nsp", state="ok", text="Every signature checks", image=icon)
+```
+
+| 调用 | 应用显示 |
+|---|---|
+| `panel.show(id, title, lines=(), *, image=None, chips=(), tone="info")` | 显示卡片 `id`，替换同 ID 的上一张卡片。每行可以是普通文本，也可用 `label<TAB>value` 显示两列；标签为 `(label, value)` 对；`tone` 可为 `info`、`ok`、`warning`、`error`，决定标题旁图标 |
+| `panel.clear(id)` | 移除卡片 |
+| `panel.annotate(name, *, state="ok", text="", image=None)` | 标注资料库文件 `name`：状态可为 `ok`、`bad`、`checking`，下方显示一行文字，并以图片替换文件图标 |
+| `panel.unannotate(name)` | 移除标注 |
+
+| 限制 | |
+|---|---|
+| 卡片 ID | 1 至 32 个小写字母、数字、`-` 和 `_` |
+| 每个插件的卡片数 | 8；超过后忽略新 ID |
+| 每张卡片 | 标题最多 80 字符、最多 12 行且每行 200 字符、最多 6 个标签且每侧 40 字符 |
+| 图片 | 插件数据目录或资料库中的 PNG/JPEG，最大 2 MB；其他图片不显示 |
+| 文件标注 | 与文件名关联；重命名或删除文件会移除标注 |
+
+超出限制时脚本抛出 ValueError；应用无法读取的 `[panel]` 行会显示在会话输出中。
 
 <a id="a-game-of-its-own"></a>
 
@@ -222,6 +318,57 @@ def register(api):
 
 `pokeldn/ldn/esp32_wlan.py` 是开发板的工厂实现，可作为不使用内核接口的后端参考。应用通过 `POKELDN_RADIO=myradio:` 使用插件后端，参数为空；命令行中的参数为冒号后的内容。
 
+<a id="ldn-networks-17"></a>
+
+### LDN 网络（1.7）
+
+`pokeldn.ldn.network` 为插件加入或主持 LDN 网络，并提供无线后端的 IPv4 协议栈。它需要没有内核接口的无线后端：ESP32 开发板或 ldnrs。
+
+```python
+from pokeldn.ldn import network
+
+with network.join(COMM_ID, keys=args.keys, password=PASSPHRASE, name="My game") as net:
+    net.add_protocol(6, lambda src, dst, segment: segments.put((src, segment)))   # TCP, say
+    while not net.send_ip(6, net.host_ip, first_segment):    # False until ARP finds the host
+        time.sleep(0.1)
+```
+
+| 名称 | 含义 |
+|---|---|
+| `join(comm_id, *, keys, password, nickname, app_version, name, log, timeout)` | 扫描并仅加入广播 `comm_id` 的网络；`name` 用于显示给玩家的消息。没有响应时抛出 `RuntimeError` |
+| `host(comm_id, *, keys, password, nickname, application_data, scene_id, app_version, max_participants, channel, protocol, log, timeout)` | 创建供游戏机加入的网络 |
+| `Network.ip`, `.mac`, `.host_ip`, `.broadcast`, `.ssid`, `.comm_id`, `.application_data` | 地址与广播数据：加入时来自主持端，主持时为本机 |
+| `Network.participants` | 主持网络中已就座的站点，各有 `.index`、`.ip`、`.mac`、`.name` |
+| `Network.add_protocol(number, handler)`, `.remove_protocol(number)` | 在无线事件循环中将发往本机、已重组且协议号为 `number` 的 IPv4 包交给 `handler(src_ip, dst_ip, payload)`；应入队后立即返回。UDP（17）仍由协议栈处理。处理函数异常会记入日志并丢弃数据包 |
+| `Network.send_ip(protocol, dst_ip, payload)` | 发送一个 IPv4 包，按 1500 字节分片；`dst_ip` 的地址未知时发送 ARP 请求并返回 `False` |
+| `Network.udp_socket(port)` | 网络上的 UDP 套接字：`sendto`、`recvfrom`、`setblocking`、`settimeout`、`fileno`、`close` |
+| `Network.set_application_data(data)` | 更新所主持网络的广播数据 |
+| `Network.error`, `.close()` | 网络结束原因（运行时为空）；退出网络。`Network` 可用作上下文管理器 |
+| `pokeldn.ldn.radio_lost()` | 无线后端退出进程的原因，或空字符串。任务会收到与玩家点击“停止”相同的 `KeyboardInterrupt`，此值可区分两者 |
+
+通过开发板传输约为 0.5 MB/s；可用 `pokeldn.progress.show` 报告进度。
+
+<a id="a-battle-server"></a>
+
+### 对战服务器
+
+对战服务器为主持启动器运行团体战，使游戏机与程序的宝可梦参与同一场对战（[提供对战服务](sv_raid.md#serving-the-battle)）。目前只有《朱／紫》（`"sv"`）支持。通过 `api.add_battle_server(game, name, factory, label)` 注册；运行 `bin/sv_host.py --raid-serve NAME`（仅指定 `--raid-serve` 时使用首个已加载服务器），在游戏机发来对战引导数据后，于网络事件循环之外调用 `factory(bootstrap, partners)`。`bootstrap` 为引导数据字节，`partners` 为两位 NPC 搭档各 0x158 字节的队伍记录。返回对象应提供：
+
+| 成员 | 行为 |
+|---|---|
+| `start(now)` | 在 `now` 秒运行首帧，返回推动对战的帧数 |
+| `run(until)` | 按每秒 30 帧运行到 `until` 秒（至少一帧），返回推动对战的帧数 |
+| `t` | 服务器时钟，单位为秒 |
+| `receive(slot, message)` | 从对战槽位 `slot` 接收站点消息，由 32 字节头部和正文组成 |
+| `sent(slot)` | 自上次调用以来排队发往 `slot` 的消息，每条由 32 字节头部和正文组成 |
+
+槽位 0 为程序宝可梦，1 为首领，2 为游戏机，3、4 为搭档。任一成员抛出异常会停止提供服务，游戏机随后自行运行对战。
+
+```python
+def register(api):
+    api.add_battle_server("sv", "mine", MyServer, "My raid battle")
+```
+
 <a id="packing-and-testing"></a>
 
 ### 打包与测试
@@ -241,6 +388,8 @@ POKELDN_PLUGINS=~/my-plugin python gui/main.py
 ```
 
 `--plugins` 列出所有发现的插件及加载失败原因。插件若在 `register` 中抛出异常、要求其他 API 版本或占用已有键，不会添加任何内容；卡片显示错误，其他插件仍可加载。插件也可作为 Python 包分发，通过 `pokeldn.plugins` 入口点组指定包含 `register` 的模块。
+
+打包时会忽略隐藏文件，以及 `plugin.toml` 中由 `exclude = ["tests", "tools"]` 指定的目录。
 
 <a id="signing"></a>
 
@@ -316,7 +465,7 @@ python scripts/pack_plugin.py examples/plugins/pseudo -o pseudo.pokeplugin
 
 | 位置 | 工具 | 行为 |
 |---|---|---|
-| Plugin Test Kit | Self-test | 检查 API 版本、自身加载、模块导入、所有字段类型、训练家占位符、会话目录、数据目录（保存更新后仍保留的运行计数）及无线后端；逐项输出 PASS 或 FAIL |
+| Plugin Test Kit | Self-test | 检查 API 版本、自身加载、导入、各类字段、训练家占位符、会话目录、数据目录（更新后保留的运行计数器）、资料库及文件标注、无线后端；逐项输出 PASS 或 FAIL，并在工具页留下最近自检状态卡片 |
 | Plugin Test Kit | Simulated session | 输出交换步骤，每次交换输出 `[done]` 行；点击“停止”后正常退出 |
 | Plugin Test Kit | Fail on purpose | 抛出异常，或以代码 3 退出 |
 | 火红／叶绿 | Hello from a plugin | 在内置工具中添加插件工具 |
@@ -340,11 +489,14 @@ python scripts/pack_plugin.py examples/plugins/pseudo -o pseudo.pokeplugin
 | API | 新增 |
 |---|---|
 | 1.0 | `add_tool`、`add_game`、`add_radio`、`folder`、`version` |
-| 1.1 | `api.data`、`api.level`、`pokeldn.plugins.data_folder(id)` |
+| 1.1 | `api.data`、`api.level`、`pokeldn.plugins.data_folder(plugin_id)` |
 | 1.2 | `pokeldn.popup` |
 | 1.3 | 程序接口：生成器、礼物文件、PKHeX 和开发板 |
 | 1.4 | 银行导入、记录、目的地、提供记录和交换完成处理 |
 | 1.5 | 语言包插件和字符串查找 |
+| 1.6 | `add_battle_server` |
+| 1.7 | `pokeldn.ldn.network`、`pokeldn.ldn.radio_lost`、`library` 和 `api.library`、`pokeldn.popup.choose`、`pokeldn.progress`、`{keys}` 占位符 |
+| 1.8 | `pokeldn.panel`、`library_sort` |
 
 <a id="the-api-version-1"></a>
 
@@ -355,14 +507,21 @@ python scripts/pack_plugin.py examples/plugins/pseudo -o pseudo.pokeplugin
 | `api.add_tool(game, tool)` | 在键为 `game` 的游戏下添加 `Tool`：`frlg`、`lgpe`、`swsh`、`bdsp`、`pla`、`sv`、`za` 或插件添加的游戏 |
 | `api.add_game(game, icon="")` | 添加游戏分组及工具 |
 | `api.add_radio(scheme, install, label="")` | 添加无线适配器 |
+| `api.add_battle_server(game, name, factory, label="")` | 添加团体战服务器（1.6） |
 | `api.folder` | 插件文件夹（`Path`），Python 包则为 None |
-| `api.version`、`api.level` | 当前 API 主版本和级别，`1` 和 `5` |
+| `api.version`、`api.level` | 当前 API 主版本和级别，`1` 和 `8` |
 | `api.data` | 更新时保留的目录，首次使用时创建（1.1） |
-| `pokeldn.plugins.data_folder(id)` | 从工具脚本访问同一目录（1.1） |
+| `pokeldn.plugins.data_folder(plugin_id)` | 从工具脚本访问同一目录（1.1） |
+| `api.library`, `pokeldn.plugins.library_folder(plugin_id)` | 玩家可见的 `plugin.toml` 的 `library` 目录，首次使用时创建（1.7，[资料库](#a-library-17)） |
 | `Tool`、`Field`、`Game` | 应用目录类型，从 `pokeldn.plugins` 导入 |
 | `pokeldn.ldn.show_done()` | 打印标记一次交换完成的行 |
 | `pokeldn.popup.acknowledge(title, text="", *, id, label="OK", on_ack, tone)` | 单按钮弹窗，返回 ID（1.2，[弹窗](gui.md#pop-ups)） |
 | `pokeldn.popup.confirm(title, text, agree, disagree, *, id, on_agree, on_disagree, on_dismiss, tone)` | 使用调用方指定的同意、不同意按钮；Esc 或点击外部关闭，返回 ID（1.2） |
+| `pokeldn.popup.choose(title, text, options, *, id, on_choice, on_dismiss, tone)` | 提供 2 至 8 个选项按钮；`on_choice(index)` 接收所选索引，Esc 或点击外部触发 `on_dismiss`；返回 ID（1.7） |
+| `pokeldn.progress.show(done, total, title, unit="bytes")` | 会话面板中的进度条；`unit` 为 `bytes` 或 `items`（1.7） |
+| `pokeldn.panel.show(id, title, lines=(), *, image, chips, tone)`, `clear(id)`, `annotate(name, *, state, text, image)`, `unannotate(name)` | 工具页状态卡片及资料库文件标注（1.8，[状态卡片](#status-cards-18)） |
+| `pokeldn.ldn.network` | 通过 IPv4 协议栈加入或主持 LDN 网络（1.7，[LDN 网络](#ldn-networks-17)） |
+| `pokeldn.ldn.radio_lost()` | 无线后端退出任务的原因，或空字符串（1.7） |
 | `pokeldn.popup.cancel(id)`、`available()`、`set_dispatcher(dispatch)` | 关闭弹窗并移除回调；判断应用是否显示弹窗；指定回调执行位置（1.2） |
 
 本表及下表列出的接口受兼容性保证。插件从 pokeldn 导入的其他内容可能在任何版本改变。

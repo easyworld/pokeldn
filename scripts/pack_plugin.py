@@ -33,7 +33,8 @@ def main(argv=None):
     try:
         package = plugin_store.pack(args.folder, out, key)
     except plugin_store.PackageError as error:
-        os.remove(out)
+        if os.path.exists(out):
+            os.remove(out)
         parser.exit(1, f"Not installable: {error}\n")
     if not args.output:
         named = f"{package.id}-{package.version or '0'}.{plugin_store.EXTENSION}"

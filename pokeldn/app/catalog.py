@@ -1,6 +1,7 @@
 """What the app offers per game: each tool is an entry point, the tested flags it always gets, the
 fields a user fills in, and what to press on the console. Fixed arguments may carry {received}
-(the Received folder), {stamp} (the run's time) and {src_var} (a fresh random id)."""
+(the Received folder), {stamp} (the run's time), {src_var} (a fresh random id) and {keys} (the
+prod.keys file Settings names)."""
 from pokeldn.app.i18n import t as tr
 from dataclasses import dataclass, replace
 

@@ -44,6 +44,13 @@ def test_packer_uses_tracked_defaults_and_requires_firmware(monkeypatch, tmp_pat
     pack = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(pack)
     files = pack.runtime_files()
+    # Every dependency docs/plugins.md lets a plugin import ships whole: a plugin's Crypto.PublicKey.RSA
+    # failed in 0.28.0, which carried only the Crypto modules pokeldn imports.
+    import re
+    row = next(line for line in (path.parents[1] / "docs/plugins.md").read_text(encoding="utf-8").splitlines()
+               if "pokeldn's own dependencies" in line)
+    names = [b or a for a, b in re.findall(r"`([^`]+)`(?: \(`([^`]+)`\))?", row.split("|")[1])]
+    assert set(names) - {"flet", "bleak", "unicorn"} == set(pack.PLUGIN_PACKAGES)
     assert "config/host.toml" in files
     assert "LICENSE" in files and "vendor/LDN/LICENSE" in files
     assert not any("scratchpad" in p or "host.local.toml" in p or "__pycache__" in p for p in files)

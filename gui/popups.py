@@ -61,12 +61,15 @@ class Dialogs:
         dialog.semantics_label = translate(entry.title)
         dialog.title = ft.Row([t.pixel_icon(icon, color=color),
                                ft.Column(header, spacing=2, tight=True, expand=True)], spacing=10)
-        dialog.content = (ft.Container(t.text(translate(entry.text), 13, t.MUTED, selectable=True), width=460)
-                          if entry.text else None)
-
         def press(answer):
             return lambda e: entry.press(answer)
+        body = [t.text(translate(entry.text), 13, t.MUTED, selectable=True)] if entry.text else []
+        # A choice's options weigh the same: one unfilled button each, full width, in the program's order.
+        body += [t.secondary_button(translate(option), press(str(i))) for i, option in enumerate(entry.options)]
+        if len(body) > 1:
+            body = [ft.Column(body, spacing=8, tight=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)]
+        dialog.content = ft.Container(body[0], width=460) if body else None
         # Esc and a click outside answer Dismiss; a button for it would sit beside disagree.
         dialog.actions = ([t.button(translate(entry.label), press("ack"))] if entry.kind == "ack" else
                           [t.secondary_button(translate(entry.disagree), press("disagree")),
-                           t.button(translate(entry.agree), press("agree"))])
+                           t.button(translate(entry.agree), press("agree"))] if entry.kind == "confirm" else [])

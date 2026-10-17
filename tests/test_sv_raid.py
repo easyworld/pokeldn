@@ -16,7 +16,7 @@ from pokeldn.app.catalog import GAMES
 from pokeldn.app.command import build
 from pokeldn.app.settings import Settings
 from pokeldn.ldn import channel_table, game_channel, pia6, pia_connect, reliable5
-from pokeldn.sv import (lz4, port2, raid, raid_encounter, raid_event, raid_partners, raid_scan, raid_search,
+from pokeldn.sv import (lz4, port2, raid, raid_battle, raid_encounter, raid_event, raid_partners, raid_scan, raid_search,
                         streams)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1066,3 +1066,90 @@ def test_our_guest_joins_a_console_s_raid_and_leaves_its_pokemon_in_the_battle(m
     battle_ack = [r for r in got if (r["protocol"], r["port"]) == (0x80, 0) and "data" not in r]
     leave = [r for r in got if r["protocol"] == 0x98 and r["payload"][0] == 3]
     assert len(leave) == 1 and leave[0] is got[-1] and leave[0]["t"] - battle_ack[-1]["t"] < 0.06
+
+
+class ServedBattleConsole(RaidGuestConsole):
+    """The scripted console, then at battle slot 2 of a served battle (pokeldn.sv.raid_battle) whose
+    bootstrap is `boot`: each odd server step answered 0.3 s later, a request with its Pokemon's first
+    move on the boss and the boss's first move on it, on 0x80 port 0 as its battle-start frames."""
+
+    def __init__(self, clock, boot):
+        super().__init__(clock)
+        self.battle = []                        # (x, message) received in the battle
+        self.boot = boot
+
+    def answer_data(self, protocol, port, rm, body):
+        super().answer_data(protocol, port, rm, body)
+        if (protocol, port) != (0x80, 0):
+            return
+        framed = raid_battle.unframe(body)
+        if framed is None:
+            return
+        x, _, msg = framed
+        self.battle.append((x, msg))
+        if x != raid_battle.SERVER:
+            return
+        if msg[0] == raid_battle.REQUEST:
+            moves = [raid_battle.first_move(self.boot[o:o + gen9.SIZE_PARTY]) if self.boot else 0
+                     for o in (gen9.SIZE_PARTY, 4 * gen9.SIZE_PARTY)]
+            reply = raid_battle.command(msg, 2, *moves)
+        elif msg[0] & 1:
+            reply = raid_battle.answer(msg, 2)
+        else:
+            return
+        self.send_data(0.3, 0x80, 0, raid_battle.frame(3, 5, reply), compressed=True)
+
+
+class ScriptedServer:
+    """A battle server with the plugin interface (docs/plugins.md, A battle server): step 1 to every
+    slot, a request (5) once every slot answered it, then the end sequence once the four player slots
+    sent their commands. Moves the battle in each frame that queued something."""
+    END = (0x25, 0x29, 0x49, 0x35, 0x37)
+
+    def __init__(self, bootstrap, partners):
+        assert len(bootstrap) >= 6 * gen9.SIZE_PARTY and len(partners) == 2
+        self.t, self.queued, self.got = 0.0, {s: [] for s in range(5)}, {}
+
+    def _send(self, kind):
+        for slot in range(5):
+            self.queued[slot].append(bytes([kind]) + bytes(0x17) + bytes([5, slot]) + bytes(6))
+
+    def start(self, now):
+        self.t = now
+        self._send(0x01)
+        return 1
+
+    def receive(self, slot, message):
+        self.got.setdefault(message[0], set()).add(slot)
+        if (message[0], len(self.got[message[0]])) in ((0x02, 5), (0x06, 4)):    # the boss sends no command
+            for kind in ((0x05,) if message[0] == 0x02 else self.END):
+                self._send(kind)
+
+    def run(self, until):
+        self.t = max(self.t, until)
+        return 0
+
+    def sent(self, slot):
+        out, self.queued[slot] = self.queued[slot], []
+        return out
+
+
+def test_a_console_fights_the_battle_we_serve(monkeypatch, tmp_path, capsys):
+    """The launcher's served battle through the scripted console, with a plugin's battle server: the
+    console's answers reach the server, the server's steps reach the console, and the run closes at
+    the battle's end with no handover."""
+    from pokeldn import plugins
+    plugin = plugins.Plugin(id="scripted", name="scripted")
+    plugins.API(plugin).add_battle_server("sv", "scripted", ScriptedServer)
+    monkeypatch.setattr(plugins, "load", lambda: [plugin])
+    try:
+        made, _ = run_raid_host(monkeypatch, tmp_path, extra=["--raid-serve", "scripted"], seconds=900,
+                                consoles=lambda clock: [ServedBattleConsole(clock, None)])
+    finally:
+        plugins._battle_servers.clear()
+    console = made[0]
+    kinds = [m[0] for x, m in console.battle if x == raid_battle.SERVER]
+    assert kinds == [0x01, 0x05, *ScriptedServer.END]
+    assert not [r for r in console.seen if r["protocol"] == 0x98 and r["data"][0] == 7]   # no handover
+    out = capsys.readouterr().out
+    assert "serving the raid battle with scripted" in out and "the served battle is over" in out

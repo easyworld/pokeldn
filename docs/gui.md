@@ -494,12 +494,13 @@ deposited in HOME". The trade offers it like any other
 ## Pop-ups
 
 A run the app started, another of its child processes, or the app's own code can put a pop-up over
-whatever page shows (`pokeldn.popup`, in the plugin API since 1.2). There are two kinds:
+whatever page shows (`pokeldn.popup`, in the plugin API since 1.2). There are three kinds:
 
 | kind | buttons | callback |
 |---|---|---|
 | `acknowledge(title, text)` | one, `label` (OK) | `on_ack`: the button, Esc or a click outside |
 | `confirm(title, text, agree, disagree)` | agree and disagree, the caller's labels | `on_agree`, `on_disagree` or `on_dismiss`, which Esc and a click outside fire |
+| `choose(title, text, options)` (1.7) | one per option, 2 to 8, full width under the text in the caller's order | `on_choice(index)`, or `on_dismiss`, which Esc and a click outside fire |
 
 Opening one never waits: it returns the pop-up's id, and the answer comes later as its callback. A
 callback runs on the thread that reads the app's answers, unless `set_dispatcher(dispatch)` hands it to the program's own loop; in the app, it runs on a worker
@@ -515,18 +516,26 @@ earlier answer already handed to the dispatcher. A program holding 32
 pop-ups unanswered gets `RuntimeError`. A pop-up's header names the program that opened it: the
 tool, Board installer or Controller service, and nothing for the app's own.
 
-When a program exits, its confirmations close and its acknowledgements stay with no answer to go
-back. With no app (`available()` is false, as in a terminal), a pop-up is a `[pop-up]` line in the
+When a program exits, its confirmations and choices close and its acknowledgements stay with no answer
+to go back. With no app (`available()` is false, as in a terminal), a pop-up is a `[pop-up]` line in the
 output, no answer comes, and it does not count toward the 32.
 
 `runner.Process(..., popups=app.popups, label=...)` sets `POKELDN_POPUPS=1` in the child. The child
 sends each pop-up as a `[popup]` line and a JSON object on stdout, which the app keeps out of the log
 and finds wherever in a line another thread's print left it; the app answers with
-`[popup] {"id", "n", "answer"}` on the child's stdin, which `pokeldn.app.runner.child` reads. `n`
+`[popup] {"id", "n", "answer"}` on the child's stdin (a choice's answer is the option's index, `"0"`
+to `"7"`), which `pokeldn.app.runner.child` reads. `n`
 tells a pop-up from one opened again under its id, so a late answer to a replaced pop-up fires
 nothing. Code in the app reaches the manager directly (`popup.attach`). `pokeldn.app.popups.Manager`
 keeps the open pop-ups; `gui.popups.Dialogs` draws them. An app dialog's
 `page.pop_dialog()` closes the app's own top dialog, never a pop-up opened above it.
+
+## Progress
+
+A run prints `[progress] DONE TOTAL UNIT TITLE` (`pokeldn.progress.show`, plugin API 1.7; `UNIT` is
+`bytes` or `items`) to put a bar in the Session panel in place of a log line: the amount
+(`1.05 of 5.20 GB`), the rate over the last 30 s and the time left. `show` prints at most four lines a
+second per title and always the last one. A save backup's or restore's `[save]` lines draw the same bar.
 
 Mystery Gift - Simulated raises a warning when a gift made for the receiving player goes with the
 trainer from Settings instead, saying why: the save names no one, or its copy stopped at the card,

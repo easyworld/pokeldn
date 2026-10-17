@@ -25,6 +25,39 @@ def test_cobs_round_trip():
             assert esp32.cobs_decode(encoded) == data
 
 
+def test_the_usbwatch_report_every_hello_repeats_is_logged_once_per_link():
+    report = b"usbwatch: reset reason 11, up 812 ms"
+    frames = [esp32.encode_frame(esp32.MSG_LOG, line) for line in (report, b"joined", report, b"joined")]
+
+    class Stream:
+        def read(self, n):
+            time.sleep(0.005)
+            return frames.pop(0) if frames else b""
+
+        def write(self, data):
+            return len(data)
+
+    lines = []
+    radio = esp32.Radio(Stream(), log=lines.append)
+    deadline = time.monotonic() + 2
+    while frames and time.monotonic() < deadline:
+        time.sleep(0.01)
+    time.sleep(0.05)
+    radio.close()
+    assert lines == ["[esp32] usbwatch: reset reason 11, up 812 ms", "[esp32] joined", "[esp32] joined"]
+
+
+def test_a_lost_board_ends_the_run_with_a_reason_the_players_stop_lacks(monkeypatch):
+    import pokeldn.ldn
+    interrupted = []
+    monkeypatch.setattr(esp32_wlan._thread, "interrupt_main", lambda: interrupted.append(True))
+    monkeypatch.setattr(pokeldn.ldn, "_radio_lost", "")
+    assert pokeldn.ldn.radio_lost() == ""
+    esp32_wlan.board_lost(log=lambda line: None, error=OSError("Device not configured"))
+    assert interrupted == [True]
+    assert pokeldn.ldn.radio_lost() == "The board's USB connection failed (Device not configured)."
+
+
 def test_reader_resynchronises_after_boot_text():
     frame = esp32.encode_frame(esp32.MSG_RX_ETH, b"\x00abc\x00")
     reader = esp32.FrameReader()
@@ -41,8 +74,9 @@ class _RingBoard:
 
     RING, RATE = 16384, 2_000_000   # bytes, bytes per second the handler takes
 
-    def __init__(self, losses=(), holds=()):
+    def __init__(self, losses=(), holds=(), start=0):
         import threading
+        self.start = start              # the count a HELLO restarts at, to reach the u32 wrap
         self.losses = sorted(losses)    # (at byte N received, lose the next M bytes)
         self.holds = sorted(holds)      # (at byte N read, the reader stops for S seconds)
         self.credit_at = 0.0
@@ -90,9 +124,10 @@ class _RingBoard:
                 self.consumed += 1
                 for msg_type, _ in self.reader.feed(bytes([b])):
                     if msg_type == esp32.CMD_HELLO:
-                        self.consumed = 0
+                        self.consumed = self.start
                         with self.lock:
-                            self.inbox.append(esp32.encode_frame(esp32.MSG_CREDIT, bytes(4)))
+                            self.inbox.append(esp32.encode_frame(
+                                esp32.MSG_CREDIT, struct.pack("<I", self.start & 0xFFFFFFFF)))
                     elif msg_type == esp32.CMD_ETH_TX:
                         self.frames += 1
                     elif msg_type == esp32.CMD_STATUS:
@@ -103,7 +138,7 @@ class _RingBoard:
                 self.credit_at = time.monotonic()
                 with self.lock:
                     self.inbox.append(esp32.encode_frame(esp32.MSG_CREDIT,
-                                                         struct.pack("<I", self.consumed)))
+                                                         struct.pack("<I", self.consumed & 0xFFFFFFFF)))
 
 
 def test_a_flood_of_eth_tx_never_overflows_the_boards_ring():
@@ -127,6 +162,78 @@ def test_a_flood_of_eth_tx_never_overflows_the_boards_ring():
         board.close()
     assert board.frames == 2000
     assert (radio.tx_dropped, radio.flow_resyncs) == (0, 0)
+
+
+def test_the_window_stays_open_across_the_boards_u32_count():
+    """A stream past 4 GiB (a 5.2 GB game update) keeps flowing when the board's count wraps."""
+    start = (1 << 32) - 100_000
+    board = _RingBoard(start=start)
+    radio = esp32.Radio(board)
+    try:
+        radio.send(esp32.CMD_HELLO)
+        assert radio.drain(5)
+        with radio._out_cv:     # as if 4 GiB had already passed since the HELLO
+            radio._written = radio._credited = start
+            radio._flow = True
+        frame = b"\xff" * 6 + bytes(6) + b"\x08\x00" + bytes(range(200))
+        for i in range(2000):
+            radio.send_ethernet(frame)
+            if i % 200 == 199:
+                assert radio.drain(10)
+        assert radio.drain(10)
+        while board.ring:
+            time.sleep(0.01)
+    finally:
+        radio.close()
+        board.close()
+    assert board.consumed > 1 << 32
+    assert (board.frames, radio.flow_resyncs, radio.tx_dropped, radio.lost) == (2000, 0, 0, None)
+
+
+class _MidWriteBoard:
+    """Credits as the USB firmware does, every 1024 bytes it reads, and reads a frame while the host's write
+    of it is still running: the CREDIT for its first part arrives before the write returns. It never sends
+    the idle CREDIT that would cover a frame's tail."""
+
+    def __init__(self):
+        self.radio = None
+        self.consumed = self.credited = 0
+
+    def write(self, data):
+        for part in (data[:1100], data[1100:]):
+            self.consumed += len(part)
+            if self.consumed - self.credited >= 1024:
+                self.credited = self.consumed
+                self.radio._dispatch(esp32.MSG_CREDIT, struct.pack("<I", self.consumed))
+        return len(data)
+
+    def read(self, n):
+        time.sleep(0.005)
+        return b""
+
+    def close(self):
+        pass
+
+
+def test_a_credit_for_a_frame_still_being_written_counts():
+    """Frames sent one at a time, each credited before its write returns, never wait on the window: a
+    refused count shuts it every few frames until the board's idle CREDIT, which this board never sends."""
+    board = _MidWriteBoard()
+    radio = esp32.Radio(board)
+    board.radio = radio
+    try:
+        with radio._out_cv:
+            radio._flow = True
+        frame = b"\xff" * 6 + bytes(6) + b"\x08\x00" + bytes(range(256)) * 6
+        started = time.monotonic()
+        for _ in range(12):
+            radio.send_ethernet(frame)
+            assert radio.drain(2)
+        took = time.monotonic() - started
+    finally:
+        radio.close()
+    assert radio.flow_resyncs == 0 and took < esp32.FLOW_STALL
+    assert radio._written - radio._credited < 1024
 
 
 def test_bytes_lost_on_the_line_close_the_window_once_each():

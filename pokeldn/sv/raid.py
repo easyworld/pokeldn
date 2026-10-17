@@ -5,6 +5,7 @@ whose body is the game's serializer header and a payload. `RaidHost.actions` and
 """
 
 import struct
+import threading
 
 from pokeldn import gen9
 from pokeldn.ldn import channel_table as tables, reliable5
@@ -86,7 +87,10 @@ HANDOVER_WAIT = 20.0              # at most this long after the first console's,
 MIGRATION_REPEAT, MIGRATION_WAIT = 1.0, 5.0
 STATUS_REPEAT, STATUS_WAIT = 0.5, 4.0
 HANDOVER_REPEAT, HANDOVER_SPAN, HANDOVER_SPAN_UNANSWERED = 0.3, 4.0, 2.0
-STATION_LIST_RETRY = 2.0          # a retail raid host resends its Session station list this often
+STATION_LIST_RETRY = 2.0
+# The battle engine's session seats our Pokemon, the boss, one console and two NPC partners: the
+# console is bootstrap participant 1, at battle slot 2 (docs/sv_raid.md, Serving the battle).
+SERVED_STATION, SERVED_SLOT = 1, 2          # a retail raid host resends its Session station list this often
 
 
 def channel_table():
@@ -221,9 +225,12 @@ class RaidGroup:
     runs out. The bootstrap's partner seed and unlock stage pick the NPCs for the seats no console
     holds. `left` is set once the host may go."""
 
-    def __init__(self, raid, pokemon_record, rewards=None, players=1, partner_seed=0, stage=None):
+    def __init__(self, raid, pokemon_record, rewards=None, players=1, partner_seed=0, stage=None,
+                 serve=None):
         if not 1 <= players <= CONSOLES:
             raise ValueError(f"a raid seats 1 to {CONSOLES} consoles, not {players}")
+        if serve is not None and players != 1:
+            raise ValueError("a served battle seats one console")
         self.raid = raid
         self.pokemon = gen9.load(pokemon_record)
         self.rewards = None if rewards is None else tuple(rewards)
@@ -236,6 +243,11 @@ class RaidGroup:
         self.started_at = None
         self.handover_at = None
         self.plain = None
+        # serve(bootstrap) -> a pokeldn.sv.raid_battle.RaidBattle; built off the loop at the bootstrap.
+        self.serve = serve
+        self.battle = None
+        self.battle_error = None
+        self.serving = serve is not None
 
     def seat(self, index, now):
         """-> the RaidHost for the console at station `index`, or None once the raid has started."""
@@ -276,6 +288,24 @@ class RaidGroup:
                                       for i in range(1, CONSOLES + 1)]
             self.plain = bootstrap(self.raid, slots, self.rewards, POINT_NAME, *self.partners)
         return self.plain
+
+    def prepare_battle(self):
+        """Build the served battle from the bootstrap in a thread (the session takes seconds)."""
+        if not self.serving or self.battle is not None or self.battle_error is not None:
+            return
+
+        def build():
+            try:
+                self.battle = self.serve(self.bootstrap())
+            except Exception as exc:              # the consoles then fight their own battles
+                self.battle_error = exc
+        self.battle = False
+        threading.Thread(target=build, daemon=True).start()
+
+    def stop_serving(self, error):
+        """The served battle failed: the network goes to a console, which serves its own."""
+        self.battle_error = error
+        self.serving = False
 
     def next_host(self):
         """-> the station index the network goes to: the lowest still on it with its battle."""
@@ -325,6 +355,7 @@ class RaidHost:
         self.departure = None                   # [phase, since, next send, span]
         self.left = False
         self.whole = None
+        self.serving_from = None                # when the served battle started
 
     def accepted(self, now):
         """The console's port-2 join was answered: its lobby clock starts."""
@@ -352,6 +383,14 @@ class RaidHost:
             self._reach("loaded", now)
         if payload[:4] == BATTLE and "loaded" in self.steps:
             self._reach("battle", now)
+        if self.serving_from is not None and self.group.serving:
+            from pokeldn.sv import raid_battle
+            framed = raid_battle.unframe(payload)
+            if framed is not None:
+                try:
+                    self.group.battle.receive(SERVED_SLOT, framed[2], now)
+                except Exception as exc:
+                    self.group.stop_serving(exc)
 
     def net_acked(self, now):
         if self.net_at is not None:
@@ -404,6 +443,42 @@ class RaidHost:
         repeat = {"migration": MIGRATION_REPEAT, "status": STATUS_REPEAT}.get(phase, HANDOVER_REPEAT)
         self.departure[2] = max(due + repeat, now)
         return [({"status": "migrating"}.get(phase, phase),)]
+
+    def _serve(self, now):
+        """The served battle's frames for this console; at its end the network is handed over."""
+        group = self.group
+        if group.battle_error is not None or (group.battle is None and group.serve is not None):
+            group.stop_serving(group.battle_error or RuntimeError("the battle was never built"))
+            return []
+        if not group.battle:
+            return []                           # still building
+        try:
+            if self.serving_from is None:
+                if self.index != SERVED_STATION:
+                    raise ValueError(f"the served battle seats station {SERVED_STATION}, not {self.index}")
+                self.serving_from = now
+                group.battle.start(now)
+            frames = [f for _, f in group.battle.poll(now)]
+        except Exception as exc:
+            group.stop_serving(exc)
+            return []
+        if group.battle.over:
+            self.left = True                    # the battle is over; the consoles need no host
+        out = []
+        for raw in frames:
+            packed = streams.compress(raw)
+            if len(packed) <= BOOTSTRAP_FRAGMENT:
+                parts = [(COMPLETE_ZLIB, packed)]
+            else:
+                parts = [(FRAGMENT_START, raw[:BOOTSTRAP_FRAGMENT]),
+                         (FRAGMENT_END_ZLIB, streams.compress(raw[BOOTSTRAP_FRAGMENT:]))]
+            first = None
+            for flags, payload in parts:
+                seq = len(self.sent) + 1
+                first = first or seq
+                out.append(("app", seq, flags, first, payload))
+                self.sent[seq] = now
+        return out
 
     def _reach(self, milestone, now):
         self.seen.setdefault(milestone, now)
@@ -460,6 +535,7 @@ class RaidHost:
                     or not all("guest_start" in m.seen for m in self.group.present())):
                 return None
             self.whole = bootstrap_message(self.group.bootstrap(), self._count())
+            self.group.prepare_battle()
             cut = min(BOOTSTRAP_FRAGMENT, len(self.whole) - 1)
             return "boot1", FRAGMENT_START, self.whole[:cut], None
         if "boot2" not in self.steps:
@@ -473,6 +549,8 @@ class RaidHost:
             if not self._passed("loaded", now=now):
                 return None
             return "battle", COMPLETE, BATTLE_READY, None
+        if self.group.serving:
+            return None
         first = self.steps.get("handoff0")
         n = sum(1 for name in self.steps if name.startswith("handoff"))
         if n == len(HANDOFF):
@@ -491,6 +569,10 @@ class RaidHost:
             return self._leaving(now)
         if self.gone_at is not None:
             return []
+        if self.group.serving and "battle" in self.steps:
+            return self._serve(now)
+        if self.group.serve is not None and "battle" in self.steps and self.done_at is None:
+            self.done_at = now                  # a failed served battle: hand the network over
         if "start" in self.steps and self.group.due(now):
             self._depart("migration" if self.group.next_host() == self.index else "waiting", now)
             return self._leaving(now)

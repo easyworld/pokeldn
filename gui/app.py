@@ -62,6 +62,7 @@ class App:
         self.update_state = ""                                  # checking, current, available, offline
         self.update_listeners: list = []                        # called on the UI loop after a check
         self.plugin_updates: dict = {}                          # plugin id -> plugin_updates.Available
+        self.plugin_sources: list = []                          # plugin_sources.Source, as last read
         self.plugin_update_listeners: list = []                 # called on the UI loop after a check
         self.gts = None                                         # gui.views.gts.service, once used
         # Pop-ups (docs/gui.md, Pop-ups): a run's come through runner.Process; the app's own through
@@ -224,11 +225,16 @@ class App:
         threading.Thread(target=work, daemon=True).start()
 
     def check_plugin_updates(self) -> None:
-        """Ask each installed plugin's update address for a newer version, in the background."""
+        """Read every followed source and each installed plugin's update address, in the background."""
         def work():
-            from pokeldn.app import plugin_updates
-            found = plugin_updates.check(plugins.discover())
-            self.ui(lambda: self._plugin_updates_done(found))
+            from pokeldn.app import plugin_sources, plugin_updates
+            listings = [plugin_sources.fetch(url) for url in plugin_sources.followed()]
+            found = plugin_updates.check(plugins.discover(), listings)
+
+            def done():
+                self.plugin_sources = listings
+                self._plugin_updates_done(found)
+            self.ui(done)
 
         threading.Thread(target=work, daemon=True).start()
 

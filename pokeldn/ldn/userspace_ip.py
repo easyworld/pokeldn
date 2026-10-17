@@ -53,26 +53,33 @@ def _mac(value) -> bytes:
     return bytes.fromhex(str(value).replace(":", ""))
 
 
-def build_udp(src_ip: str, dst_ip: str, src_port: int, dst_port: int, payload: bytes,
-              ident: int = 0) -> list[bytes]:
-    """-> the IPv4 packets carrying one datagram, fragmented at the MTU."""
+def build_ipv4(src_ip: str, dst_ip: str, protocol: int, payload: bytes, ident: int = 0) -> list[bytes]:
+    """-> the IPv4 packets carrying `payload` for `protocol`, fragmented at the MTU."""
     src, dst = socket.inet_aton(src_ip), socket.inet_aton(dst_ip)
-    udp_len = 8 + len(payload)
-    pseudo = src + dst + struct.pack("!BBH", 0, PROTO_UDP, udp_len)
-    udp = struct.pack("!HHHH", src_port, dst_port, udp_len, 0) + payload
-    udp_sum = checksum(pseudo + udp) or 0xFFFF
-    udp = udp[:6] + struct.pack("!H", udp_sum) + udp[8:]
     step = (MTU - 20) & ~7
     packets = []
-    for offset in range(0, len(udp), step):
-        chunk = udp[offset:offset + step]
-        more = offset + step < len(udp)
+    for offset in range(0, max(len(payload), 1), step):
+        chunk = payload[offset:offset + step]
+        more = offset + step < len(payload)
         flags = (0x2000 if more else 0) | (offset // 8)
         header = struct.pack("!BBHHHBBH4s4s", 0x45, 0, 20 + len(chunk), ident & 0xFFFF, flags,
-                             64, PROTO_UDP, 0, src, dst)
+                             64, protocol, 0, src, dst)
         header = header[:10] + struct.pack("!H", checksum(header)) + header[12:]
         packets.append(header + chunk)
     return packets
+
+
+def udp_segment(src_ip: str, dst_ip: str, src_port: int, dst_port: int, payload: bytes) -> bytes:
+    udp_len = 8 + len(payload)
+    pseudo = socket.inet_aton(src_ip) + socket.inet_aton(dst_ip) + struct.pack("!BBH", 0, PROTO_UDP, udp_len)
+    udp = struct.pack("!HHHH", src_port, dst_port, udp_len, 0) + payload
+    return udp[:6] + struct.pack("!H", checksum(pseudo + udp) or 0xFFFF) + udp[8:]
+
+
+def build_udp(src_ip: str, dst_ip: str, src_port: int, dst_port: int, payload: bytes,
+              ident: int = 0) -> list[bytes]:
+    """-> the IPv4 packets carrying one datagram, fragmented at the MTU."""
+    return build_ipv4(src_ip, dst_ip, PROTO_UDP, udp_segment(src_ip, dst_ip, src_port, dst_port, payload), ident)
 
 
 class _Readable:
@@ -215,6 +222,7 @@ class Stack:
         self._lock = threading.Lock()
         self._udp: dict[int, list[UdpSocket]] = {}
         self._packet: list[PacketSocket] = []
+        self._protocols: dict[int, object] = {}
         self._fragments: dict[tuple, tuple[float, dict[int, bytes], int | None]] = {}
         self._ident = 0
         self.counters = collections.Counter()
@@ -256,20 +264,42 @@ class Stack:
             return BROADCAST_MAC
         return self.neighbors.get(ip) or self.learned.get(ip)
 
-    def send_udp(self, payload: bytes, dst_ip: str, dst_port: int, src_port: int) -> None:
+    def add_protocol(self, number: int, handler) -> None:
+        """`handler(src_ip, dst_ip, payload)` takes every reassembled IPv4 packet of `number`
+        addressed to this stack, on the radio's loop: it must return at once. UDP stays the stack's."""
+        if number == PROTO_UDP or not 0 <= number <= 255:
+            raise ValueError(f"IP protocol {number} cannot be taken")
+        with self._lock:
+            if number in self._protocols:
+                raise ValueError(f"IP protocol {number} is already taken")
+            self._protocols[number] = handler
+
+    def remove_protocol(self, number: int) -> None:
+        with self._lock:
+            self._protocols.pop(number, None)
+
+    def send_ip(self, protocol: int, dst_ip: str, payload: bytes) -> bool:
+        """Sends `payload` as one IPv4 packet, fragmented at the MTU. False, and an ARP request
+        sent, while `dst_ip`'s address is unknown: the caller sends again later."""
         if self.ip is None:
             raise OSError("the interface has no address yet")
         target = self._resolve(dst_ip)
         if target is None:
             self.counters["unresolved"] += 1
             self._send_arp(1, BROADCAST_MAC, b"\x00" * 6, dst_ip)
-            return
+            return False
         with self._lock:
             self._ident = (self._ident + 1) & 0xFFFF
             ident = self._ident
-        for packet in build_udp(self.ip, dst_ip, src_port, dst_port, payload, ident):
+        for packet in build_ipv4(self.ip, dst_ip, protocol, payload, ident):
             self._transmit(target + self.mac + struct.pack("!H", ETH_P_IP) + packet)
-        self.counters["udp_out"] += 1
+        return True
+
+    def send_udp(self, payload: bytes, dst_ip: str, dst_port: int, src_port: int) -> None:
+        if self.ip is None:
+            raise OSError("the interface has no address yet")
+        if self.send_ip(PROTO_UDP, dst_ip, udp_segment(self.ip, dst_ip, src_port, dst_port, payload)):
+            self.counters["udp_out"] += 1
 
     def _send_arp(self, op: int, eth_target: bytes, hw_target: bytes, ip_target: str) -> None:
         if self.ip is None:
@@ -322,11 +352,18 @@ class Stack:
             frame = frame[:14] + ip
         for sock in packet_sockets:
             sock._push(frame)
-        if ip[9] != PROTO_UDP or len(ip) < ihl + 8:
-            return
         dst = socket.inet_ntoa(ip[16:20])
         if self.ip is not None and dst not in (self.ip, self.broadcast, "255.255.255.255") \
                 and not dst.endswith(".255"):
+            return
+        if ip[9] != PROTO_UDP:
+            with self._lock:
+                handler = self._protocols.get(ip[9])
+            if handler is not None:
+                handler(src, dst, ip[ihl:])
+                self.counters["ip_in"] += 1
+            return
+        if len(ip) < ihl + 8:
             return
         src_port, dst_port, udp_len = struct.unpack_from("!HHH", ip, ihl)
         payload = ip[ihl + 8:ihl + max(udp_len, 8)]

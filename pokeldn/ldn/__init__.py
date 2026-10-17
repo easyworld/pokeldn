@@ -5,6 +5,13 @@ See docs/ldn.md and docs/pia.md. A game's addresses and payload shapes belong in
 import os as _os
 
 _done: dict[str, int] = {}
+_radio_lost = ""
+
+
+def radio_lost() -> str:
+    """Why the radio left this process, or "": a run that ends in KeyboardInterrupt tells a lost
+    board from the player's Stop by it (docs/plugins.md, The API)."""
+    return _radio_lost
 
 
 def show_done(kind: str = "trade") -> bool:

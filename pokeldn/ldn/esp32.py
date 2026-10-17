@@ -113,21 +113,14 @@ LINK_KEY_FAILED = 0xFFFE
 
 
 def cobs_encode(data: bytes) -> bytes:
-    out = bytearray([0])
-    code_at, code = 0, 1
-    for b in data:
-        if b == 0:
-            out[code_at] = code
-            code_at, code = len(out), 1
-            out.append(0)
-            continue
-        out.append(b)
-        code += 1
-        if code == 255:
-            out[code_at] = code
-            code_at, code = len(out), 1
-            out.append(0)
-    out[code_at] = code
+    out = bytearray()
+    for block in data.split(b"\x00"):
+        while len(block) >= 254:
+            out.append(255)
+            out += block[:254]
+            block = block[254:]
+        out.append(len(block) + 1)
+        out += block
     return bytes(out)
 
 
@@ -169,16 +162,18 @@ class FrameReader:
         self.rejected = 0
 
     def feed(self, data: bytes):
-        for b in data:
-            if b:
-                self._buffer.append(b)
-                continue
-            if self._buffer:
+        if 0 not in data:
+            self._buffer += data
+            return
+        frames = bytes(data).split(b"\x00")
+        frames[0] = bytes(self._buffer) + frames[0]
+        self._buffer = bytearray(frames.pop())
+        for frame in frames:
+            if frame:
                 try:
-                    yield decode_frame(bytes(self._buffer))
+                    yield decode_frame(frame)
                 except ValueError:
                     self.rejected += 1
-                self._buffer.clear()
 
 
 def mac_bytes(mac) -> bytes:
@@ -310,10 +305,12 @@ class Radio:
         self._out: collections.deque = collections.deque()
         self._out_cv = threading.Condition()
         self._written = self._credited = 0
+        self._sending = 0  # the frame on the line; the board credits it before the write returns
         self._credit_seen = 0.0
         self._lost = 0  # bytes a resync wrote off; the board's count stays behind by them
         self._flow = False
         self.tx_dropped = self.flow_resyncs = 0
+        self._usbwatch_seen: set[bytes] = set()
         # POKELDN_ESP32_TRACE=FILE records every message both ways: time, direction, type, hex.
         trace = os.environ.get("POKELDN_ESP32_TRACE")
         self._trace = open_output(trace, "a", buffering=1) if trace else None
@@ -496,7 +493,8 @@ class Radio:
                         # Bytes the board never counted (lost on the line) would hold the window
                         # shut for good.
                         self.flow_resyncs += 1
-                        self._record("!", MSG_CREDIT, struct.pack("<II", self._written, self._credited))
+                        self._record("!", MSG_CREDIT, struct.pack("<II", self._written & 0xFFFFFFFF,
+                                                                  self._credited & 0xFFFFFFFF))
                         self._lost += self._written - self._credited
                         self._credited = self._written
                         break
@@ -505,6 +503,7 @@ class Radio:
                     self._writing = False
                     self._out_cv.notify_all()
                     return
+                self._sending = len(frame)
             if silent:
                 self._lose(RadioError("The board stopped answering over USB"))
                 return
@@ -520,6 +519,7 @@ class Radio:
                 return
             with self._out_cv:
                 self._written += len(frame)
+                self._sending = 0
                 if msg_type == CMD_HELLO:
                     # The board restarts its count after a HELLO's delimiter and answers CREDIT 0
                     # (firmware wire_credit_reset); the window stays shut across it.
@@ -566,7 +566,8 @@ class Radio:
     def _read_loop(self) -> None:
         while not self._closed:
             try:
-                data = self._stream.read(4096)
+                # pyserial's read(n) waits for n bytes or the timeout (31.25 ms on Windows).
+                data = self._stream.read(getattr(self._stream, "in_waiting", 4096) or 1)
             except Exception as e:
                 if not self._closed:
                     self._lose(e)
@@ -611,17 +612,21 @@ class Radio:
             credit = struct.unpack("<I", payload)[0]
             self._record("<", msg_type, payload)
             with self._out_cv:
+                # A CREDIT may count part of the frame still on the line (docs/hardware_esp32.md).
+                sent = self._written + self._sending
+                # The board counts in a u32 (wire.c s_consumed): one update stream passes 4 GiB.
+                credit += max(0, sent - credit) >> 32 << 32
                 self._credit_seen = time.monotonic()
                 # More than was written since the HELLO is a count from before it. A count past
                 # what the written-off bytes allow means a resync wrote off bytes the board had.
-                if credit <= self._written:
-                    self._lost = min(self._lost, self._written - credit)
+                if credit <= sent:
+                    self._lost = min(self._lost, sent - credit)
                     self._credited = max(self._credited, credit + self._lost)
                     self._flow = True
                     self._out_cv.notify_all()
             return
         self._record("<", msg_type, payload)
-        if msg_type == MSG_LOG and self._log:
+        if msg_type == MSG_LOG and self._log and not self._repeated(payload):
             self._log(f"[esp32] {payload.decode(errors='replace')}")
         if msg_type == MSG_BUTTON and len(payload) == 6 and self._log:
             self._log(f"[esp32] BOOT button, mark {struct.unpack_from('<H', payload, 4)[0]}")
@@ -633,6 +638,15 @@ class Radio:
             subscribers = list(self._subscribers)
         for callback in subscribers:
             callback(msg_type, payload)
+
+    def _repeated(self, line: bytes) -> bool:
+        """True for a usbwatch report line this link already logged: every HELLO repeats it."""
+        if not line.startswith(b"usbwatch:"):
+            return False
+        if line in self._usbwatch_seen:
+            return True
+        self._usbwatch_seen.add(line)
+        return False
 
     def hello(self) -> Info:
         info = Info.parse(self.request(CMD_HELLO, b"", MSG_INFO))

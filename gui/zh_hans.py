@@ -2135,4 +2135,14 @@ LABELS.update({'PKHeX flags the missing HOME tracker. Pokemon HOME gave this gif
 
 LABELS.update({'Close': '关闭', 'OK': '确定', 'Yes': '是', 'No': '否'})
 
+LABELS.update({
+    'Type a source address.': '请输入来源地址。',
+    'A source must be an HTTPS address, or OWNER/REPO for a GitHub repository.': '来源必须为 HTTPS 地址，或表示 GitHub 仓库的 OWNER/REPO。',
+    'The source is not a plugin listing.': '来源不是有效的插件列表。',
+    'The source is written for another pokeldn. Update pokeldn.': '此来源需要其他版本的 pokeldn，请更新 pokeldn。',
+    'That source is already in the list.': '此来源已在列表中。',
+    'The built-in source cannot be removed.': '无法移除内置来源。',
+    'A file name cannot be empty, start with a dot or hold / \\ : * ? " < > |.': '文件名不能为空、不能以点开头，也不能包含 / \\ : * ? " < > |。',
+})
+
 LABELS.update({'First Challenge Pichu': '首次挑战奖励：皮丘', 'First GTS Trade Rotom': '首次 GTS 交换奖励：洛托姆', 'First Login Reward Pikachu': '首次登录奖励：皮卡丘', 'First Wonder Box Trade Eevee': '首次奇迹盒子交换奖励：伊布', 'Hidden Ability Grookey': '隐藏特性敲音猴', 'Hidden Ability Scorbunny': '隐藏特性炎兔儿', 'Hidden Ability Sobble': '隐藏特性泪眼蜥', 'HOME Starter Bulbasaur': 'HOME 初始伙伴：妙蛙种子', 'HOME Starter Charmander': 'HOME 初始伙伴：小火龙', 'HOME Starter Squirtle': 'HOME 初始伙伴：杰尼龟', 'National Dex Completion Magearna': '全国图鉴完成奖励：玛机雅娜', 'Pokemon GO Transfer Gift Melmetal': 'Pokémon GO 传送奖励：美录梅塔', 'Ver 1.4.0 HOME Bulbasaur': 'HOME 1.4.0 赠礼：妙蛙种子', 'Ver 1.4.0 HOME Squirtle': 'HOME 1.4.0 赠礼：杰尼龟'})

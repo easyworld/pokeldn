@@ -910,6 +910,103 @@ A draw adds `s0 + s1` and steps the state; the count rises by one per call, not 
 
 Many round functions inline the step instead of calling these.
 
+### Damage and draws per move
+
+Measured on oracle battles of random Pokemon against standard raids (233 battles, 29 with every draw
+logged). A move use draws, in this order:
+
+| draw | when | what it decides |
+|---|---|---|
+| `chance(25)` | the user is paralysed | a full paralysis |
+| `chance(accuracy)` | the move has an accuracy; 100 still draws | a hit |
+| `below(24)`, `below(8)`, `below(2)` | a damaging move, by critical-hit stage 0, 1, 2 | a critical hit when 0 |
+| `below(16)` | a damaging move | the roll r: the damage times (100 − r) / 100 |
+| `chance(p)` | a secondary effect of chance p (Body Slam's 30) | the effect |
+
+A flinch secondary against the boss draws nothing ([A move in the round queue](#a-move-in-the-round-queue)
+has the rule). A stat-lowering secondary of 100 percent (Spirit Break, Bulldoze) draws `chance(0)` in
+some rounds and nothing in others. Two battlers of equal speed draw `below(2)` before the first move.
+
+A battle draws `below(100)` once before its first round. The damage is Showdown's Gen 9 formula (data
+from Pokemon Showdown's `moves.json` and `typechart`) with the party record's stats and the boss
+defending as its Tera type only: 921 of 1346 hits on the boss before any stat stage change fit it, and
+for 137 of 140 hits with every draw logged the logged roll and critical draw give the recorded damage.
+Hits that do not fit come during the boss's shield (about 0.45 of the formula), from moves with their
+own rules (Body Press, Rising Voltage, multi-hit moves) or are capped at the HP left.
+
+A boss's HP pool is its record's HP times the RaidPoint's HP coefficient over 100 ([The battle
+bootstrap](#the-battle-bootstrap)): of the oracle battles won, 78 at one star, 84 at two, 125 at three and 35 at
+four ended after exactly 5, 5, 8 and 12 times the record's HP in `0x37 (2, 2, damage)`; the others took
+less, through the shield and moves with their own rules.
+
+### A move in the round queue
+
+In a round's queue a battler's move is one run of commands. A battler's client position is 0 to 3 for
+battlers 1, 3, 4 and 5 and 4 for the boss; A is the user, T the target, M the move, `type` the move's
+type index and `cat` its category (1 physical, 2 special). Measured on oracle rounds where a player's
+move hits the boss and the boss's reply hits a player:
+
+| command | meaning |
+|---|---|
+| `0x05 (A, 0, pp)` | a player's move begins, spending pp (2 against a target with Pressure, else 1); the boss's has none |
+| `0x07 (A, 0)` | the move is used |
+| `0xc9 (A, 0, M, T's position, 0)` | the move and its target |
+| `0x7b (M, n, A)` | n counts the rounds before this one |
+| six `0xcf` groups of zeros | 20, 5, 5, 5, 19 and 20 bytes |
+| `0x7e (0, ...)`, `0x7e (1, 0, 0, 0, 0, 0)`, `0x7e (2, e, e, e, e, e)` | the first: 1 at T's position + 1; the third: an effectiveness code per position, 7 for none |
+| `0x8b (A's position, T's position, M, type, 0, 0, 1, tera, 0, 0)` | the hit; `tera` is 1 when the boss uses a damaging move of its Tera type (448 of 448 such hits), else 0 |
+| `0x37 (T, 2, damage)`, `0x37 (T, 5, 1)`, `0x02 (T, A, damage, 3)` | the damage |
+| `0xd0` with bytes `T, e` | e is the effectiveness: 7 neutral, 6 not very effective, 8 super effective |
+| `0x8e (1, 1, M)`; `0x8e (1, 3, M)` and `0xca (A, 575, 0xffff0000)` when not very effective; `0x8e (1, 2, M)` and `0xca (A, 574, 0xffff0000)` when super effective | the effectiveness message |
+| `0x20 (A, 24)` | only for a super-effective hit |
+| `0x42 (T, A, A's position, type, cat, M, damage)` | the hit's record |
+| the drain, when the move drains and its user is below full HP | `0xa7 (T, 51)`, `0x03 (A, heal)`, `0x9a (A, heal)`, `0xcb (A, 290, T)`; heal is damage times the drain fraction, rounded half up, capped at the HP the user lacks |
+| the secondary effect, if any | for example a paralysis: `0x13`, `0x90`, `0xa7`, `0xcb (2, 92, T)` |
+| `0xd1` with bytes `01 00`, `0x2e (2, A − 1)` | |
+| `0x85 (7, damage)` | only for damage to the boss |
+| `0x7c ()`, `0x08 (A, 0)`, `0x1d (A, T's position, type, 1, 0, M, M)`, `0x5b (A, M)` twice, `0x1e (A, 0)` | the move ends |
+
+A round ends with `0xb2 (0)`, `0x37 (b, 7, 1)` for each battler that moved, `0x75 (3, n)`, `0xc5 (1)`,
+`0x43 (b)` for each battler in speed order (party record speed, the boss among them), `0x23 (b)` for
+each of the round's actors in id order, or all five in the battle's first round, and `0x2d (0)`;
+`0x75 (3, n)` counts the rounds so far, this one included.
+
+A hit that knocks the boss out wins the battle. After its `0x42` come `0x49 (2, A, M)`, `0x09 (A, 0)`,
+`0x37 (2, 1, 1)`, `0xcb (2, 0, 2)`, `0x94 (2, 0)`, `0x37 (2, 8, 1)`, `0x5f (2)`, `0x62 (2)`, `0x6c (2)`,
+`0x5d (2)`, `0x41 (b, 2)` for each player in id order, `0x33 (2, k)` for k 0 to 13 except 8, `0x80 (2)`,
+`0x29 (2)` and `0x38 (A)`, then the move's usual end. Nobody moves after it, and the round ends with
+only the `0x43` of the battlers left standing, the `0x23` list and `0x2d (0)`. The `0x85 (7, damage)`
+and the damage commands carry the HP the boss had left.
+
+The prefix starts with `0xb5 (0)`, then runs `0x51 (b, 1)` once for the round's actors in id order and
+once in the order they move; in the second run a battler with Stall (ability 100) moves last and
+carries `0x51 (b, 0)`. A battler whose chosen move registers its own handler adds `0x5a (b, M, speed)`
+and `0x5b (b, M)` after each run, in that run's order, then twice more in move order. Before each
+battler after the first moves, every such battler repeats the pair once more, and a mover whose move
+registers a handler adds `0x5a (b, M, 0x72000 + speed)` just before its `0x05`. Which moves register
+a handler is measured by using each move in an oracle battle and watching for `0x5a`: 347 of the 631
+moves seen used register one (Facade and Body Slam among them, Night Slash not).
+
+The boss is Terastallized from the start: a damaging move of its Tera type under 60 base power, with
+no priority and a single hit, hits at 60, Gen 9's Tera rule (a Smoliv's Tera Normal Tackle did 4
+where 40 base power gives 2). A move's secondaries each draw `chance(n)` in Showdown's order, except
+a flinch against the boss, which draws nothing: a player's Ice Fang on the boss draws only its
+freeze chance (a freeze shows as `0x13 (2, 3, 0, 1, 4)` with messages 97 and 98, and the boss draws
+`chance(20)` to thaw before it moves), the boss's Ice Fang on a player draws both. A hit that knocks
+the boss out draws `chance(0)` first, with or without a secondary.
+
+Built this way, from Showdown's move data and the Gen 9 damage formula, 56 of 554 oracle battles'
+first rounds equal the oracle's byte for byte and none differ; the others hold something refused.
+Chained from the start body through the boss's knockout, 20 whole battles equal the oracle's in
+every round. Served end to end against the same scripted console, a server built this way sent
+the console every frame the oracle server sent, in order and at the same frame, in 19 of 19 battles
+both served (the twentieth the oracle server failed).
+A round is refused when a battler that acts or is hit holds an ability or item whose Showdown callback
+can change the round (Hustle's attack, Rivalry's power, Friend Guard's 0.75, Rattled's speed raise
+after a Dark hit, Gale Wings' priority), unless the corpus measured that ability or item idle, or
+when the battle holds an ability that acts on switching in (Intimidate lowers the attacker's Attack
+before the first round).
+
 ### Actions
 
 A round's action header (the request block, 0x238 bytes) is five 0x70-byte blocks, one per client
@@ -954,9 +1051,8 @@ A round's block therefore holds one slot's actions. The 4 unwritten bytes of eac
 0x235..0x237 come from the poster's stack and reach the type-0x15 body unchanged; the round reads
 none of them. Each type-0x15 record between two emulated Scarlet 4.0.0 equals, outside those bytes,
 the block built from the type-6 command of its acting slot (10 of 10 records whose command was on the
-wire; the boss's own slot-1 blocks have none: [The boss's actions](#the-bosss-actions)). The rounds of four emulated sessions run from their
-actions alone (`pokeldn.sv.battle.engine.requests.run_round`) give the console's 20576-byte bodies
-outside those bytes.
+wire; the boss's own slot-1 blocks have none: [The boss's actions](#the-bosss-actions)). The rounds of four emulated sessions,
+run from their actions alone, give the console's 20576-byte bodies outside those bytes.
 
 ### The server command queue
 
@@ -976,7 +1072,7 @@ table `0x3c6a90c`):
 | 0xd3 | one byte |
 | 0xd4 | none |
 
-Format bytes and their argument widths in bits (`pokeldn.sv.battle.queue.FORMATS`):
+Format bytes and their argument widths in bits:
 
 | format | widths | format | widths |
 |---|---|---|---|
@@ -1005,8 +1101,44 @@ Format bytes and their argument widths in bits (`pokeldn.sv.battle.queue.FORMATS
 Every queue starts with command 0xb5. A round in which slot 2 used Hex (move 506) on the boss
 carried `0x5a (3, 506, 212)`, `0x5b (3, 506)` and `0xc9 (3, 0, 506, 4, 0)`. Every queue recorded
 from emulated Scarlet 4.0.0 servers and the type-0x15 records between two emulated consoles, 20 in
-all, decodes to its last byte and encodes back to the same bytes (`tests/test_sv_battle_queue.py`).
+all, decodes to its last byte and encodes back to the same bytes.
 The 0xcf groups seen so far are zero-filled.
+
+### The battle-start body
+
+Message 0x11's body is a command queue with no length word ([The server command queue](#the-server-command-queue)).
+Battler ids are 1 for slot 0, 2 for the boss (slot 1), 3 for slot 2, and 4 and 5 for slots 3 and 4; a
+battler sits at position id − 1. The body sends each battler out in id order, then runs the switch-in
+events, then ends with `0x2b (0)`:
+
+| commands | what |
+|---|---|
+| `0x3d (pos)`, `0x16 (pos, 0, 0, 0)`, `0x5e (id, ability)`, `0x61 (id)`, `0x6b (id)`, `0x4e (id)` | one battler sent out; `ability` is its ability id |
+| `0x25 (id)`, `0xc7 (id, 0)`, the effect, `0xc8 (id)` | an ability's activation |
+| `0xcb (id, text, params..., 0xffff0000)`, padded with zeros to ten arguments | a battle message |
+
+| switch-in event | effect |
+|---|---|
+| Pressure (46) | the activation around `0xcb (id, 162, id)` |
+| Intimidate (22) | the activation around, per target, `0x0d (target, 1, 1)`, `0x93 (target, 1, 1, 0)`, `0xcb (id, 32, target, 1)` |
+| Frisk (119) | the activation around `0xcb (0, 146, id, target, item)` per foe holding an item |
+| Unnerve (127) | `0x25 (id)`, `0xc7 (id, 127)`, `0xca (id, 679, side, 0xffff0000)`, `0xc8 (id)`, before every other event; `side` is 1 for a player's Unnerve, 0 for the boss's |
+| Anticipation (107) | the activation around `0xcb (id, 145, id)` when a foe knows a damaging move super effective on it or a one-hit KO move |
+| Air Balloon (541) held | `0xcb (id, 137, id)`, after the battler's ability |
+
+In 224 of 233 oracle battles the events run in the battlers' speed order (party record speed). The 9 others
+involve Unnerve (127), which acts first, or speed ties. Over the same battles, 161 abilities produced no
+switch-in event and, of the items Leftovers (234), Life Orb (247), 270 and Focus Sash (275), none did.
+
+Intimidate opens with `0x25 (I)` and `0xc7 (I, 0)`, then for each foe in id order (the four players
+for the boss, the boss for a player) `0x0d (F, 1, 1)`, `0x93 (F, 1, 1, 0)` and `0xcb (I, 32, F, 1,
+0xffff0000)`, and closes with `0xc8 (I)`. A foe with Own Tempo answers inside it with its own
+`0x25`/`0xc7`, `0xcb (F, 69, F, 0xffff0000)` and `0xc8`, and loses nothing. A foe with Defiant answers
+after its drop with `0x0c (F, 1, 2)`, `0x92 (F, 1, 2, 0)` and `0xcb (F, 18, F, 0xffff0000)`. Frisk
+names the first foe that holds an item with `0xcb (0, 146, I, F, item, 0xffff0000)` and each later
+one with `0xca (0, 752, F, item, 0xffff0000)`; with no item among the foes it has no event. Defiant,
+Hyper Cutter, Klutz, Light Metal, Moxie, Poison Touch and Wind Power have no start event. Built this
+way, 420 of 554 oracle start bodies are equal and none differ.
 
 ### The server's messages
 
@@ -1166,7 +1298,6 @@ message but 5 and 0x37 0.1 s later and send no command, the clock run to 700 s i
 server code under unicorn and `Server` send every slot the same messages in the same order, byte for byte
 outside the unwritten bytes. They are the boss's round of its last timed action (kind 3, 10 percent of the
 time left), then 0x2b with the body `00 00 00 00 02 00` (slot 0, outcome 0, decided by 2), 0x35 and 0x37.
-`tests/test_sv_battle_served.py` checks `Server` against those messages.
 
 A raid the boss wins ends the same way. On the same session from 414.5 s, with stations that answer every
 request with a command in which their Pokemon uses Growl (move 45) on the boss and the boss answers with
@@ -1251,10 +1382,9 @@ messages in the relayed order at their capture times) sends the guest the consol
 byte for byte outside the header's and the request blocks' unwritten bytes. Without the incoming-link
 step the 0x51 copy never reaches the boss list and the 80 percent action never fires.
 
-`pokeldn.sv.battle.engine.server.Server` runs this flow over a session the engine built: each frame is
-the server's part of the run step (`0xe0f040`, `0xe0fd68`, `0xe0f854`, `0xfc363c(G, 1)`, and `0x2898350`
-when that step moved), ported (`pokeldn.sv.battle.engine` modules `links`, `scheduler`, `frame`,
-`reader`, `jobs`; a path into a function not ported raises `UnliftedCall`), at 30 frames a second on
+`Server`, a Python port of this flow over a built session, runs each frame as the server's part of the
+run step (`0xe0f040`, `0xe0fd68`, `0xe0f854`, `0xfc363c(G, 1)`, and `0x2898350` when that step moved), at
+30 frames a second on
 the machine's clock up to the time of each message it is given, and for one frame period after each.
 No frame can be skipped as idle: a reader waiting on a fainted slot's timer makes the machine report a
 move every frame, and each such frame queues a message 0x46 on the server's own link. Under unicorn the
@@ -1271,7 +1401,7 @@ machine's clock, the server sends the guest all 24 of the console's frames in th
 one is byte for byte the console's outside the header's unwritten bytes and the request blocks'
 ([Actions](#actions)); the boss's timed action fires at the console's frame from the timer's own start.
 Under unicorn, the game's own code for every lifted step leaves the same pages through the whole served
-battle. `tests/test_sv_battle_served.py` serves it from the recorded messages.
+battle.
 
 ### Reproducing a round
 
@@ -1281,7 +1411,7 @@ touches it, the thread-local page behind `tpidrro_el0` is a stand-in whose `+0x1
 thread, and SVCs 0x10, 0x11, 0x12, 0x1a, 0x1b, 0x1d and 0x1e return 0. Eleven replayed rounds
 equalled, byte for byte, the bodies the console then built itself; a round touched 159 to 353 pages.
 
-`pokeldn.sv.battle` is a Python port of the server, one function per game function, keyed by its
+A Python port of the server runs it, one function per game function, keyed by its
 offset from main. The builder `0x113c8a0` runs in Python for message kinds 1, 5, 17 and 21: the
 round driver `0x113e3d0` with move selection, damage `0xf7c344`, fainting `0x1144df8` and end of
 turn `0x114a094`, and the battle start `0x113dca8` with its send-out, item, ability and entry
@@ -1318,9 +1448,9 @@ come out of `arc/data.trpfs` (`tools/switch/trpfs_read.py`; Oodle entries throug
 `OodleLZ_Decompress` at `0xcc8750`), and every byte of them held by 97 halted consoles equals the
 extracted file.
 
-The battle start also runs with no halted console (`pokeldn.sv.battle.standalone`). From the static
+The battle start also runs in the port with no halted console. From the static
 image and the romfs alone, the
-port builds the game heap (`pokeldn.sv.battle.engine.arena`), the "Application" counted allocator
+port builds the game heap, the "Application" counted allocator
 (`0x3b78d3d`, limit 0xa0000000, over the GlobalHeap allocator 0x4763918), the weak-handle table
 (`0x165dd08`) and the five data tables (personal `0x164498c`, id-hash `0x1730f6c`). The session and
 the server object N then come from the game's own creators (below), with the raid start's setup
@@ -1332,8 +1462,7 @@ and changes 123 bytes of a round. Neither heap addresses nor weak-handle ids rea
 console's ids are 0x1b5xx of generation 3, and the port's are 0..0x58 with all its objects at other
 addresses.
 
-The session is made in four steps, each by the game's code ported to Python
-(`pokeldn.sv.battle.engine.session` and `.network`):
+The session is made in four steps:
 
 | step | code | what it makes |
 |---|---|---|
@@ -1375,7 +1504,7 @@ The data system's init `0x1641afc` runs `0x1643a48` (personal, growth), `0x1641c
 `0x1641d78` (abilities). Each table is created from the allocator, reset into its static (`0x1643e68`)
 and appended through `0xf0ba9c` to the registry at 0x4763a18 (count u32 0x4765a18, at most 0x400).
 Inserting a file's records in file order, after reserving their count, gives the console's node list.
-The static image and the five tables come from the player's own dump (`pokeldn.sv.battle.game`):
+The static image and the five tables come from the player's own dump:
 main and the SDK from the v4.0.0 update's ExeFS (main's build id
 `421c5411b487eb4d049dd065fec9547773e8e598`), each NSO's segments at their memory offsets with .bss, RELATIVE relocations at main
 `0x8504000` and SDK main + `0x4e6d000`, then the GLOB_DAT, JUMP_SLOT and ABS64 slots bound to the
@@ -1386,6 +1515,50 @@ the session and N's start states 2.4 s.
 A weak-handle entry is 0x20 bytes: u64 id (u32 index | u32 generation << 32), +8 the resolved value,
 +0x10 the object, u16 +0x18 weak count, u16 +0x1a strong count, u32 +0x1c state (-1 freed, -2 live).
 Blocks hold 0x400 entries (`0xc1adec`); freed ids go to a `deque<u32>` grown by `0xb44724`.
+
+### The server's flow, measured
+
+These hold for an oracle server over the scripted console of [Serving the battle](#serving-the-battle),
+and a server built from them sends the console the same frames, notices included, over nine whole
+battles that the players won:
+
+| rule | measured |
+|---|---|
+| header counters | `step` rises by one per send, a broadcast or one request; `round` is 0 for message 1, 1 from 0x11, and rises with each 0x15 and with 0x25 |
+| one job a frame | message 1 starts Wild::Setup, which sends 0x11 once every slot answered 1, and ends one frame after every slot answered 0x11 |
+| requests | on a frame with no job running, a slot with nothing unanswered is posted a request (5); requests start one a frame, in slot order 0, 2, 3, 4 |
+| a command | the slot's 6 is posted as a job that sends the round (0x15) to every slot |
+| asked again | a slot that has answered every round sent to it is asked again on the next frame |
+| a win | the round that wins is followed, on the next frame, by an empty round 0x25 (20576 zero bytes), then 0x29 with the body `00 00 01 00 01 00`, 0x49, 0x35 and 0x37, each sent once every slot answered the one before: 2 frames after the last answer to 0x25 and to 0x49, on the same frame after the others |
+| a time-up | 0x2b with the body `00 00 00 00 02 00` (63 of 233 battles) |
+| the notice 0x46 | one for each frame on which a job starts, or on which, with no job running, a round's answer (0x16) is read |
+
+### Serving the battle
+
+`bin/sv_host.py --raid-serve [NAME]` keeps the network through the battle and serves it from the
+host's station with `pokeldn.sv.raid_battle.RaidBattle`: a plugin's battle server ([A battle
+server](plugins.md#a-battle-server)) built from the bootstrap and two NPC partners, and the stations a
+console host keeps for itself. pokeldn ships no battle server; without a plugin that adds one, the flag
+is refused. The served session seats our Pokemon, the boss, one console at station index 1 (bootstrap
+participant 1, slot 2) and two NPC partners, so the flag takes one console.
+
+| part | what the host sends |
+|---|---|
+| the server's messages to the console | frames addressed (0x2713, 1, 2) |
+| slots 0, 1, 3 and 4 | each odd step answered with type + 1 after 0.05 s; a request (5) for slots 0, 3 and 4 with a type-6 command in which the slot's Pokemon uses its first move on the boss and the boss its first move on that Pokemon ([Actions](#actions)) |
+| every message the server reads, the console's own included | relayed to the console, addressed (0x2713, 3, 5) |
+| each server frame that moved the battle | after that frame's messages, a notice 0x46 from slot 0 (step 0, a 4-byte zero body), addressed (0x2713, 3, 5) |
+
+Each frame goes on 0x80 port 0 as one deflated reliable message (flags `COMPLETE_ZLIB`); the largest
+seen deflated to 903 bytes. A server that reproduces Scarlet 4.0.0's sends, as its first six frames,
+the six battle-start messages a retail host sent (`raid.HANDOFF`) outside the header bytes its stack
+filled, in the same order, so `--raid-serve` sends them in place of `HANDOFF`.
+
+The host stops serving once the console answered 0x37, or 5 s after 0x37 was sent, and closes the
+network. Answering 0x37 itself re-runs the time-up on the server ([The server's flow](#the-servers-flow)),
+so the local stations leave it unanswered. A failure (the server raising, or failing to build) stops
+the serving and hands the network over as a host without the flag does; the console then fails over
+and fights its own battle ([Which station runs the server](#which-station-runs-the-server)).
 
 ## Joining
 
@@ -1408,6 +1581,10 @@ the host start; its Pokemon stayed in the battle.
 
 ## Unresolved
 
+- What the `chance(0)` draws before some stat-drop secondaries stand for, when the target is not
+  knocked out.
+- Why a player's Whirlpool (a move that registers a handler and traps) hit a Fairy-Tera boss for 7
+  where the damage formula gives 14 to 17.
 - Whether a listener of the GlueCode dispatcher `0x18beef4` reads `+0x4c` as a word (listeners
   register at run time; groups 1 to 3 are called at `0x18bf87c`), and which consumer drains the
   per-slot queues `0xe106a4` fills (`0x113d5e0` from `0xe107ac`). Message 16, with +0x08 zero,

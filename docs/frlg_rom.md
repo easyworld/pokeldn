@@ -1392,6 +1392,14 @@ at most 1, the footer must contain at least two bytes, and the stream's own id (
 be non-zero and appear among its big-endian u16 recipient ids (`footer_size >> 1` entries). Separately, when
 `([+0xC] & 0x7E) >= 6` and the destination is 2 or more, it must equal the stream's own `+0x88`.
 
+The filter forms the recipient pointer as `packet + (size - footer) + 0x30`, after `sub w8, w8, w9`
+at `main + 0x912EC`; the message walker `main + 0xD6460` and the parser `main + 0xDE278` form the
+walk bound as `size - footer - 0x1d` (`main + 0xD651C`, `main + 0xDE298`). Neither subtract is
+gated on the footer size fitting the datagram. The footer size byte is datagram offset 12, in the
+plaintext header, so a peer sets it freely. A footer size above the datagram size does not fault
+the filter: six 31-byte datagrams with footer `0x40` reached the socket and the session ran on
+(measured on the emulator).
+
 **The threads.** The transport's receive and send loops are `nn::os` threads named "Pia
 ReceiveThreadStream" (started at `main + 0xE9020`, the name via `adr` at `main + 0xE9034`) and "Pia
 SendThreadStream" (`main + 0xEA758`), created through `main + 0xF6010` (`nn::os::CreateThread`,

@@ -131,7 +131,8 @@ def build(tool: Tool, values: dict, extra: dict, settings, stamp: str | None = N
     tokens = {"{received}": os.path.expanduser(settings.received), "{stamp}": stamp,
               "{src_var}": f"0x{random.getrandbits(32):08x}",
               "{ot}": settings.name(game), "{tid}": str(tid), "{sid}": str(sid),
-              "{language}": str(settings.language), "{gender}": str(settings.gender)}
+              "{language}": str(settings.language), "{gender}": str(settings.gender),
+              "{keys}": os.path.expanduser(settings.keys)}
     # A banked Pokemon keeps its PID and encryption constant: they are who it is [docs/gui.md, The bank].
     banked = any(entry.get("bank") for field in tool.fields if field.kind == "pokemon"
                  for entry in offers(value_of(field, values)))

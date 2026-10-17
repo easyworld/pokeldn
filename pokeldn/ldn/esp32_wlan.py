@@ -469,7 +469,9 @@ def set_station_mac(mac) -> None:
 
 def board_lost(log=None, error=None) -> None:
     """Ends the run as the app's Stop does: a board that left USB never comes back to this process."""
+    import pokeldn.ldn
     detail = f" ({error})" if error else ""
+    pokeldn.ldn._radio_lost = f"The board's USB connection failed{detail}."
     (log or print)(f"[esp32] The board's USB connection failed{detail}. Unplug it and plug it back in. "
                    "If it happens again, try another USB port or cable; if a screen is wired to "
                    "the board, try without it.")

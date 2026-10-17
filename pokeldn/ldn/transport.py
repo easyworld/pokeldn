@@ -239,8 +239,13 @@ class LiveTransport:
     def __init__(self, password=None, nickname="EMU", keys_path="~/.switch/prod.keys",
                  local_comm_id=None, scene_id=None, app_version=None,
                  phyname="phy0", ifname="ldnclient", log=print,
-                 scan_channels=(1, 6, 11), scan_dwell=0.6, beacon_debug=None):
+                 scan_channels=(1, 6, 11), scan_dwell=0.6, beacon_debug=None,
+                 exact_comm_id=False, network="FRLG"):
+        """`exact_comm_id` joins only a network with `local_comm_id`, never the only joinable one;
+        `network` names it in the player's messages."""
         self.info = getattr(log, "info", log)
+        self.exact_comm_id = exact_comm_id
+        self.network = network
         self.password = password if password else GBA_APP_PASSPHRASE
         self.nickname = nickname
         self.keys_path = keys_path
@@ -318,7 +323,7 @@ class LiveTransport:
 
         async def main():
             keys = ldn.load_keys(self.keys_path)
-            self.info("Scanning for the FRLG network...")
+            self.info(f"Scanning for the {self.network} network...")
             # A Switch beacons every 102 ms; ldn.scan's default 110 ms dwell sees about one per
             # channel and misses the network.
             networks = await ldn.scan(keys, phyname=self.phyname,
@@ -333,13 +338,14 @@ class LiveTransport:
                          f"accept_policy={getattr(n, 'accept_policy', '?')}")
             net = next((n for n in joinable
                         if n.local_communication_id == self.LOCAL_COMMUNICATION_ID), None)
-            if net is None and len(joinable) == 1:
+            if net is None and len(joinable) == 1 and not self.exact_comm_id:
                 net = joinable[0]
                 self.log(f"[live] no comm-id match; using the only joinable network "
                          f"(comm_id=0x{net.local_communication_id:016x})")
             if net is None:
-                self._err = (f"no joinable FRLG network (saw {len(networks)}, "
-                             f"{len(joinable)} joinable) - set --comm-id from the list above")
+                self._err = (f"no joinable {self.network} network (saw {len(networks)}, "
+                             f"{len(joinable)} joinable)"
+                             + ("" if self.exact_comm_id else " - set --comm-id from the list above"))
                 self._ready.set()
                 return
             self.LOCAL_COMMUNICATION_ID = net.local_communication_id

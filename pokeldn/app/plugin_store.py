@@ -55,6 +55,7 @@ class Package:
     key: str = ""                    # the author's public key (base64), when signed
     updates: str = ""                # where its newer versions are published
     digest: str = ""
+    library: str = ""                # the player-visible folder it keeps files in (plugins.library_name)
 
 
 def _version(text: str) -> tuple:
@@ -121,6 +122,10 @@ def _read(path: str) -> Package:
         if not ID.fullmatch(plugin_id):
             raise PackageError("plugin.toml needs an id of lowercase letters, digits, dots, dashes or underscores.")
         api = plugins.parse_api(meta.get("api"))
+        try:
+            library = plugins.library_name(meta["library"]) if "library" in meta else ""
+        except ValueError as error:
+            raise PackageError(str(error)) from None
         state, message = plugins.compatibility(api)
         if state in ("newer", "older"):
             raise PackageError(message)
@@ -143,7 +148,8 @@ def _read(path: str) -> Package:
                        str(meta.get("author", "")), str(meta.get("description", "")),
                        str(meta.get("homepage", "")), len(infos), sum(i.file_size for i in infos), icon,
                        os.path.abspath(path), prefix, names, findings, key, str(meta.get("updates", "")),
-                       hashlib.sha256(_manifest(plugin_id, str(meta.get("version", "")), contents)).hexdigest())
+                       hashlib.sha256(_manifest(plugin_id, str(meta.get("version", "")), contents)).hexdigest(),
+                       library)
 
 
 NETWORK = {"socket", "ssl", "urllib", "http", "requests", "httpx", "aiohttp", "websockets", "websocket", "ftplib",
@@ -289,7 +295,7 @@ def describe(plugin: plugins.Plugin) -> Package:
                                          for part in p.relative_to(plugin.folder).parts)}
     return Package(plugin.id, plugin.name, plugin.version, plugin.api, plugin.author, plugin.description,
                    plugin.homepage, len(files), sum(map(len, files.values())), findings=scan(files),
-                   key=verify(plugin.id, plugin.version, files), updates=plugin.updates)
+                   key=verify(plugin.id, plugin.version, files), updates=plugin.updates, library=plugin.library)
 
 
 def installed(plugin_id: str) -> plugins.Plugin | None:
@@ -311,9 +317,19 @@ def accept(plugin: plugins.Plugin, key: str = "") -> None:
                                                      "source": "folder"}), encoding="utf-8")
 
 
-def install(package: Package) -> Path:
+def origin(plugin: plugins.Plugin) -> str:
+    """The source listing a plugin was installed from (pokeldn.app.plugin_sources), or ""."""
+    try:
+        consent = json.loads((plugin.folder / CONSENT).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return ""
+    return str(consent.get("origin", "")) if isinstance(consent, dict) else ""
+
+
+def install(package: Package, origin: str = "") -> Path:
     """Extracts the package as plugins/<id>, replacing an installed copy only once the new one is
-    whole. The caller has shown the risks and the user accepted them."""
+    whole; `origin` is the source listing it came from. The caller has shown the risks and the user
+    accepted them."""
     current = read(package.source)
     if (current.id, current.version, current.key, current.digest) != (package.id, package.version, package.key, package.digest):
         raise PackageError("The package changed after it was checked.")
@@ -336,7 +352,8 @@ def install(package: Package) -> Path:
                     archives.copy(src, dst, archive.getinfo(name).file_size)
         (staging / CONSENT).write_text(json.dumps({"accepted": time.strftime("%Y-%m-%d %H:%M"),
                                                    "source": os.path.basename(package.source),
-                                                   "version": package.version}), encoding="utf-8")
+                                                   "version": package.version,
+                                                   **({"origin": origin} if origin else {})}), encoding="utf-8")
         old = root / f".old-{package.id}"
         shutil.rmtree(old, ignore_errors=True)
         if target.exists():
@@ -358,6 +375,8 @@ def remove(plugin_id: str, data: bool = False) -> None:
     if target.parent != root or not (target / "plugin.toml").is_file():
         raise PackageError("Only a plugin installed in the app can be removed here.")
     shutil.rmtree(target)
+    from pokeldn.app import panels
+    panels.forget(plugin_id)
     if data and ID.fullmatch(plugin_id):
         shutil.rmtree(plugins.data_folder(plugin_id), ignore_errors=True)
 
@@ -370,18 +389,25 @@ def kept_data(plugin_id: str) -> int:
 
 def pack(folder: str, out: str, key=None) -> Package:
     """Writes a folder holding plugin.toml as a package, signed with the author's `key`, then reads it
-    back as the app would."""
+    back as the app would. Hidden files and plugin.toml's `exclude` paths stay out."""
     source = Path(folder)
+    meta = tomllib.loads((source / "plugin.toml").read_text(encoding="utf-8"))
+    exclude = meta.get("exclude", [])
+    exclude = [PurePosixPath(e).parts for e in exclude if isinstance(e, str) and e] if isinstance(exclude, list) else []
+
+    def kept(parts: tuple) -> bool:
+        return not any(part in SKIP or part.startswith(".") for part in parts) and \
+            not any(parts[:len(e)] == e for e in exclude)
     files = {p.relative_to(source).as_posix(): p.read_bytes() for p in sorted(source.rglob("*"))
-             if p.is_file() and not any(part in SKIP for part in p.relative_to(source).parts)}
+             if p.is_file() and kept(p.relative_to(source).parts)}
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in files.items():
             archive.writestr(name, data)
         if key is not None:
-            meta = tomllib.loads(files["plugin.toml"].decode("utf-8"))
             archive.writestr(SIGNATURE, _sign(key, str(meta.get("id", "")), str(meta.get("version", "")), files))
     return read(out)
 
 
 def size_text(size: int) -> str:
-    return f"{size} B" if size < 1024 else f"{size / 1024:.0f} KB" if size < 1 << 20 else f"{size / (1 << 20):.1f} MB"
+    return (f"{size} B" if size < 1024 else f"{size / 1024:.0f} KB" if size < 1 << 20 else
+            f"{size / (1 << 20):.1f} MB" if size < 1 << 30 else f"{size / (1 << 30):.2f} GB")

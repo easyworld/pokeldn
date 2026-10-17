@@ -15,8 +15,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from pokeldn.switch.trpfs import FNV_BASIS, FNV_PRIME, OODLE, Fb, Oodle, Trpfs, fnv1a64  # noqa: E402,F401
-from pokeldn.switch import trpfs  # noqa: E402
+from trpfs import FNV_BASIS, FNV_PRIME, OODLE, Fb, Oodle, Trpfs, fnv1a64  # noqa: E402,F401
+import trpfs  # noqa: E402
 
 
 def Source(args):

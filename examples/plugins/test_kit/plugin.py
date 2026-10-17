@@ -14,9 +14,10 @@ def register(api):
                  Field("--color", "A choice", "choice", default="red",
                        choices=(("red", "Red"), ("blue", "Blue"), ("green", "Green"))),
                  Field("--loud", "A switch", "switch", default=True),
-             ), fixed=("--trainer", "{ot}")),
+             ), fixed=("--trainer", "{ot}", "--keys-file", "{keys}")),
         Tool("test-kit-session", "Simulated session", "session.py",
-             "Pretends to trade, one line per second, so the queue, Stop and the output can be watched.", IDLE,
+             "Asks how many trades to pretend, then trades them under a progress bar, so the choice, the queue, "
+             "Stop and the output can be watched.", IDLE,
              fields=(Field("--trades", "Trades", "number", default="3"),
                      Field("--pause", "Seconds per trade", "number", default="2"))),
         Tool("test-kit-fail", "Fail on purpose", "fail.py",

@@ -615,6 +615,79 @@ def test_a_pop_up_is_a_dialog_naming_its_program_with_the_callers_buttons(monkey
     assert answers[1:] == [{"id": "ask", "n": 1, "answer": "dismiss"}]
 
 
+def test_a_choice_is_a_dialog_with_one_button_per_option_and_no_actions(monkeypatch):
+    page, manager, run, answers = popup_page(monkeypatch)
+    run.take({"op": "open", "id": "update", "n": 1, "kind": "choose", "title": "Update found",
+              "text": "Version 1.1.0 is installed.", "options": ["Save it", "Send 1.2.0", "Leave"], "tone": "info"})
+    (dialog,) = page._dialogs.controls
+    text, *buttons = dialog.content.content.controls
+    assert text.value == "Version 1.1.0 is installed." and dialog.actions == []
+    assert [b.content for b in buttons] == ["Save it", "Send 1.2.0", "Leave"]
+    buttons[1].on_click(None)
+    assert answers == [{"id": "update", "n": 1, "answer": "1"}] and not dialog.open
+
+
+def test_a_runs_progress_lines_draw_a_bar_with_rate_and_time_left_and_stay_out_of_the_log(monkeypatch):
+    from gui.views import games
+    clock = iter([100.0, 110.0])
+    monkeypatch.setattr(games.time, "monotonic", lambda: next(clock))
+    logged = []
+    panel = SessionPanel.__new__(SessionPanel)
+    panel.__dict__.update(app=SimpleNamespace(ui=lambda fn: fn()), log=SimpleNamespace(add=logged.append),
+                          transfer=ft.Container(visible=False), rates={}, partner_state=None, traded=0)
+    panel.transfer.update = lambda: None
+    panel._line("[progress] 1000000000 5200000000 bytes Sending the update")
+    panel._line("[progress] 1047000000 5200000000 bytes Sending the update")
+    panel._line("[lcs] the console sent its version")
+    bar, detail = panel.transfer.content.controls[1].controls
+    assert panel.transfer.visible and round(bar.value, 3) == round(1047 / 5200, 3)
+    assert detail.value == "1.05 / 5.20 GB · 4.70 MB/s · 剩余 15 分钟"
+    assert logged == ["[lcs] the console sent its version"]
+
+
+def test_a_runs_panel_lines_are_kept_for_its_plugin_and_drawn_on_its_page(monkeypatch, tmp_path):
+    """A `[panel]` line from a plugin's run is stored for that plugin, stays out of the log and redraws the
+    card and the library note on the page; one the app cannot read is shown in the log instead."""
+    from gui.views import library as library_view
+    from gui.views.panels import StatusCards
+    from pokeldn import panel as cards, plugins
+    from pokeldn.app import paths
+    monkeypatch.setattr(paths, "DATA", tmp_path)
+    owner = plugins.Plugin(id="updates", name="Updates", library="Updates")
+    monkeypatch.setattr(plugins, "owner", lambda key: owner if key == "updates-tool" else None)
+    monkeypatch.setattr(plugins, "library_path", lambda name: tmp_path / name)
+    (tmp_path / "Updates").mkdir()
+    (tmp_path / "Updates" / "Game 1.0.2.nsp").write_bytes(b"nsp")
+    changed, logged = [], []
+    session = SessionPanel.__new__(SessionPanel)
+    session.__dict__.update(app=SimpleNamespace(ui=lambda fn: fn()), log=SimpleNamespace(add=logged.append),
+                            running_tool=SimpleNamespace(key="updates-tool"),
+                            games=SimpleNamespace(plugin_changed=changed.append))
+    session._line(cards.PREFIX + '{"id":"console","title":"Let\'s Go, Pikachu!","lines":[["System version","23.0.1"]],'
+                  '"chips":[["Version","1.0.2"]],"tone":"ok"}')
+    session._line(cards.PREFIX + '{"file":"Game 1.0.2.nsp","state":"bad","text":"A signature does not check"}')
+    session._line(cards.PREFIX + '{"id":"x","tone":"pink"}')
+    assert changed == ["updates", "updates"]
+    assert len(logged) == 1 and "无法读取" in logged[0]
+
+    column = StatusCards(owner).control()
+    (card,) = column.controls
+    texts = [c.value for c in walk(card) if isinstance(c, ft.Text)]
+    assert texts[:2] == ["Let's Go, Pikachu!", "Version 1.0.2"] and texts[2:] == ["System version", "23.0.1"]
+    view = library_view.LibraryCard(SimpleNamespace(), owner)
+    view.control()
+    (row,) = view.listing.controls
+    assert "A signature does not check" in [c.value for c in walk(row) if isinstance(c, ft.Text)]
+
+
+def walk(control):
+    yield control
+    for name in ("content", "controls"):
+        child = getattr(control, name, None)
+        for c in (child if isinstance(child, list) else [child] if isinstance(child, ft.Control) else []):
+            yield from walk(c)
+
+
 def test_a_pop_up_opened_again_under_its_id_redraws_its_dialog(monkeypatch):
     page, manager, run, answers = popup_page(monkeypatch)
     message = {"op": "open", "id": "gift", "n": 1, "kind": "ack", "title": "The gift carries the trainer from "

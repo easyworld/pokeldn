@@ -28,7 +28,6 @@ from pokeldn.swsh import COMM_ID, PASSPHRASE, beacon, wc8
 SCENE_ID = 0            # the console's scan filter keys on the communication id, not the scene
 APP_VERSION = 4
 LDN_PROTOCOL = 1        # the retail gift screen advertises protocol 1 (AES-CTR); the GBA app uses 3
-VALIDATOR = 0x010b5de0  # the game's Wonder Card check: 0 sealed, 0x80000001 checksum (docs/swsh_gift.md)
 
 
 def build_record(args):
@@ -71,20 +70,6 @@ def show_card(args, record):
     screen.gift("Mystery Gift", line, species=species)
 
 
-def validate(record, image):
-    """-> the game's own validator's answer for `record`, run from `image` under unicorn. Covers
-    the seal only; an item id the bag cannot hold still passes."""
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                    "tools", "switch"))
-    from nso_run import SCRATCH, Runner
-    r = Runner(image)
-    card, header, rec = SCRATCH + 0x1000, SCRATCH + 0x3000, SCRATCH + 0x4000
-    r.write(card, bytes(0x3A8))
-    r.write(header, bytes(0x68))
-    r.write(rec, record)
-    return r.call(VALIDATOR, (0, card, header, rec, len(record)))[0]
-
-
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -122,10 +107,6 @@ def build_parser():
     p.add_argument("--protocol", type=int, default=LDN_PROTOCOL, choices=(1, 3),
                    help="LDN advertisement protocol version")
     p.add_argument("--dump", help="write the record and its fragments here and exit")
-    p.add_argument("--image", default=None,
-                   help="optional research check using Sword's main NSO")
-    p.add_argument("--no-validate", action="store_true",
-                   help="skip the optional NSO check; PKHeX validation remains required")
     return p
 
 
@@ -154,16 +135,10 @@ def main(argv=None):
     fragments = beacon.build_message(record)
     print(f"record {len(record)} bytes, checksum {wc8.record_crc(record):#06x}, "
           f"{len(fragments)} fragments")
-    if args.image and not args.no_validate:
-        if not os.path.exists(args.image):
-            print(f"{args.image} is missing: the record cannot be validated; pass --image or "
-                  f"--no-validate", file=sys.stderr)
-            return 1
-        verdict = validate(record, args.image)
-        print(f"the game's validator returned {verdict:#x}")
-        if verdict != 0:
-            print("refusing to send a record the game rejects", file=sys.stderr)
-            return 1
+    if not wc8.sealed(record):
+        print("refusing to send a record whose checksum at +0x2CC does not match "
+              "(docs/swsh_gift.md, What a record must carry)", file=sys.stderr)
+        return 1
 
     if args.dump:
         write_file(args.dump, record)

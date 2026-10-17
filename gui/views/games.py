@@ -14,7 +14,8 @@ import flet as ft
 from gui import board
 from gui.app import keys_found
 from pokeldn import pokemon as builder
-from pokeldn.app import bank, command, events_gallery, gift_builder, online, received, runner
+from pokeldn import panel, progress
+from pokeldn.app import bank, command, panels, events_gallery, gift_builder, online, received, runner
 from pokeldn.sv import raid_event as raid_events
 from gui import theme as t
 from pokeldn import plugins
@@ -28,6 +29,8 @@ from gui.views.raid_partners import RaidPartnersPicker
 from gui.views.raid_seed import RaidSeedPicker
 from gui.views.rewards import RewardPicker
 from gui.views.gifts import GiftBuilder
+from gui.views.library import LibraryCard
+from gui.views.panels import StatusCards
 from gui.views.sprites import MINI, Sprite
 from gui.views.widgets import CodeBlock, DigitCode, Log, PathField, open_folder
 from pokeldn.app.i18n import t as tr
@@ -383,7 +386,22 @@ class GamesView:
                                   " ".join(f.help for f in fields if f.help), trailing=sprite))
         if not self.tool.fields:
             out.append(t.text(tr('games.nothing_to_fill_in_10f2c5', 'Nothing to fill in.'), 13, t.MUTED))
+        owner = plugins.owner(self.tool.key)
+        self.plugin_cards = StatusCards(owner) if owner is not None else None
+        self.library_card = LibraryCard(self.app, owner) if owner is not None and owner.library else None
+        if self.plugin_cards:
+            out.insert(0, self.plugin_cards.control())
+        if self.library_card:
+            out.append(self.library_card.control())
         return out
+
+    def plugin_changed(self, plugin_id: str) -> None:
+        """A run's `[panel]` line changed what plugin `plugin_id` shows; redraws it if it is on the page."""
+        if not self.visible or self.tab != "basic":
+            return
+        for part in (getattr(self, "plugin_cards", None), getattr(self, "library_card", None)):
+            if part is not None and part.plugin.id == plugin_id:
+                part.refresh()
 
     def shiny(self) -> bool:
         return any(bool(command.value_of(f, self.values)) for f in self.tool.fields
@@ -593,6 +611,34 @@ def pokemon_row(app, species: int, shiny: bool, summary: str, tip: str = "", for
                         tooltip=tip or None)
 
 
+def amount_of(done: int, total: int, unit: str) -> str:
+    """'1.20 of 5.20 GB' in the unit the total reads best in, or '3 of 12'."""
+    if unit != "bytes":
+        return tr('games.of_ca6c5e', '{value0} of {value1}', value0=done, value1=total)
+    scale, name = next(((s, n) for s, n in ((1e9, "GB"), (1e6, "MB"), (1e3, "KB")) if total >= s), (1, "B"))
+    return tr('games.of_75b2ec', '{value0:.2f} of {value1:.2f} {value2}',
+              value0=done / scale, value1=total / scale, value2=name)
+
+
+def per_second(rate: float, unit: str) -> str:
+    if unit != "bytes":
+        return tr('games.a_second_5442a7', '{value0:.1f} a second', value0=rate)
+    scale, name = (1e6, "MB/s") if rate >= 1e6 else (1e3, "KB/s")
+    return f"{rate / scale:.2f} {name}"
+
+
+def time_left(seconds: float | None) -> str:
+    if seconds is None:
+        return ""
+    minutes = round(seconds / 60)
+    if minutes < 1:
+        return tr('games.under_a_minute_left_782d1a', 'under a minute left')
+    if minutes < 60:
+        return tr('games.min_left_5a8279', '{value0} min left', value0=minutes)
+    return tr('games.h_min_left_2f1238', '{value0} h {value1:02d} min left', value0=minutes // 60,
+              value1=minutes % 60)
+
+
 class SessionPanel:
     def __init__(self, app, games: GamesView):
         self.app, self.games = app, games
@@ -607,7 +653,8 @@ class SessionPanel:
                                    alignment=ft.Alignment.CENTER, tooltip=tr('games.idle_ab0171', 'Idle'))
         self.board_line = ft.Container()   # the checklist before Start, or one line once all is set
         self.offering = ft.Container(visible=False)
-        self.transfer = ft.Container(visible=False)   # a save backup or restore's progress
+        self.transfer = ft.Container(visible=False)   # a save transfer's or a `[progress]` line's bar
+        self.rates: dict[str, progress.Rate] = {}     # each `[progress]` title's rate
         self.partner = ft.Container(visible=False)    # an online trade's partner
         self.partner_state = None                     # pokeldn.app.online.Partner
         self.offered = None                # what the offering card shows, to rebuild it only on a change
@@ -784,13 +831,26 @@ class SessionPanel:
                                               trailing=t.text(progress, 12, t.GREEN if self.traded else t.MUTED))
 
     def show_transfer(self, what: str, done: int, total: int) -> None:
-        unit = tr('games.kb_59281a', 'KB') if what == "backup" else "parts"
+        unit = tr('games.kb_59281a', 'KB') if what == "backup" else tr('games.parts', 'parts')
         title = tr('games.backing_up_the_save_caed94', 'Backing up the save') if what == "backup" else tr('games.putting_the_save_on_the_console_1871fd', 'Putting the save on the console')
+        self.show_bar(title, done, total, tr('games.of_keep_the_switch_near_the_board_2c1cac', '{value0} of {value1} {value2}. Keep the Switch near the board.', value0=done, value1=total, value2=unit))
+
+    def show_progress(self, done: int, total: int, unit: str, title: str) -> None:
+        """A run's `[progress]` line (pokeldn.progress): the bar, how much, the rate and the time left."""
+        rate = self.rates.setdefault(title, progress.Rate())
+        rate.add(done, time.monotonic())
+        parts = [amount_of(done, total, unit)]
+        if rate.per_second and done < total:
+            parts.append(per_second(rate.per_second, unit))
+            parts.append(time_left(rate.left(total)))
+        self.show_bar(title, done, total, " · ".join(parts))
+
+    def show_bar(self, title: str, done: int, total: int, detail: str) -> None:
         self.transfer.visible = True
         self.transfer.content = t.section(title, ft.Column([
-            ft.ProgressBar(value=done / total if total else 0, color=t.BLUE, bgcolor=t.BORDER,
+            ft.ProgressBar(value=min(done / total, 1) if total else None, color=t.BLUE, bgcolor=t.BORDER,
                            bar_height=6, border_radius=3),
-            t.text(tr('games.of_keep_the_switch_near_the_board_2c1cac', '{value0} of {value1} {value2}. Keep the Switch near the board.', value0=done, value1=total, value2=unit), 12, t.MUTED)], spacing=6))
+            t.text(detail, 12, t.MUTED)], spacing=6))
         self.transfer.update()
 
     def show_partner(self, partner) -> None:
@@ -922,7 +982,7 @@ class SessionPanel:
         trace = f"captures/{tool.key}-{stamp}_esp32.trace" if s.board_trace else None
         self.log.add(f'[app] {tool.name} · {self.games.game.name} · radio {port}')
         self.seen, self.received.content, self.received.visible = {}, None, False
-        self.transfer.content, self.transfer.visible = None, False
+        self.transfer.content, self.transfer.visible, self.rates = None, False, {}
         self.partner.content, self.partner.visible, self.partner_state = None, False, None
         self.traded = 0
         self.bank_trades = bank.TradeSession(self.offered_entries())
@@ -937,9 +997,20 @@ class SessionPanel:
         self.refresh()
 
     def _line(self, line: str) -> None:
+        if moved := progress.read(line):
+            self.app.ui(lambda: self.show_progress(*moved))
+            return
+        if line.startswith(panel.PREFIX):
+            owner = plugins.owner(self.running_tool.key) if self.running_tool else None
+            shown = panel.read(line)
+            if shown is None:
+                self.log.add(f"[app] {tr('games.panel_unreadable', 'A [panel] line the app cannot read:')} {line[:160]}")
+            if owner is not None and shown is not None and panels.apply(owner.id, shown):
+                self.app.ui(lambda: self.games.plugin_changed(owner.id))
+            return
         self.log.add(line)
-        if progress := received.save_progress(line):
-            self.app.ui(lambda: self.show_transfer(*progress))
+        if saving := received.save_progress(line):
+            self.app.ui(lambda: self.show_transfer(*saving))
         partner = online.update(self.partner_state, line)
         if partner is not self.partner_state:
             self.partner_state = partner

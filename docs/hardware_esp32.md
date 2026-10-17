@@ -309,7 +309,14 @@ count repeated unchanged for 0.3 s means bytes were lost on the line and the hos
 a busy reader holds up to 0.7 s, and a resync then puts 16 KB in flight against a 16 KB ring. Written-off
 bytes stay written off; a CREDIT past what the loss allows shrinks it. A CREDIT jumps the
 outgoing queue (at most one queued) yet arrives about 0.5 s late behind a Scarlet seat's 150 KB/s of
-RX_ETH. A board without CREDIT never opens the window and the host writes unthrottled. The board logs a
+RX_ETH. A board without CREDIT never opens the window and the host writes unthrottled. The count is a
+u32 (`wire.c` `s_consumed`); the host unwraps it against its own byte count, so a stream past 4 GiB
+keeps its window. The board credits every 1024 bytes it reads (`wire.c` `CREDIT_STEP`), so a CREDIT
+can count part of a 1.5 KB ETH_TX whose write has not returned; the host counts it against the bytes
+written plus the frame on the line. Refused, the frame's tail stays short of the next step and the
+window shuts until the idle CREDIT about 20 ms later: on an ESP32-S3 over USB (firmware 1.6.2, Windows),
+3000 back-to-back 1514-byte ETH_TX took 15.9 s refused and 8.5 s counted (0.29 against 0.54 MB/s), and
+a TCP transfer to a Switch went from 0.31 to 0.52 MB/s. The board logs a
 command over 50 ms (`slow command`) and a reader turn over 100 ms (`reader held`).
 
 With the idle count and the CREDIT ahead of the queue, the board counted every ETH_TX the host handed

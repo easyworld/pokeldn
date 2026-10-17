@@ -1,6 +1,7 @@
 """Newer versions of installed plugins, from the address each names in plugin.toml's `updates`: a
 GitHub repository's latest release, or a JSON file {"version", "url", "page"}. Nothing installs
 without the risk screen (docs/plugins.md, Updates)."""
+import hashlib
 import re
 import shutil
 import urllib.parse
@@ -19,6 +20,8 @@ class Available:
     version: str
     download: str
     page: str = ""
+    sha256: str = ""        # what a source listing says the package hashes to
+    source: str = ""        # the source listing that offered it
 
 
 def allowed(url: str) -> bool:
@@ -55,12 +58,14 @@ def latest(url: str) -> tuple[str, str, str]:
     return version, download, page
 
 
-def check(found: list[plugins.Plugin]) -> dict[str, Available]:
-    """The installed plugins with a newer version published; a plugin whose address fails is skipped."""
-    out = {}
+def check(found: list[plugins.Plugin], listings: list | None = None) -> dict[str, Available]:
+    """The installed plugins with a newer version published, in a followed source's listing or at
+    the plugin's own `updates` address; an address that fails is skipped."""
+    from pokeldn.app import plugin_sources
+    out = plugin_sources.updates(found, listings or [])
     for plugin in found:
         local = plugin.folder is not None and plugin.folder.parent == plugins.folder()
-        if not (local and plugin.updates and plugin.version):
+        if not (local and plugin.updates and plugin.version) or plugin.id in out:
             continue
         try:
             version, download, page = latest(plugin.updates)
@@ -78,14 +83,17 @@ def download(available: Available, folder: Path) -> Path:
     if not plugin_store.ID.fullmatch(available.plugin) or not allowed(available.download):
         raise OSError("the plugin download is invalid")
     dest = folder / f"{available.plugin}.{plugin_store.EXTENSION}"
-    done = 0
+    done, digest = 0, hashlib.sha256()
     try:
         with update._open(available.download) as reply, dest.open("wb") as out:
             for chunk in update.chunks(reply, 60):
                 done += len(chunk)
                 if done > plugin_store.MAX_BYTES:
                     raise OSError("the download is too large to be a plugin")
+                digest.update(chunk)
                 out.write(chunk)
+        if available.sha256 and digest.hexdigest() != available.sha256:
+            raise OSError("the download is not the file its source lists; it was changed or damaged")
     except BaseException:
         dest.unlink(missing_ok=True)
         raise

@@ -286,12 +286,13 @@ Let's Go、晶灿钻石／明亮珍珠、传说 阿尔宙斯、朱／紫和传�
 
 ## 弹窗
 
-应用启动的任务、其他子进程或应用自身代码，可在当前页面上显示弹窗（`pokeldn.popup`，插件 API 1.2 起支持）。有两种类型：
+应用启动的任务、其他子进程或应用自身代码，可在当前页面上显示弹窗（`pokeldn.popup`，插件 API 1.2 起支持）。有三种类型：
 
 | 类型 | 按钮 | 回调 |
 |---|---|---|
 | `acknowledge(title, text)` | 单个 `label` 按钮（OK） | `on_ack`：按钮、Esc 或点击外部 |
 | `confirm(title, text, agree, disagree)` | 调用方指定的同意和不同意按钮 | `on_agree`、`on_disagree` 或由 Esc、点击外部触发的 `on_dismiss` |
+| `choose(title, text, options)`（1.7） | 2 至 8 个选项按钮，按调用方顺序在文字下方铺满宽度 | `on_choice(index)`，或由 Esc、点击外部触发 `on_dismiss` |
 
 打开弹窗不会阻塞，立即返回弹窗 ID；用户回答通过回调稍后到达。默认在读取应用回答的线程执行；`set_dispatcher(dispatch)` 可将其交给程序自身循环。应用中的回调由工作线程执行，以免窗口阻塞。回调异常会打印堆栈。
 
@@ -302,9 +303,15 @@ Let's Go、晶灿钻石／明亮珍珠、传说 阿尔宙斯、朱／紫和传�
 
 `cancel(id)` 关闭弹窗；`cancel` 返回后不触发回调，已交给调度器的旧回答除外。同时等待回答的弹窗达到 32 个时，程序收到 `RuntimeError`。标题标明来源工具、开发板安装程序或手柄服务；应用自身弹窗不标来源。
 
-程序退出后，确认弹窗关闭，通知弹窗保留但不再返回回答。没有应用时（终端中 `available()` 为假），弹窗仅作为 `[pop-up]` 输出行，无回答且不计入 32 个上限。
+程序退出后，确认和选择弹窗关闭，通知弹窗保留但不再返回回答。没有应用时（终端中 `available()` 为假），弹窗仅作为 `[pop-up]` 输出行，无回答且不计入 32 个上限。
 
-`runner.Process(..., popups=app.popups, label=...)` 在子进程设置 `POKELDN_POPUPS=1`。子进程在 stdout 发送 `[popup]` 行和 JSON；应用从日志中过滤此行，即使它夹在其他线程输出中也能识别。应用通过子进程 stdin 回复 `[popup] {"id", "n", "answer"}`，由 `pokeldn.app.runner.child` 读取。`n` 区分同一 ID 下重新打开的弹窗，替换后迟到回答不会触发旧回调。应用代码通过 `popup.attach` 直接访问管理器。`pokeldn.app.popups.Manager` 保存打开的弹窗，`gui.popups.Dialogs` 绘制它们。`page.pop_dialog()` 只关闭应用自己的顶部对话框，不会关闭之后覆盖其上的程序弹窗。
+`runner.Process(..., popups=app.popups, label=...)` 在子进程设置 `POKELDN_POPUPS=1`。子进程在 stdout 发送 `[popup]` 行和 JSON；应用从日志中过滤此行，即使它夹在其他线程输出中也能识别。应用通过子进程 stdin 回复 `[popup] {"id", "n", "answer"}`（选择弹窗的回答为选项索引 `"0"` 至 `"7"`），由 `pokeldn.app.runner.child` 读取。`n` 区分同一 ID 下重新打开的弹窗，替换后迟到回答不会触发旧回调。应用代码通过 `popup.attach` 直接访问管理器。`pokeldn.app.popups.Manager` 保存打开的弹窗，`gui.popups.Dialogs` 绘制它们。`page.pop_dialog()` 只关闭应用自己的顶部对话框，不会关闭之后覆盖其上的程序弹窗。
+
+<a id="progress"></a>
+
+## 进度
+
+任务打印 `[progress] DONE TOTAL UNIT TITLE`（`pokeldn.progress.show`，插件 API 1.7；`UNIT` 为 `bytes` 或 `items`），会在会话面板中显示进度条，代替日志行；内容包括已完成数量（如 `1.05 of 5.20 GB`）、最近 30 秒的速率和剩余时间。`show` 对每个标题每秒最多打印四行，最后一行始终打印。存档备份和恢复的 `[save]` 行使用同一进度条。
 
 模拟神秘礼物按接收玩家生成失败、改用设置中的训练家时，会弹出原因：无法识别存档，或在卡片、PKHeX、提供记录检查、加载器阶段失败（[交换流程](gift_simulated.md#the-trade)）。每台游戏机一个弹窗（`receiver_gift.pop_up`），新原因替换旧提示。应用自身也会为更新失败和已停用插件显示弹窗。
 

@@ -422,6 +422,11 @@ def build_parser():
                     help="the unlock stage the partners come from, which sets their pool, their "
                          "level being four fifths of --raid-pokemon's; by default --raid-progress's, "
                          "six stars for a black crystal or a seven-star event raid")
+    ap.add_argument("--raid-serve", metavar="NAME", nargs="?", const="", default=None,
+                    help="serve the raid battle from this station with a plugin's battle server "
+                         "(NAME, or the first one loaded): the console and our Pokemon fight one "
+                         "battle; one console only; a failure hands the network over as without it "
+                         "(docs/sv_raid.md, Serving the battle)")
     ap.add_argument("--send", action="append", default=[],
                     help="PROTO:PORT:HEX, a reliable data message to send once the console has "
                          "joined (host seq 1 on that port, INITIALIZED); repeatable")
@@ -477,8 +482,18 @@ def prepare_raid(ap, args):
             raise ValueError(f"--raid-partner: {args.raid_players} console(s) leave {free} slot(s) "
                              "to NPC partners")
         partner_seed = raid_partners.seed_for(stage, wanted)
+        serve = None
+        if args.raid_serve is not None:
+            from pokeldn import plugins
+            from pokeldn.sv import raid_battle
+            server = plugins.battle_server("sv", args.raid_serve)
+            if server is None:
+                raise ValueError("--raid-serve: no plugin battle server for Scarlet / Violet is loaded"
+                                 + (f" named {args.raid_serve!r}" if args.raid_serve else ""))
+            print(f"[sv] serving the raid battle with {server.label} (plugin {server.plugin})")
+            serve = lambda bootstrap: raid_battle.RaidBattle(server.factory, bootstrap)  # noqa: E731
         group = raid.RaidGroup(found, record, args.raid_reward or None, players=args.raid_players,
-                               partner_seed=partner_seed, stage=stage)
+                               partner_seed=partner_seed, stage=stage, serve=serve)
     except ValueError as exc:
         ap.error(str(exc))
     rewards = args.raid_reward or found.rewards
@@ -675,6 +690,7 @@ def main(argv=None):
     list_seq = [args.update_seq]
     listed = set()              # src_ip already sent a station list on this seat
     finished_ips = set()
+    served = [False]            # the served battle's stop was reported
     battle_seq = [None]         # the station list's sequence at the battle
     net_request_seq = {}        # src_ip -> the one Net 0x11 sequence a raid host repeats
     last_ack = {}
@@ -969,6 +985,13 @@ def main(argv=None):
                 if stage.left and ip not in finished_ips:
                     finished_ips.add(ip)
                     print(f"[sv] {ip}: the battle has begun with our Pokemon; the console left")
+            if raid_group is not None and raid_group.battle_error is not None and not served[0]:
+                served[0] = True
+                print(f"[sv] the served battle stopped ({raid_group.battle_error}); the consoles "
+                      f"take the network and fight their own")
+            if raid_group is not None and raid_group.battle and raid_group.battle.over:
+                print("[sv] the served battle is over; closing")
+                break
             if raid_group is not None and raid_group.left:
                 print(f"[sv] the battle has begun for {len(raid_group.members)} console(s); the "
                       f"network is theirs")

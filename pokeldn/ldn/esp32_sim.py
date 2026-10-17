@@ -68,7 +68,7 @@ class UartPort(_HostStream):
             self._credit_at = time.monotonic()
             # Idle, the firmware repeats its CREDIT every 100 ms (wire.c reader): the one after a
             # BAUD leaves at the new rate, before the host has switched.
-            self._board._emit(esp32.MSG_CREDIT, struct.pack("<I", getattr(self._board, "_consumed", 0)))
+            self._board._emit(esp32.MSG_CREDIT, struct.pack("<I", getattr(self._board, "_consumed", 0) & 0xFFFFFFFF))
         return data
 
     def _take(self, sent: tuple[int | None, bytes]) -> bytes:
@@ -143,7 +143,7 @@ class SimulatedBoard:
                         self._consumed = 0
                         self._emit(esp32.MSG_CREDIT, struct.pack("<I", 0))
                     self._command(msg_type, payload)
-        self._emit(esp32.MSG_CREDIT, struct.pack("<I", self._consumed))
+        self._emit(esp32.MSG_CREDIT, struct.pack("<I", self._consumed & 0xFFFFFFFF))
 
     def _command(self, t: int, p: bytes) -> None:
         self._host_seen = time.monotonic()

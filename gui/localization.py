@@ -20,6 +20,15 @@ def translate(value: str) -> str:
     """Only presentation strings use this; option keys and user-entered values stay unchanged."""
     if value in LABELS:
         return LABELS[value]
+    for pattern, target in (
+        (r"(.+) is already in the library\.", r"资料库中已存在 \1。"),
+        (r"(.+) is not in the library", r"\1 不在资料库中"),
+        (r"There is no plugin listing at (.+)\.", r"\1 没有插件列表。"),
+        (r"The source did not answer \((.+)\)\.", r"来源未响应（\1）。"),
+        (r"The source is not a plugin listing \((.+)\)\.", r"来源不是有效的插件列表（\1）。"),
+    ):
+        if re.fullmatch(pattern, value, re.S):
+            return re.sub(pattern, target, value, flags=re.S)
     # Compound descriptions append a shared reminder; translate each part without changing its meaning.
     for suffix in (" Turns off any game boost that is on.",):
         if value.endswith(suffix):

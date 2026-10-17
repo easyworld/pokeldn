@@ -2,6 +2,7 @@
 its radio carries the LDN calls, and a broken or unwanted plugin adds nothing."""
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -20,7 +21,8 @@ from pokeldn.plugins import Field, Tool
 
 def register(api):
     api.add_tool("frlg", Tool("example-echo", "Echo", "echo.py", "Writes its arguments.", ("Nothing to press.",),
-                              fields=(Field("--word", "Word", default="hello"),), fixed=("--out", "echo.json")))
+                              fields=(Field("--word", "Word", default="hello"),),
+                              fixed=("--out", "echo.json", "--keys-file", "{keys}")))
 '''
 ECHO = '''
 import argparse, json, sys
@@ -30,6 +32,7 @@ def build_parser():
     parser.add_argument("--out")
     parser.add_argument("--word")
     parser.add_argument("--extra")
+    parser.add_argument("--keys-file")
     return parser
 
 if __name__ == "__main__":
@@ -83,6 +86,8 @@ def isolated(tmp_path, monkeypatch):
 def test_a_folder_plugin_tool_runs_through_the_cli_child_path(tmp_path):
     folder = make(tmp_path / "elsewhere", "echo", TOOL_PLUGIN, echo_py=ECHO)
     env = dict(os.environ, POKELDN_PLUGINS=str(folder), POKELDN_DATA=str(tmp_path / "data"), PYTHONPATH=str(ROOT))
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "settings.json").write_text(json.dumps({"keys": "~/Switch keys/prod.keys"}))
     run = lambda *a: subprocess.run([sys.executable, "-m", "pokeldn", *a], cwd=tmp_path, env=env,  # noqa: E731
                                     capture_output=True, text=True, encoding="utf-8", timeout=60)
     listed = run("--list")
@@ -90,8 +95,9 @@ def test_a_folder_plugin_tool_runs_through_the_cli_child_path(tmp_path):
     assert "echo                 Echo, API 1.0: loaded" in run("--plugins").stdout
     done = run("example-echo", "--", "--extra", "1")
     assert done.returncode == 0, done.stderr
-    assert json.loads((tmp_path / "echo.json").read_text()) == ["--out", "echo.json", "--word", "hello",
-                                                                "--extra", "1"]
+    assert json.loads((tmp_path / "echo.json").read_text()) == [
+        "--out", "echo.json", "--keys-file", os.path.expanduser("~/Switch keys/prod.keys"), "--word", "hello",
+        "--extra", "1"]
 
 
 def test_a_plugin_radio_carries_the_ldn_calls(isolated, tmp_path, monkeypatch):
@@ -164,6 +170,7 @@ def test_a_broken_plugin_keeps_its_error_and_adds_nothing(isolated, tmp_path, mo
 
 
 KIT = ROOT / "examples" / "plugins" / "test_kit"
+KIT_VERSION = re.search(r'^version = "(.+)"', (KIT / "plugin.toml").read_text(), re.M)[1]
 HELLO = ROOT / "examples" / "plugins" / "hello"
 
 
@@ -237,7 +244,22 @@ def test_the_test_kit_installs_from_its_package_and_passes_its_self_test(isolate
     env.pop("POKELDN_PLUGINS", None)
     run = subprocess.run([sys.executable, "-m", "pokeldn", "test-kit-selftest"], cwd=tmp_path, env=env,
                          capture_output=True, text=True, timeout=120)
-    assert "9 of 9 checks passed." in run.stdout, run.stdout + run.stderr
+    assert "13 of 13 checks passed." in run.stdout, run.stdout + run.stderr
+    from pokeldn import panel
+    from pokeldn.app import panels
+    for line in run.stdout.splitlines():
+        if line.startswith(panel.PREFIX):
+            assert panels.apply("test-kit", panel.read(line)), line
+    kit = plugins.owner("test-kit-selftest")
+    kept = panels.load("test-kit")
+    card, note = kept["cards"]["self-test"], kept["notes"]["self-test.txt"]
+    assert (card["tone"], card["lines"][0], card["chips"]) == (
+        "ok", ["Result", "13 of 13 checks passed"], [["API", f"{plugins.API_VERSION}.{plugins.API_LEVEL}"]])
+    assert panels.image(kit, card["image"]) == panels.image(kit, note["image"]) == str(
+        (isolated / "plugin-data/test-kit/icon.png").resolve())
+    assert (note["state"], panels.sort(kit)) == ("ok", "name")      # plugin.toml's library_sort
+    plugin_store.remove("test-kit")
+    assert panels.load("test-kit")["cards"] == {}
 
 
 def test_an_update_replaces_the_files_and_remove_deletes_only_the_apps_own(isolated, tmp_path):
@@ -247,13 +269,13 @@ def test_an_update_replaces_the_files_and_remove_deletes_only_the_apps_own(isola
     (source / "old.txt").write_text("from 1.0.0")
     plugin_store.install(plugin_store.pack(str(source), str(tmp_path / "a.pokeplugin")))
     (source / "old.txt").unlink()
-    (source / "plugin.toml").write_text((source / "plugin.toml").read_text().replace("1.1.0", "1.2.0"))
+    (source / "plugin.toml").write_text((source / "plugin.toml").read_text().replace(KIT_VERSION, "5.2.0"))
     (plugins.data_folder("test-kit") / "runs.txt").parent.mkdir(parents=True)
     (plugins.data_folder("test-kit") / "runs.txt").write_text("4")
     newer = plugin_store.pack(str(source), str(tmp_path / "b.pokeplugin"))
     assert plugin_store.compare(newer, plugin_store.installed("test-kit")) == "update"
     target = plugin_store.install(newer)
-    assert not (target / "old.txt").exists() and plugin_store.installed("test-kit").version == "1.2.0"
+    assert not (target / "old.txt").exists() and plugin_store.installed("test-kit").version == "5.2.0"
     assert plugin_store.compare(plugin_store.read(str(tmp_path / "a.pokeplugin")),
                                 plugin_store.installed("test-kit")) == "downgrade"
     assert sorted(p.name for p in plugins.folder().iterdir()) == ["test-kit"]     # no staging left behind
@@ -460,7 +482,7 @@ def test_a_signed_package_names_its_author_and_any_change_to_a_file_refuses_it(i
                 if name == "hello.py" and change == "edit":
                     data += b"\nimport shutil\n"
                 if name == "plugin.toml" and change == "version":
-                    data = data.replace(b'version = "1.1.0"', b'version = "9.0.0"')
+                    data = data.replace(f'version = "{KIT_VERSION}"'.encode(), b'version = "9.0.0"')
                 if not (name == "fail.py" and change == "remove"):
                     copy.writestr(name, data)
             if change == "add":
@@ -493,14 +515,14 @@ def test_an_update_address_offers_the_newer_version_and_the_download_installs_th
     try:
         (source / "plugin.toml").write_text(toml + f'updates = "{base}/latest.json"\n')
         plugin_store.install(plugin_store.pack(str(source), str(tmp_path / "old.pokeplugin"), key))
-        (source / "plugin.toml").write_text(toml.replace("1.1.0", "1.3.0") + f'updates = "{base}/latest.json"\n')
+        (source / "plugin.toml").write_text(toml.replace(KIT_VERSION, "5.3.0") + f'updates = "{base}/latest.json"\n')
         plugin_store.pack(str(source), str(served / "kit.pokeplugin"), key)
-        (served / "latest.json").write_text(json.dumps({"version": "1.3.0", "url": f"{base}/kit.pokeplugin"}))
+        (served / "latest.json").write_text(json.dumps({"version": "5.3.0", "url": f"{base}/kit.pokeplugin"}))
         found = plugin_updates.check(plugins.discover())
-        assert found["test-kit"].version == "1.3.0"
+        assert found["test-kit"].version == "5.3.0"
         package = plugin_store.read(str(plugin_updates.download(found["test-kit"], tmp_path / "dl")))
-        assert (package.version, plugin_store.trust(package)) == ("1.3.0", "same")
-        (served / "latest.json").write_text(json.dumps({"version": "1.1.0", "url": f"{base}/kit.pokeplugin"}))
+        assert (package.version, plugin_store.trust(package)) == ("5.3.0", "same")
+        (served / "latest.json").write_text(json.dumps({"version": KIT_VERSION, "url": f"{base}/kit.pokeplugin"}))
         assert plugin_updates.check(plugins.discover()) == {}
     finally:
         server.shutdown()
@@ -554,3 +576,353 @@ def test_plugin_source_review_is_bounded_before_parsing(tmp_path):
                                              "plugin.py": "#" * (plugin_store.MAX_SOURCE + 1)})
     with pytest.raises(plugin_store.PackageError, match="source"):
         plugin_store.read(str(path))
+
+
+def test_a_source_lists_plugins_that_install_update_and_stay_when_the_source_goes(isolated, tmp_path, monkeypatch):
+    """A followed listing on a local server: the built-in source comes first, a download that is not
+    the file the listing hashes is refused, an install records its source, a newer listing offers the
+    update, and removing the source keeps the plugin."""
+    import http.server
+    import threading
+    from pokeldn.app import plugin_sources, plugin_store, plugin_updates
+    from scripts import plugin_source
+    key = plugin_store.signing_key(str(tmp_path / "author.pem"), create=True)
+    source = tmp_path / "src"
+    shutil_copy(KIT, source)
+    toml = (source / "plugin.toml").read_text()
+    served = tmp_path / "served"
+    served.mkdir()
+
+    class Quiet(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *a, **k):
+            super().__init__(*a, directory=str(served), **k)
+
+        def log_message(self, *a):
+            pass
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Quiet)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    listing = served / plugin_sources.FILE
+
+    def publish(version):
+        (source / "plugin.toml").write_text(toml.replace(KIT_VERSION, version))
+        path = served / f"test-kit-{version}.pokeplugin"
+        plugin_store.pack(str(source), str(path), key)
+        assert plugin_source.main([str(path), "-o", str(listing), "--name", "Local",
+                                   "--download", base + "/{file}"]) == 0
+    try:
+        publish(KIT_VERSION)
+        assert plugin_sources.followed() == [plugin_sources.BUILT_IN]
+        added = plugin_sources.add(base + "/")
+        assert (added.url, added.name, [e.id for e in added.entries]) == (f"{base}/{plugin_sources.FILE}", "Local", ["test-kit"])
+        assert plugin_sources.followed() == [plugin_sources.BUILT_IN, added.url]
+        with pytest.raises(plugin_sources.SourceError, match="already"):
+            plugin_sources.add(added.url)
+        entry = added.entry("test-kit")
+        assert plugin_sources.state(entry, None) == "install"
+        offer = plugin_updates.Available(entry.id, entry.version, entry.download, "", entry.sha256, added.url)
+        wrong = plugin_updates.Available(entry.id, entry.version, entry.download, "", "0" * 64, added.url)
+        with pytest.raises(OSError, match="not the file its source lists"):
+            plugin_updates.download(wrong, tmp_path / "dl")
+        assert not list((tmp_path / "dl").iterdir())
+        package = plugin_store.read(str(plugin_updates.download(offer, tmp_path / "dl")))
+        plugin_store.install(package, added.url)
+        kit = plugin_store.installed("test-kit")
+        assert plugin_store.origin(kit) == added.url and plugin_sources.state(entry, kit) == "installed"
+        assert plugin_updates.check(plugins.discover(), [plugin_sources.fetch(added.url)]) == {}
+        publish("5.3.0")
+        publish("5.2.0")       # an older package never replaces a newer listing
+        fresh = plugin_sources.fetch(added.url)
+        assert [e.version for e in fresh.entries] == ["5.3.0"]
+        found = plugin_updates.check(plugins.discover(), [fresh])
+        assert (found["test-kit"].version, found["test-kit"].source) == ("5.3.0", added.url)
+        update = plugin_store.read(str(plugin_updates.download(found["test-kit"], tmp_path / "dl")))
+        assert (update.version, plugin_store.trust(update)) == ("5.3.0", "same")
+        server.shutdown()
+        server.server_close()
+        offline = plugin_sources.fetch(added.url)       # the cached listing still shows
+        assert offline.error and [e.version for e in offline.entries] == ["5.3.0"]
+        plugin_sources.remove(added.url)
+        assert plugin_sources.followed() == [plugin_sources.BUILT_IN]
+        assert plugin_store.installed("test-kit") is not None
+        with pytest.raises(plugin_sources.SourceError):
+            plugin_sources.remove(plugin_sources.BUILT_IN)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.parametrize("typed, feed", [
+    ("Decryptu/pokeldn-decrypt-plugins",
+     "https://raw.githubusercontent.com/Decryptu/pokeldn-decrypt-plugins/HEAD/pokeldn-source.json"),
+    ("https://github.com/Decryptu/pokeldn-decrypt-plugins.git",
+     "https://raw.githubusercontent.com/Decryptu/pokeldn-decrypt-plugins/HEAD/pokeldn-source.json"),
+    ("https://github.com/Decryptu/pokeldn-decrypt-plugins/tree/main",
+     "https://raw.githubusercontent.com/Decryptu/pokeldn-decrypt-plugins/HEAD/pokeldn-source.json"),
+    ("https://example.org/plugins/", "https://example.org/plugins/pokeldn-source.json"),
+    ("https://example.org/list.json", "https://example.org/list.json"),
+    ("http://example.org/list.json", None), ("file:///etc/passwd", None), ("", None),
+])
+def test_a_typed_source_resolves_to_its_listing(typed, feed):
+    from pokeldn.app import plugin_sources
+    if feed is None:
+        with pytest.raises(plugin_sources.SourceError):
+            plugin_sources.resolve(typed)
+    else:
+        assert plugin_sources.resolve(typed) == feed
+
+
+def test_a_listing_keeps_only_entries_it_can_check():
+    from pokeldn.app import plugin_sources
+    good = {"id": "a", "version": "1.0", "download": "https://x/a.pokeplugin", "sha256": "a" * 64, "api": "1.6"}
+    listing = {"schema": 1, "plugins": [
+        good, dict(good),                                         # a duplicate id
+        {**good, "id": "b", "sha256": ""}, {**good, "id": "c", "download": "http://x/c"},
+        {**good, "id": "../d"}, {**good, "id": "e", "version": "latest"}, "junk",
+        {**good, "id": "f", "icon": "javascript:alert(1)", "api": "9.0"}]}
+    source = plugin_sources.parse("https://x/l.json", json.dumps(listing).encode())
+    assert [e.id for e in source.entries] == ["a", "f"]
+    assert source.entry("f").icon == "" and plugin_sources.state(source.entry("f"), None) == "incompatible"
+    with pytest.raises(plugin_sources.SourceError, match="another pokeldn"):
+        plugin_sources.parse("https://x", json.dumps({**listing, "schema": 2}).encode())
+
+
+def test_the_browse_tab_installs_a_listed_plugin_through_the_risk_screen(isolated, tmp_path, monkeypatch):
+    pytest.importorskip("flet")
+    import hashlib
+    import time
+    import flet as ft
+    from types import SimpleNamespace
+    from gui.views import plugins as view
+    from pokeldn.app import plugin_sources, plugin_store, plugin_updates
+    from pokeldn.app.settings import Settings
+    from pokeldn.app import settings as settings_module
+    monkeypatch.setattr(ft.BaseControl, "update", lambda self: None)
+    monkeypatch.setattr(settings_module, "PATH", isolated / "settings.json")
+    package = plugin_store.pack(str(KIT), str(tmp_path / "kit.pokeplugin"))
+    digest = hashlib.sha256(Path(package.source).read_bytes()).hexdigest()
+    listed = plugin_sources.parse("https://x/l.json", json.dumps({"schema": 1, "name": "Mine", "plugins": [
+        {"id": "test-kit", "name": "Kit", "version": package.version, "api": "1.0",
+         "download": "https://x/kit.pokeplugin", "sha256": digest}]}).encode())
+    asked = []
+    monkeypatch.setattr(plugin_updates, "download", lambda a, folder: asked.append(a) or Path(package.source))
+    monkeypatch.setattr(plugin_sources, "followed", lambda: [listed.url])
+    shown = []
+    app = SimpleNamespace(settings=Settings(), navigate=lambda *a, **k: None, ui=lambda f: f(), plugin_updates={},
+                          plugin_update_listeners=[], plugin_sources=[listed],
+                          page=SimpleNamespace(show_dialog=shown.append, pop_dialog=lambda: None))
+    page = view.PluginsView(app)
+    page._tab("browse")
+
+    def walk(control):
+        yield control
+        for name in ("content", "controls", "actions"):
+            child = getattr(control, name, None)
+            for c in (child if isinstance(child, list) else [child] if child is not None else []):
+                yield from walk(c)
+    install = next(c for c in walk(page.column) if isinstance(c, ft.Button) and c.content == "安装")
+    install.on_click(None)
+    for _ in range(100):
+        if shown:
+            break
+        time.sleep(0.05)
+    assert asked[0].sha256 == digest and asked[0].source == listed.url
+    controls = list(walk(shown[0]))
+    tick = next(c for c in controls if isinstance(c, ft.Container) and c.on_click and any(
+        isinstance(x, ft.Text) and x.value.startswith("我理解") for x in walk(c)))
+    tick.on_click(None)
+    next(c for c in controls if isinstance(c, ft.Button) and c.content == "安装").on_click(None)
+    assert plugin_store.origin(plugin_store.installed("test-kit")) == listed.url
+    page.render()
+    assert not any(isinstance(c, ft.Button) and c.content == "安装" for c in walk(page.column))
+
+
+SAVER = '''
+from pokeldn.plugins import Tool
+
+def register(api):
+    api.add_tool("frlg", Tool("saver-save", "Save", "save.py", "", ()))
+'''
+SAVE = '''
+import os, shutil, sys
+from pathlib import Path
+from pokeldn import plugins
+
+def build_parser():
+    import argparse
+    return argparse.ArgumentParser()
+
+def attempt(label, fn):
+    try:
+        fn()
+        print(label, "ALLOWED")
+    except PermissionError:
+        print(label, "STOPPED")
+
+if __name__ == "__main__":
+    lib = plugins.library_folder("saver")
+    (lib / "stale.nsp.part").write_bytes(b"half")
+    (lib / ".staging").mkdir(exist_ok=True)
+    (lib / "update.nsp.part").write_bytes(b"whole")
+    attempt("finish", lambda: os.replace(lib / "update.nsp.part", lib / "update.nsp"))
+    attempt("clear-part", lambda: (lib / "stale.nsp.part").unlink())
+    attempt("clear-staging", lambda: shutil.rmtree(lib / ".staging"))
+    attempt("rename", lambda: os.rename(lib / "update.nsp", lib / "Game 1.1.0.nsp"))
+    attempt("delete", lambda: (lib / "Game 1.1.0.nsp").unlink())
+    attempt("other-library", lambda: (plugins.library_path("Other") / "x.nsp").unlink())
+'''
+
+
+def test_a_plugins_library_takes_its_whole_file_workflow_and_nothing_beside_it(tmp_path):
+    """Writing a partial file, replacing it with the whole one, clearing what a crash left, renaming and
+    deleting are allowed in the plugin's library; another folder beside it stays guarded."""
+    folder = make(tmp_path, "saver", SAVER, save_py=SAVE)
+    (folder / "plugin.toml").write_text('id = "saver"\nname = "Saver"\napi = "1.7"\nlibrary = "Switch updates"\n')
+    data = tmp_path / "data"
+    (data / "Other").mkdir(parents=True)
+    (data / "Other" / "x.nsp").write_text("someone else's")
+    (tmp_path / "tmp").mkdir()
+    env = dict(os.environ, POKELDN_PLUGINS=str(folder), POKELDN_DATA=str(data), PYTHONPATH=str(ROOT),
+               TMPDIR=str(tmp_path / "tmp"), TEMP=str(tmp_path / "tmp"), TMP=str(tmp_path / "tmp"))
+    run = subprocess.run([sys.executable, "-m", "pokeldn", "saver-save"], cwd=tmp_path, env=env,
+                         capture_output=True, text=True, timeout=60)
+    verdicts = dict(line.split() for line in run.stdout.splitlines() if line.endswith(("ALLOWED", "STOPPED")))
+    assert verdicts == {**dict.fromkeys(("finish", "clear-part", "clear-staging", "rename", "delete"), "ALLOWED"),
+                        "other-library": "STOPPED"}, run.stdout + run.stderr
+    assert sorted(p.name for p in (data / "Switch updates").iterdir()) == []
+    assert (data / "Other" / "x.nsp").read_text() == "someone else's"
+
+
+def test_a_library_sorts_names_as_a_player_reads_them(tmp_path):
+    """The Switch updates plugin's names: each game's updates group together in version order, system
+    updates in version order, case aside; -desc reverses, size and date order by their own field."""
+    from pokeldn.app import library
+    names = ["System update 23.0.1.zip", "game [0100A][v131072](1.0.2).nsp", "Game [0100A][v65536](1.0.1).nsp",
+             "System update 20.5.0.zip", "Game [0100B][v65536](1.0.1).nsp"]
+    for i, name in enumerate(names):
+        (tmp_path / name).write_bytes(b"x" * (10 - i))
+        os.utime(tmp_path / name, (1_000_000 + i, 1_000_000 + i))
+    wanted = ["Game [0100A][v65536](1.0.1).nsp", "game [0100A][v131072](1.0.2).nsp", "Game [0100B][v65536](1.0.1).nsp",
+              "System update 20.5.0.zip", "System update 23.0.1.zip"]
+    assert [e.name for e in library.entries(tmp_path, "name")] == wanted
+    assert [e.name for e in library.entries(tmp_path, "name-desc")] == wanted[::-1]
+    assert [e.name for e in library.entries(tmp_path, "date-desc")] == names[::-1]
+    assert [e.name for e in library.entries(tmp_path, "size")] == names[::-1]
+    with pytest.raises(ValueError):
+        library.entries(tmp_path, "random")
+
+
+def test_the_players_sort_wins_over_plugin_tomls_and_a_bad_one_refuses_the_plugin(isolated, tmp_path, monkeypatch):
+    from pokeldn.app import panels
+    good = make(tmp_path, "sorted", "def register(api):\n    pass\n")
+    bad = make(tmp_path, "unsorted", "def register(api):\n    pass\n")
+    for path, sort in ((good, "name-desc"), (bad, "newest")):
+        (path / "plugin.toml").write_text((path / "plugin.toml").read_text() + f'library = "{path.name}"\nlibrary_sort = "{sort}"\n')
+    monkeypatch.setenv("POKELDN_PLUGINS", os.pathsep.join(map(str, (good, bad))))
+    loaded = {p.id: p for p in plugins.load()}
+    assert "library_sort is one of" in loaded["unsorted"].error
+    assert panels.sort(loaded["sorted"]) == "name-desc"
+    panels.set_sort("sorted", "size")
+    assert panels.sort(loaded["sorted"]) == "size"
+    with pytest.raises(ValueError):
+        panels.set_sort("sorted", "random")
+
+
+def test_status_cards_keep_to_their_limits_and_draw_only_the_plugins_own_images(isolated, tmp_path, monkeypatch, capsys):
+    """What a plugin prints is untrusted: an image outside its folders, a renamed file posing as a PNG, a ninth
+    card and a line past the limits are kept out; a line the app reads is the one the call printed."""
+    from pokeldn import panel
+    from pokeldn.app import panels
+    folder = make(tmp_path, "carded", "def register(api):\n    pass\n")
+    monkeypatch.setenv("POKELDN_PLUGINS", str(folder))
+    (plugin,) = plugins.load()
+    data = plugins.data_folder("carded")
+    data.mkdir(parents=True)
+    png = b"\x89PNG\r\n\x1a\n" + bytes(32)
+    (data / "icon.png").write_bytes(png)
+    (data / "fake.png").write_bytes(b"GIF89a" + bytes(32))
+    (tmp_path / "outside.png").write_bytes(png)
+    (data / "big.png").write_bytes(png + bytes(panel.IMAGE_BYTES))
+    for name in ("icon.png", "fake.png", "big.png"):
+        panel.show("c", "Card", image=data / name)
+    panel.show("c", "Card", image=data / ".." / ".." / ".." / "outside.png")
+    shown = [panel.read(line) for line in capsys.readouterr().out.splitlines()]
+    assert [panels.image(plugin, s["image"]) for s in shown] == [str((data / "icon.png").resolve()), None, None, None]
+
+    for n in range(panel.CARDS):
+        assert panels.apply("carded", panel._card(f"card-{n}", "Card"))
+    assert not panels.apply("carded", panel._card("one-more", "Card"))
+    assert not panels.apply("carded", panel._card("card-0", "Card"))       # the same card again
+    assert panels.apply("carded", {"id": "card-0", "clear": True})
+    assert panels.apply("carded", panel._note("a.nsp", "bad", "Signature refused"))
+    assert panels.load("carded")["notes"]["a.nsp"]["state"] == "bad"
+
+    for bad in ('{"id":"../x","title":"T"}', '{"id":"x","title":"T","tone":"pink"}',
+                '{"id":"x","title":"T","lines":' + json.dumps(["l"] * 13) + '}',
+                '{"id":"x","title":"' + "T" * 81 + '"}', '{"file":"../x.nsp"}', '[1]', 'not json'):
+        assert panel.read(panel.PREFIX + bad) is None, bad
+    with pytest.raises(ValueError):
+        panel.show("x", "T", image="icon.gif")
+    with pytest.raises(ValueError):
+        panel.annotate("x.nsp", state="great")
+
+
+@pytest.mark.parametrize("name, refused", [
+    ("Switch updates", ""), ("NSP_backups-2.0", ""), ("saves", "pokeldn's own"), ("Bank", "pokeldn's own"),
+    ("Received", "pokeldn's own"), ("NUL", "device name"), ("com1.backup", "device name"), ("../Bank", "folder name"),
+    ("a/b", "folder name"), (".hidden", "folder name"), ("ends.", "folder name"), ("x" * 41, "folder name"), (3, "folder name"),
+])
+def test_a_library_is_a_plain_folder_name_no_feature_of_pokeldn_uses(name, refused):
+    if not refused:
+        assert plugins.library_name(name) == name
+        return
+    with pytest.raises(ValueError, match=refused):
+        plugins.library_name(name)
+
+
+def test_a_package_with_a_bad_library_is_refused_and_two_plugins_never_share_one(isolated, tmp_path, monkeypatch):
+    from pokeldn.app import plugin_store
+    with pytest.raises(plugin_store.PackageError, match="pokeldn's own"):
+        plugin_store.read(str(zipped(tmp_path / "x.pokeplugin", {"plugin.toml": GOOD_TOML + 'library = "Saves"\n',
+                                                                 "plugin.py": ""})))
+    good = plugin_store.read(str(zipped(tmp_path / "y.pokeplugin", {
+        "plugin.toml": GOOD_TOML + 'library = "Updates"\n', "plugin.py": "def register(api):\n    pass\n"})))
+    assert good.library == "Updates"
+    first = make(tmp_path, "first", "def register(api):\n    api.library\n")
+    second = make(tmp_path, "second", "def register(api):\n    pass\n")
+    for path in (first, second):
+        (path / "plugin.toml").write_text((path / "plugin.toml").read_text() + 'library = "updates"\n')
+    monkeypatch.setenv("POKELDN_PLUGINS", os.pathsep.join(map(str, (first, second))))
+    loaded = {p.id: p for p in plugins.load()}
+    assert loaded["first"].loaded and plugins.library_folder("first").is_dir()
+    assert loaded["second"].error == "its library 'updates' is already the plugin 'first''s"
+
+
+def test_the_library_lists_names_and_copies_files_and_survives_the_plugins_removal(isolated, tmp_path):
+    from pokeldn.app import library, plugin_store
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    for name, age in (("old.nsp", 30), ("new.nsp", 10), (".x.part", 0), ("y.nsp.part", 0)):
+        (lib / name).write_text(name)
+        os.utime(lib / name, (1_000_000 - age, 1_000_000 - age))
+    (lib / "folder").mkdir()
+    assert [e.name for e in library.entries(lib)] == ["new.nsp", "old.nsp"]
+    newest = library.entries(lib)[0]
+    assert library.rename(lib, newest, "  Game   1.2.0 ").name == "Game 1.2.0.nsp"   # the extension stays
+    for bad in ("", ".hidden", "a/b", "c:d"):
+        with pytest.raises(ValueError):
+            library.rename(lib, library.entries(lib)[0], bad)
+    with pytest.raises(FileExistsError):
+        library.rename(lib, library.entries(lib)[0], "old.nsp")
+    with pytest.raises(ValueError):
+        library.delete(lib, library.Entry(tmp_path / "outside.nsp", 0, 0))
+    source = tmp_path / "old.nsp"
+    source.write_text("dropped")
+    assert library.add(lib, str(source)).name == "old (2).nsp"
+    assert sorted(e.name for e in library.entries(lib)) == ["Game 1.2.0.nsp", "old (2).nsp", "old.nsp"]
+    assert not [p for p in lib.iterdir() if p.name.startswith(".") and p.name != ".x.part"]   # no copy left half
+    plugin_store.install(plugin_store.pack(str(KIT), str(tmp_path / "kit.pokeplugin")))
+    kept = plugins.library_folder("test-kit")
+    (kept / "backup.nsp").write_text("hours of work")
+    plugin_store.remove("test-kit", data=True)
+    assert (kept / "backup.nsp").read_text() == "hours of work"

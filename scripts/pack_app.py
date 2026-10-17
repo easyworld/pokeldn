@@ -69,6 +69,11 @@ PLUGIN_STDLIB = ("cmath", "cmd", "code", "codeop", "dbm", "filecmp", "fileinput"
                  "sqlite3", "symtable", "syslog", "timeit", "wave", "wsgiref", "xmlrpc", "zipapp", "zoneinfo")
 
 
+# docs/plugins.md, What a plugin can import: shipped whole, not only what pokeldn imports. flet, bleak
+# and unicorn are collected below on their own terms.
+PLUGIN_PACKAGES = ("trio", "Crypto", "zstandard", "serial", "websockets", "certifi")
+
+
 def plugin_stdlib() -> list[str]:
     return [name for name in PLUGIN_STDLIB if importlib.util.find_spec(name) is not None]
 
@@ -161,6 +166,7 @@ def main() -> int:
                        *console, *onedir,
                        *[f"--hidden-import={s}" for s in scripts],
                        *[f"--collect-submodules={m}" for m in plugin_stdlib()],
+                       *[f"--collect-all={m}" for m in PLUGIN_PACKAGES],
                        *[f"--exclude-module={m}" for m in platform_excludes()], "--collect-all=esptool", "--collect-submodules=unicorn",
                        "--collect-all=esp_pylib", "--collect-submodules=pokeldn", "--collect-submodules=bleak",
                        "--collect-submodules=ldn"):

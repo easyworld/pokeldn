@@ -43,3 +43,5 @@ BANK = DATA / "Bank" if os.environ.get("POKELDN_DATA") else _DOCUMENTS / "Bank"
 MACROS = DATA / "Macros" if os.environ.get("POKELDN_DATA") else _DOCUMENTS / "Macros"
 # GTS listings and offers with their keys and records (pokeldn.app.gts); an isolated POKELDN_DATA keeps its own.
 GTS = DATA / "GTS" if os.environ.get("POKELDN_DATA") else _DOCUMENTS / "GTS"
+# Plugins' player-visible folders (pokeldn.plugins.library_folder); an isolated POKELDN_DATA keeps its own.
+LIBRARIES = DATA if os.environ.get("POKELDN_DATA") else _DOCUMENTS

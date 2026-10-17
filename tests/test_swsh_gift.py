@@ -100,6 +100,18 @@ def test_two_records_are_five_fragments():
 
 
 SWORD_IMAGE = "scratchpad/swsh/main.bin"
+VALIDATOR = 0x010b5de0  # the game's Wonder Card check: 0 sealed, 0x80000001 checksum
+
+
+def validate(record):
+    """-> the game's validator's answer for `record`, run under unicorn from the user's own image."""
+    from nso_run import SCRATCH, Runner
+    r = Runner(SWORD_IMAGE)
+    card, header, rec = SCRATCH + 0x1000, SCRATCH + 0x3000, SCRATCH + 0x4000
+    r.write(card, bytes(0x3A8))
+    r.write(header, bytes(0x68))
+    r.write(rec, record)
+    return r.call(VALIDATOR, (0, card, header, rec, len(record)))[0]
 
 
 @pytest.mark.skipif(not __import__("os").path.exists(SWORD_IMAGE),
@@ -109,15 +121,15 @@ def test_the_host_sends_only_what_the_games_own_validator_accepts(tmp_path, monk
     returns the checksum error, and the host then refuses before it writes or sends anything."""
     import swsh_gift_host
     rec = wc8.pokemon_card(25, level=25, nickname="POKELDN", ot="POKELDN")
-    assert swsh_gift_host.validate(rec, SWORD_IMAGE) == 0
+    assert validate(rec) == 0
     bad = bytearray(rec)
     bad[0x10] ^= 1
-    assert swsh_gift_host.validate(bytes(bad), SWORD_IMAGE) == 0x80000001
+    assert validate(bytes(bad)) == 0x80000001
 
     (tmp_path / "bad.bin").write_bytes(bad)
     out = tmp_path / "out.bin"
     monkeypatch.setattr("sys.argv", ["swsh_gift_host.py", "--record", str(tmp_path / "bad.bin"),
-                                     "--image", SWORD_IMAGE, "--dump", str(out)])
+                                     "--dump", str(out)])
     assert swsh_gift_host.main() == 1
     assert not out.exists()
 
@@ -147,7 +159,7 @@ def _redeem(runner, record, redemption):
     runner.write(card, bytes(0x3A8))
     runner.write(header, bytes(0x68))
     runner.write(rec, record)
-    assert runner.call(swsh_gift_host.VALIDATOR, (0, card, header, rec, len(record)))[0] == 0
+    assert runner.call(VALIDATOR, (0, card, header, rec, len(record)))[0] == 0
     runner.write(pair, bytes(runner.uc.mem_read(header, 0x68)) + record)
     runner.call(redemption, (pair,))
 
@@ -238,7 +250,7 @@ def test_the_app_sends_an_official_event_with_a_date_and_the_game_accepts_every_
         runner.write(card, bytes(0x3A8))
         runner.write(header, bytes(0x68))
         runner.write(rec, event["record"])
-        assert runner.call(swsh_gift_host.VALIDATOR, (0, card, header, rec, 0x2D0))[0] == 0, event["key"]
+        assert runner.call(VALIDATOR, (0, card, header, rec, 0x2D0))[0] == 0, event["key"]
 
     tool = next(t for g in catalog.GAMES for t in g.tools if t.key == "swsh-gift")
     monkeypatch.setattr(gift_builder, "output", lambda tool: str(tmp_path / "gift.pokegift"))
@@ -248,8 +260,7 @@ def test_the_app_sends_an_official_event_with_a_date_and_the_game_accepts_every_
         assert gift_builder.problem(tool, value) == ""
         gift_builder.prepare(tool, value)
         out = tmp_path / f"{event['key']}.bin"
-        assert swsh_gift_host.main([*gift_builder.args(tool, value), "--image", SWORD_IMAGE,
-                                    "--dump", str(out)]) == 0
+        assert swsh_gift_host.main([*gift_builder.args(tool, value), "--dump", str(out)]) == 0
         sent = out.read_bytes()
         assert sent[8:wc8.CHECKSUM_AT] == event["record"][8:wc8.CHECKSUM_AT]
         assert wc8.sealed(sent) and sent[:8] != bytes(8)
@@ -297,7 +308,7 @@ def test_a_shiny_galarian_bird_given_another_card_id_reaches_a_save_that_took_an
     assert gift_builder.problem(tool, value) == ""
     gift_builder.prepare(tool, value)
     out = tmp_path / "sent.bin"
-    assert swsh_gift_host.main([*gift_builder.args(tool, value), "--image", SWORD_IMAGE, "--dump", str(out)]) == 0
+    assert swsh_gift_host.main([*gift_builder.args(tool, value), "--dump", str(out)]) == 0
     sent, official = out.read_bytes(), events.by_key()[key]["record"]
     assert wc8.sealed(sent) and events.card_id(sent) == 2
     assert [i for i in range(8, wc8.CHECKSUM_AT) if sent[i] != official[i]] == [8]

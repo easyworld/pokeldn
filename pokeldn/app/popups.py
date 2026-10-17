@@ -5,10 +5,10 @@ The manager runs on the app's UI loop: `call` brings each program's messages the
 shows and hides the pop-ups and reports the buttons pressed.
 """
 
-from pokeldn.popup import ANSWERS, LIMIT, TONES
+from pokeldn.popup import ANSWERS, CHOICES, LIMIT, TONES
 
 # What a pop-up shows is the program's to say, up to these lengths.
-CLIP = {"title": 120, "text": 4000, "label": 40, "agree": 40, "disagree": 40}
+CLIP = {"title": 120, "text": 4000, "label": 40, "agree": 40, "disagree": 40, "option": 60}
 
 
 def _clip(value, length: int) -> str:
@@ -29,7 +29,11 @@ class Entry:
         self.label = _clip(message.get("label"), CLIP["label"]) or "OK"
         self.agree = _clip(message.get("agree"), CLIP["agree"])
         self.disagree = _clip(message.get("disagree"), CLIP["disagree"])
-        if not self.id or kind == "confirm" and not (self.agree and self.disagree):
+        options = message.get("options") if kind == "choose" else []
+        if not isinstance(options, list) or kind == "choose" and not 2 <= len(options) <= CHOICES:
+            raise ValueError("not a pop-up")
+        self.options = [_clip(o, CLIP["option"]) for o in options]
+        if not self.id or kind == "confirm" and not (self.agree and self.disagree) or not all(self.options):
             raise ValueError("not a pop-up")
         self.tone = message.get("tone") if message.get("tone") in TONES else "info"
 
@@ -40,7 +44,7 @@ class Entry:
 
     @property
     def answers(self) -> tuple[str, ...]:
-        return ANSWERS[self.kind]
+        return tuple(str(i) for i in range(len(self.options))) + ANSWERS[self.kind]
 
     def press(self, answer: str) -> None:
         """The view: the player pressed `answer`'s button."""
@@ -62,8 +66,8 @@ class Program:
         self.manager.call(lambda: self.manager.take(self, message))
 
     def ended(self) -> None:
-        """The program exited, from any thread: its confirmations close, and its acknowledgements stay with no
-        answer to go back."""
+        """The program exited, from any thread: its confirmations and choices close, and its acknowledgements
+        stay with no answer to go back."""
         self.manager.call(lambda: self.manager.ended(self))
 
 
@@ -112,12 +116,12 @@ class Manager:
             entry.program.send({"id": entry.id, "n": entry.n, "answer": answer})
 
     def dismissed(self, entry: Entry) -> None:
-        """A pop-up's dialog closed: Esc or a click outside, unless the app closed it first. A confirmation is
-        dismissed, an acknowledgement acknowledged."""
+        """A pop-up's dialog closed: Esc or a click outside, unless the app closed it first. A confirmation or a
+        choice is dismissed, an acknowledgement acknowledged."""
         if entry in self.open:
-            self.answer(entry, "dismiss" if entry.kind == "confirm" else "ack")
+            self.answer(entry, "ack" if entry.kind == "ack" else "dismiss")
 
     def ended(self, program: Program) -> None:
         program.over = True
-        for entry in [e for e in self.open if e.program is program and e.kind == "confirm"]:
+        for entry in [e for e in self.open if e.program is program and e.kind != "ack"]:
             self._close(entry)
