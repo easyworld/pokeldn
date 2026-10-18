@@ -396,6 +396,12 @@ Flet 1.0.2 的桌面客户端不会发生文件丢失。 `scripts/build_client.p
 `gui/client/<platform>`。 `gui/drop.py` 声明匹配的 `FileDrop` 控件。 `gui/main.py` 在构建时运行该客户端，否则运行 Flet 自己的客户端，其中不显示目标；冻结的应用程序总是带有构建的应用程序。该脚本需要Flutter，版本为
 `python -m flet_cli.cli --version --json` 名称（Flet 1.0.2 为 3.44.8）。它将 macOS 客户端的部署目标从 11.0 提高到 12.0：Xcode 27 不会构建任何旧版本。 Linux 客户端是 Flet 的轻量版，因为 Flet 自己的 CI 构建了它。
 
+<a id="the-docs-page"></a>
+
+## 文档页面
+
+“文档”页显示应用指南和网站导航中列出的全部文档。页面列表上方的搜索框按章节搜索：匹配每个标题及其下方的正文，查询中的每个词都必须出现。标题或页面名称包含关键词的结果优先显示。点击结果会定位到对应标题；`page.md#heading` 形式的链接也会滚动到相应章节（`gui/views/docs.py`）。
+
 <a id="unreleased-titles"></a>
 
 ## 尚未发布的游戏

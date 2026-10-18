@@ -44,6 +44,7 @@ def test_doc_navigation_translates_every_title_without_changing_the_tree():
 
     original = [(p.file, p.title, p.parent) for p in flatten(view.tree)]
     view.file = "guide"
+    view.query = ""
     view.open_parents = {file for file, _, _ in original}
     view.nav = ft.Column()
     view.render_nav()
