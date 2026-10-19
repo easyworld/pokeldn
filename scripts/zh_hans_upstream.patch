@@ -1,0 +1,97 @@
+diff --git a/gui/views/docs.py b/gui/views/docs.py
+index db62cbf..e7116df 100644
+--- a/gui/views/docs.py
++++ b/gui/views/docs.py
+@@ -40,7 +40,8 @@ def document_body(file: str) -> tuple[str, str | None]:
+ 
+ def page_title(page: "Page") -> str:
+     path = document_path(page.file)
+-    return page.title if os.path.samefile(path, _english(page.file)) else _read(path)[0].get("title", page.title)
++    title = page.title if os.path.samefile(path, _english(page.file)) else _read(path)[0].get("title", page.title)
++    return i18n.message(title)
+ 
+ 
+ @dataclass
+diff --git a/gui/views/games.py b/gui/views/games.py
+index b97bc5c..ee41ba2 100644
+--- a/gui/views/games.py
++++ b/gui/views/games.py
+@@ -489,7 +489,7 @@ class GamesView:
+             return control
+         if field.kind == "choice":
+             choices = self.raid_choices(field) or field.choices
+-            control = t.dropdown([(k or EMPTY, label) for k, label in choices], value or EMPTY,
++            control = t.dropdown([(k or EMPTY, translate(label)) for k, label in choices], value or EMPTY,
+                                  on_select=lambda e: self.set_value(
+                                      field, "" if e.control.value == EMPTY else e.control.value, rebuild=True))
+             control.disabled = len(choices) == 1 and len(field.choices) > 1   # an event leaves one
+@@ -504,7 +504,7 @@ class GamesView:
+             chosen = value if value in keys else (keys[-1] if keys else "")
+             if chosen != value and chosen:
+                 self.values[field.key] = chosen
+-            control = t.dropdown(options or [(EMPTY, tr('games.no_boss_of_this_event_shows_in_a_den_8a4b1e', 'No boss of this event shows in a den'))],
++            control = t.dropdown([(key, translate(label)) for key, label in options] or [(EMPTY, tr('games.no_boss_of_this_event_shows_in_a_den_8a4b1e', 'No boss of this event shows in a den'))],
+                                  chosen or EMPTY, on_select=lambda e: self.set_value(field, e.control.value, rebuild=True))
+             control.disabled = not options
+             return control
+diff --git a/gui/views/lair_seed.py b/gui/views/lair_seed.py
+index 0a7282c..8b1df93 100644
+--- a/gui/views/lair_seed.py
++++ b/gui/views/lair_seed.py
+@@ -9,6 +9,7 @@ import threading
+ import flet as ft
+ 
+ from gui import theme as t
++from gui.localization import translate
+ from gui.views.sprites import MINI, Sprite
+ from pokeldn.swsh import lair, raid_event
+ 
+@@ -42,7 +43,7 @@ class LairSeedPicker:
+         self._show(str(value or ""), update=False)
+ 
+     def _name(self, species: int) -> str:
+-        return self.names.get(str(species), f"#{species}")
++        return translate(self.names.get(str(species), f"#{species}"))
+ 
+     def _tiles(self, rows) -> ft.Row:
+         return ft.Row([ft.Column([Sprite(self.app, row[0], size=MINI, form=row[1]).control,
+diff --git a/gui/views/raid_partners.py b/gui/views/raid_partners.py
+index 1adc854..77b410a 100644
+--- a/gui/views/raid_partners.py
++++ b/gui/views/raid_partners.py
+@@ -10,6 +10,7 @@ from gui import theme as t
+ from gui.views.sprites import MINI, Sprite
+ from gui.localization import translate
+ from pokeldn.app import command
++from pokeldn.app import i18n
+ from pokeldn.sv import raid_partners
+ 
+ COLUMNS = 3
+@@ -78,7 +79,7 @@ class RaidPartnersPicker:
+             return tr('raid_partners.none_consoles_fill_the_slots_5b1d52', 'None, {value0} consoles fill the slots', value0=self.consoles)
+         if not self.picks:
+             return tr('raid_partners.drawn_as_the_game_draws_them_83bcc1', 'Drawn as the game draws them{value0}', value0=stage)
+-        names = ", ".join(self.picks)
++        names = ", ".join(translate(name) for name in self.picks)
+         return (names if len(self.picks) == self.free else tr('raid_partners.one_drawn_5e7b66', '{value0}, one drawn', value0=names)) + stage
+ 
+     def _body(self) -> list[ft.Control]:
+@@ -123,7 +124,7 @@ class RaidPartnersPicker:
+                              alignment=ft.Alignment.CENTER) if picked else ft.Container()
+         title = ft.Row([
+             Sprite(self.app, partner.species, size=MINI).control,
+-            ft.Column([t.text(partner.trainer, 13, weight=ft.FontWeight.W_600, max_lines=1,
++            ft.Column([t.text(translate(partner.trainer), 13, weight=ft.FontWeight.W_600, max_lines=1,
+                               overflow=ft.TextOverflow.ELLIPSIS),
+                        t.text(translate(partner.name), 12, t.MUTED, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)],
+                       spacing=0, expand=True),
+@@ -134,7 +135,8 @@ class RaidPartnersPicker:
+         # Every partner has three moves, one to a line, so every card of a pool stands as tall.
+         moves = ft.Column([t.text(translate(partner.ability), 12, t.SOFT, weight=ft.FontWeight.W_500, max_lines=1,
+                                   overflow=ft.TextOverflow.ELLIPSIS)]
+-                          + [t.text(translate(move), 12, t.MUTED, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
++                          + [t.text(i18n.t("pokemon.move." + move, translate(move)), 12, t.MUTED,
++                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
+                              for move in partner.moves], spacing=1)
+         column = [title, facts, moves]
+         if footer:

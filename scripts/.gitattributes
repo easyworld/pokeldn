@@ -1,0 +1,2 @@
+# Preserve unified-diff context lines and line endings for the preview compatibility patch.
+zh_hans_upstream.patch -text whitespace=-blank-at-eol
