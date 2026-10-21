@@ -120,6 +120,7 @@ font_family = "Noto Sans CJK SC"
 语言切换在完整校验资源后提交，更新已挂载控件及缓存视图，刷新文档搜索，更新 Flet 的语言和
 字体，同时保留实体选择、可编辑文本、焦点及运行中的会话。切换失败时保留当前语言。
 训练家语言和记录中的文本与显示语言分别管理。
+更新当前语言插件时重新加载其资源；停用或卸载当前语言插件时，界面及已保存的语言选择恢复英文。
 
 <a id="validation"></a>
 ## 构建与验证
@@ -127,8 +128,8 @@ font_family = "Noto Sans CJK SC"
 ```bash
 python scripts/check_localization.py --language-pack /path/to/zh-hans-plugin --require-complete
 python scripts/build_language_pack.py /path/to/zh-hans-plugin --require-complete
-python scripts/preview_language.py dist/community-zh-hans-2.0.2.pokeplugin --prepare-only
-python scripts/preview_language.py dist/community-zh-hans-2.0.2.pokeplugin --web 8815
+python scripts/preview_language.py dist/community-zh-hans-2.0.3.pokeplugin --prepare-only
+python scripts/preview_language.py dist/community-zh-hans-2.0.3.pokeplugin --web 8815
 ```
 
 应用提供完整英文目录。简体中文包作为独立数据插件安装，设置中的语言列表来自已安装插件。

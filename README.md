@@ -5,8 +5,8 @@
 
 ## 安装
 
-从 [Releases](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v2.0.2)
-下载 `community-zh-hans-2.0.2.pokeplugin`，在程序的 Plugins 页面安装，
+从 [Releases](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v2.0.3)
+下载 `community-zh-hans-2.0.3.pokeplugin`，在程序的 Plugins 页面安装，
 然后在 Settings → App language 选择“简体中文”。
 
 包 ID 为 `community-zh-hans`，仅包含 TOML 和 Markdown 数据，无 Python 执行代码。
@@ -20,7 +20,7 @@
 ```bash
 python scripts/check_localization.py --language-pack /path/to/zh-hans-plugin --require-complete
 python scripts/build_language_pack.py /path/to/zh-hans-plugin --require-complete
-python scripts/preview_language.py dist/community-zh-hans-2.0.2.pokeplugin --web 8815
+python scripts/preview_language.py dist/community-zh-hans-2.0.3.pokeplugin --web 8815
 ```
 
 生成安装包和对应 SHA-256 文件。浏览器打开 `http://127.0.0.1:8815/`。
@@ -35,7 +35,7 @@ python -m pytest tests/test_semantic_i18n.py tests/test_i18n_bilingual.py
 
 ## 资源覆盖
 
-- 全部 5,548 个核心文案键，以及 `hello-localized` 插件示例的 4 个文案键。
+- 全部 5,554 个核心文案键，以及 `hello-localized` 插件示例的 4 个文案键。
 - 高级参数说明及选项、礼物预设与效果说明、剑盾官方活动标题和分类。
 - 游戏实体名称由 PKHeX 简体中文名称表提供，语言包补充指定名称和形态覆盖。
 - 39 篇中文文档；其余 7 篇文档的正文、标题和目录整体使用英文。

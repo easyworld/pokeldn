@@ -1,5 +1,11 @@
 # UTF-8. Stable semantic keys.
 [strings]
+"core.plugins.api_label" = "插件 API {version}"
+"core.plugins.update_notice" = "将{name}从 {old_version} 更新至 {version}，保留已保存的数据。"
+"core.plugins.reinstall_notice" = "已安装版本 {version}，将替换该版本的文件。"
+"core.plugins.downgrade_notice" = "将以 {version} 替换较新的 {old_version} 版本。"
+"core.pokemon.set_number" = "第 {number} 组配置"
+"core.encounter.location_number" = "地点 {number}"
 "core.app.add_yourself_to_the_group_sudo_usermod_ag_user_then_log_b0f6cb" = "将自己加入 {value0} 用户组（sudo usermod -aG {value1} $USER），然后注销并重新登录。"
 "core.app.android_allow_usb" = "允许 USB 访问"
 "core.app.android_bridge_board" = "此开发板需要通过电脑连接"
