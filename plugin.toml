@@ -1,15 +1,15 @@
 id = "community-zh-hans"
 name = "简体中文"
-version = "2.0.3"
-api = "1.10"
+version = "3.0.0"
+api = "1.9"
 author = "easyworld"
 homepage = "https://github.com/easyworld/pokeldn/tree/codex/zh-hans-pack"
 locale = "zh-Hans"
-localization_format = 1
-
-[locales.zh-Hans]
-name = "简体中文"
-strings = "locales/zh-Hans/strings.toml"
-entities = "locales/zh-Hans/entities.toml"
-documents = "locales/zh-Hans/documents.toml"
+strings = "strings.toml"
+messages = "messages.toml"
+templates = "templates.toml"
+terms = "terms.toml"
+help = "help.toml"
+documents = "docs"
 font_family = "Noto Sans CJK SC"
+exclude = ["tests"]

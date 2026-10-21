@@ -1,48 +1,55 @@
-# 简体中文语言包
+# pokeldn 简体中文语言插件
 
-用于 pokeldn 语义本地化接口的独立数据插件。需要插件 API 1.10、本地化资源格式 1；
-当前上游 main 的旧版程序不能加载此格式，需要包含本地化接口改造的版本。
+独立数据插件，适用于上游保留的 **插件 API 1.9** 语言包格式。
+版本 3.0.0 已按上游 `main` 的 `47e34fc` 提交适配，不需要 Babel 或额外的 Python 运行代码。
 
 ## 安装
 
-从 [Releases](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v2.0.3)
-下载 `community-zh-hans-2.0.3.pokeplugin`，在程序的 Plugins 页面安装，
-然后在 Settings → App language 选择“简体中文”。
+从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.0.0)
+下载 `community-zh-hans-3.0.0.pokeplugin`，在程序的 Plugins 页面安装。
+然后在 Settings → App language 选择“简体中文”，**重启 pokeldn 后生效**。
 
-包 ID 为 `community-zh-hans`，仅包含 TOML 和 Markdown 数据，无 Python 执行代码。
-切回 English 或卸载插件即可恢复英文。游戏记录中的训练家语言与显示语言分别设置。
+插件 ID 为 `community-zh-hans`，可覆盖安装此前使用同一 ID 的版本。
+切回 English 后也需要重启。显示语言与生成宝可梦时使用的训练家语言分别设置。
 
-## 构建和验证
+## 资源
 
-本分支只保存语言插件源码。另行检出包含语义本地化接口的 pokeldn 仓库，
-在该应用仓库根目录运行以下命令，路径指向本插件源码目录：
+- `strings.toml`：全部 1,663 个当前界面文案键。
+- `help.toml`：全部 1,882 条按工具和参数区分的高级说明。
+- `messages.toml`：3,035 条模块文案，包括礼物预设、增强功能和剑盾活动。
+- `templates.toml`：286 条动态消息模板，保留命名参数。
+- `terms.toml`：222 条界面术语和选项词语。
+- `docs/`：38 篇中文文档，使用本地化标题并保留章节锚点。未提供的页面使用上游英文文档。
+
+宝可梦、招式、特性、性格、属性、精灵球等游戏名称由上游 PKHeX 显示语言服务提供。
+本包不携带实体名称数据库，也不修改实体 ID、游戏记录、文件路径、昵称或连接码。
+界面中的第三方名称、品牌、协议标识及提供者诊断可能保留原文。
+
+资源采用根目录的扁平 TOML 表，使用上游现有的 `strings`、`messages`、`templates`、`terms`、
+`help`、`documents` 和 `font_family` 清单字段。英文复数后缀参数使用字符串精度 `.0`
+抑制显示，例如 `{value1:.0}`；参数名称保持一致，不会在中文句尾产生英文 `s`。
+
+## 校验和构建
+
+检出最新上游应用代码，在应用仓库根目录执行，路径指向本插件目录：
 
 ```bash
-python scripts/check_localization.py --language-pack /path/to/zh-hans-plugin --require-complete
-python scripts/build_language_pack.py /path/to/zh-hans-plugin --require-complete
-python scripts/preview_language.py dist/community-zh-hans-2.0.3.pokeplugin --web 8815
+python scripts/check_language_pack.py /path/to/zh-hans-plugin
+python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.0.0.pokeplugin
 ```
 
-生成安装包和对应 SHA-256 文件。浏览器打开 `http://127.0.0.1:8815/`。
-预览使用独立数据目录，禁用开发板访问、更新检查和精灵图片下载。
+缺失文案、未知文案、参数差异、缺失高级说明和未知高级说明均应为 0。
+未来上游新增文案或参数后，用该检查脚本定位需要补充的翻译。
 
-使用本包运行应用仓库的双语测试：先将环境变量 `POKELDN_TEST_LANGUAGE_PACK`
-设为本插件源码的绝对路径，再执行：
+本插件的测试放在 `tests/`，打包时排除。将环境变量 `POKELDN_SOURCE` 设为上游应用仓库的
+绝对路径后，在本插件目录执行：
 
 ```bash
-python -m pytest tests/test_semantic_i18n.py tests/test_i18n_bilingual.py
+python -m pytest tests -q
 ```
 
-## 资源覆盖
-
-- 全部 5,554 个核心文案键，以及 `hello-localized` 插件示例的 4 个文案键。
-- 高级参数说明及选项、礼物预设与效果说明、剑盾官方活动标题和分类。
-- 游戏实体名称由 PKHeX 简体中文名称表提供，语言包补充指定名称和形态覆盖。
-- 39 篇中文文档；其余 7 篇文档的正文、标题和目录整体使用英文。
-- 训练家姓名、昵称、文件路径、连接码和导入记录中的原始文本保持原值。
-
-核心接口见应用仓库的 `docs/localization.md`，本包也提供
-`locales/zh-Hans/docs/localization.md`。新增核心文案后，用完整性检查定位需补充的翻译。
+测试会在临时数据目录中安装本包，检查格式、完整性、动态参数、文档、礼物及活动文案，
+并通过 PKHeX 验证中文游戏名称。不访问开发板，也不修改正常使用的设置。
 
 Source: [codex/zh-hans-pack](https://github.com/easyworld/pokeldn/tree/codex/zh-hans-pack).
 License: AGPL-3.0, see LICENSE.
