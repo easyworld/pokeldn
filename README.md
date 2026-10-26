@@ -1,12 +1,13 @@
 # pokeldn 简体中文语言插件
 
 独立数据插件，适用于上游保留的 **插件 API 1.9** 语言包格式。
-版本 3.0.0 已按上游 `main` 的 `47e34fc` 提交适配，不需要 Babel 或额外的 Python 运行代码。
+版本 3.1.0 对应上游 `main` 的 `a088e9b`（pokeldn 0.45.0，主程序插件 API 1.12）。
+本包只需要既有的 1.9 语言包能力，不需要 Babel 或额外的 Python 运行代码。
 
 ## 安装
 
-从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.0.0)
-下载 `community-zh-hans-3.0.0.pokeplugin`，在程序的 Plugins 页面安装。
+从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.1.0)
+下载 `community-zh-hans-3.1.0.pokeplugin`，在程序的 Plugins 页面安装。
 然后在 Settings → App language 选择“简体中文”，**重启 pokeldn 后生效**。
 
 插件 ID 为 `community-zh-hans`，可覆盖安装此前使用同一 ID 的版本。
@@ -14,12 +15,18 @@
 
 ## 资源
 
-- `strings.toml`：全部 1,663 个当前界面文案键。
-- `help.toml`：全部 1,882 条按工具和参数区分的高级说明。
-- `messages.toml`：3,035 条模块文案，包括礼物预设、增强功能和剑盾活动。
-- `templates.toml`：286 条动态消息模板，保留命名参数。
+- `strings.toml`：全部 1,791 个当前界面文案键。
+- `help.toml`：全部 2,708 条按工具和参数区分的高级说明，包含 5 条已有说明的修订。
+- `messages.toml`：3,043 条模块文案，包括礼物预设、增强功能和剑盾活动。
+- `templates.toml`：287 条动态消息模板，保留命名参数。
 - `terms.toml`：222 条界面术语和选项词语。
-- `docs/`：38 篇中文文档，使用本地化标题并保留章节锚点。未提供的页面使用上游英文文档。
+- `docs/`：35 篇中文文档，补充新版局域网、开发板独立分发、GTS 和操作指南。
+  未提供及尚未同步的协议研究页面完整回退到上游最新版英文，包括 `frlg_rom.md`、`pia.md`、
+  `sv_raid.md`；旧版译文仍保存在 3.0.0 的源码标签中。
+
+本版新增覆盖：活动分组与角色／连接方式选择、银行图鉴与批量操作、PKSM 银行导入、
+GTS 最多三种求换条件和异色筛选、查找训练家、无需开发板的局域网连接、开发板独立礼物分发、
+异色传说宝可梦倒数与头目标记。
 
 宝可梦、招式、特性、性格、属性、精灵球等游戏名称由上游 PKHeX 显示语言服务提供。
 本包不携带实体名称数据库，也不修改实体 ID、游戏记录、文件路径、昵称或连接码。
@@ -35,7 +42,7 @@
 
 ```bash
 python scripts/check_language_pack.py /path/to/zh-hans-plugin
-python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.0.0.pokeplugin
+python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.1.0.pokeplugin
 ```
 
 缺失文案、未知文案、参数差异、缺失高级说明和未知高级说明均应为 0。
@@ -49,7 +56,9 @@ python -m pytest tests -q
 ```
 
 测试会在临时数据目录中安装本包，检查格式、完整性、动态参数、文档、礼物及活动文案，
-并通过 PKHeX 验证中文游戏名称。不访问开发板，也不修改正常使用的设置。
+并通过 PKHeX 验证中文游戏名称。`tests/upstream_sources.json` 保存已审核的英文文案和工具帮助，
+使“键未变但英文说明已变化”也能被测试发现。活动选择测试同时核对语言变化前后的工具键、
+选项值和协议参数保持一致。不访问开发板，也不修改正常使用的设置。
 
 Source: [codex/zh-hans-pack](https://github.com/easyworld/pokeldn/tree/codex/zh-hans-pack).
 License: AGPL-3.0, see LICENSE.

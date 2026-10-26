@@ -1,4 +1,5 @@
 """Run against a compatible upstream checkout named by POKELDN_SOURCE."""
+import json
 import os
 from pathlib import Path
 import re
@@ -46,6 +47,12 @@ def test_current_upstream_catalog_has_no_missing_or_stale_resources():
                            "missing help": [], "unknown help": []}
 
 
+def test_english_source_contract_catches_changed_help_as_well_as_new_keys():
+    snapshot = json.loads((PACK / "tests/upstream_sources.json").read_text(encoding="utf-8"))
+    assert snapshot["strings"] == ENGLISH
+    assert snapshot["help"] == help_keys()
+
+
 def test_installable_archive_is_data_only_in_the_19_format(installed):
     assert not installed.findings
     with zipfile.ZipFile(installed.source) as archive:
@@ -83,6 +90,9 @@ def test_every_interface_template_formats_in_chinese_and_english(installed, lang
 def test_english_plural_suffix_does_not_leak_into_chinese(installed):
     for count, suffix in ((1, ""), (2, "s")):
         assert i18n.t("plugins.source_count", ENGLISH["plugins.source_count"], value0=count, value1=suffix) == f"{count} 个插件"
+        shown = i18n.t("gts.open_until_offer_answered_3c9d1f", ENGLISH["gts.open_until_offer_answered_3c9d1f"],
+                       value0="2026-10-26", value1=count, value2=suffix)
+        assert shown == f"开放至 2026-10-26；已回应 {count} 份交换提议。"
 
 
 def test_dynamic_templates_do_not_shadow_other_templates_or_translate_literal_fields(installed):
@@ -128,7 +138,7 @@ def test_gift_and_event_metadata_and_cjk_tooltips(installed):
 
 
 def test_real_pkhex_names_follow_display_language_without_changing_ids(installed):
-    from gui.localization import SERVICE, summary_text
+    from gui.localization import SERVICE, summary_text, summary_lines
     checks = {"national": (25, "皮卡丘"), "moves": (94, "精神强念"), "abilities": (1, "恶臭"),
               "types": (0, "一般"), "natures": (0, "勤奋"), "balls": (4, "精灵球")}
     for kind, (identity, expected) in checks.items():
@@ -138,6 +148,8 @@ def test_real_pkhex_names_follow_display_language_without_changing_ids(installed
     literal = "'旅人 {species} C:/Save/00012345'"
     shown = summary_text("Pikachu · Lv. 5 · shiny · " + literal)
     assert "皮卡丘" in shown and "异色" in shown and literal in shown
+    head, rest = summary_lines("Pikachu · Lv. 5 · shiny · alpha · " + literal)
+    assert "头目" in head and literal in rest
     assert i18n.message("Gives an Egg containing Pikachu.") == "赠送皮卡丘的蛋。"
 
 
@@ -166,7 +178,53 @@ def test_localized_document_titles_anchors_search_and_missing_page_fallback(inst
     page = docs.Page("frlg.md", "FireRed and LeafGreen", 1)
     assert HAN.search(docs.page_title(page))
     assert docs.document_path("plugins.md") == Path(docs.DOCS) / "plugins.md"
+    for file in ("frlg_rom.md", "pia.md", "sv_raid.md"):
+        assert docs.document_path(file) == Path(docs.DOCS) / file
+        assert docs.document_body(file)[1] is None
     assert docs.search(docs.index([page], "指南"), "宝可梦")
+
+
+def test_new_legendary_boost_options_and_countdown_are_chinese(installed):
+    from gui.localization import translate
+    from pokeldn.frlg.gift import builder
+    boost = builder.BOOST["hook-shiny-press"]
+    assert translate(boost.label) == "异色传说宝可梦"
+    for identity, label in builder.LEGENDARIES:
+        assert HAN.search(translate(label)), label
+        _, lines = boost.compose({"legendary": identity})
+        assert all(HAN.search(translate(line)) for line in lines)
+        assert not any(word in translate(lines[0]) for word in ("Mewtwo", "Articuno", "Zapdos", "Moltres"))
+
+
+def test_activity_labels_translate_but_tool_variants_and_protocol_values_stay_identical(tmp_path):
+    code = '''
+import json, os
+from pokeldn.app import i18n
+i18n.select(os.environ["TEST_PACK"])
+from pokeldn.app.catalog import GAMES, activities
+labels, identities = [], []
+for game in GAMES:
+    labels.append(game.name)
+    for activity in activities(game):
+        labels.append(activity.name)
+        for tool in activity.tools:
+            identities.append([game.key, activity.key, tool.key, list(tool.variant), list(tool.fixed)])
+            for _, axis, options in activity.axes(tool):
+                labels.append(axis.label)
+                labels.extend(option[1] for option in options)
+print(json.dumps({"labels":labels,"identities":identities}, ensure_ascii=False))
+'''
+    outputs = []
+    for pack in ("", "community-zh-hans"):
+        environment = dict(os.environ, PYTHONPATH=str(APP), PYTHONIOENCODING="utf-8", TEST_PACK=pack,
+                           POKELDN_PLUGINS=str(PACK), POKELDN_DATA=str(tmp_path / (pack or "english")))
+        result = subprocess.run([sys.executable, "-c", code], cwd=APP, env=environment,
+                                capture_output=True, text=True, encoding="utf-8", timeout=60)
+        assert result.returncode == 0, result.stderr
+        outputs.append(json.loads(result.stdout))
+    assert outputs[0]["identities"] == outputs[1]["identities"]
+    assert not any(HAN.search(value) for value in outputs[0]["labels"])
+    assert {"交换", "极巨大冒险", "极巨团体战", "太晶团体战", "连接方式", "你的游戏机"} <= set(outputs[1]["labels"])
 
 
 def test_selected_pack_loads_without_babel(tmp_path):

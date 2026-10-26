@@ -101,6 +101,16 @@ title: Let's Go 卡带与会话
  种子是 +0x0C 处的会话参数。来自 Let's Go 皮卡丘主机的 392 个数据报中的 392 个在 `ldn_session_key(game key, session param)` 下使用 pia4 IV 进行身份验证（三个字节
 `crc32(network id little-endian || host MAC)`，源 ID 字节 0，八字节标头随机数）。
 
+<a id="lan-mode"></a>
+## 局域网模式
+
+
+《Let's Go》1.0.2 含有一条实际不会进入的 LAN 路径。网络设置函数 `0x5dabb0` 在模式 0
+构建本地工厂、模式 1 构建 Nex 工厂、模式 2 构建 Lan 工厂（`0x5ddaf0`，构造器 `0xd14a20`）；
+对应启动函数 `0x4da710` 接受模式 1 或 2。但所有写入模式的位置都只传入 0 或 1：
+`0x115818` 传入 1，会话对象构造器将 `+0xa4` 置零，唯一的设置函数 `0x348eb0` 也只写入 0 或 1。
+英文选项、匹配、菜单和错误消息均不含 LAN 文案。
+
 <a id="the-link-code"></a>
 ## 链接代码
 

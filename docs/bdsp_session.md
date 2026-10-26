@@ -266,6 +266,16 @@ mac[1] << 24 | mac[0] << 16`）解包到扫描到的MAC `48:f1:eb:20:9b:22`。 P
 离开交换框不会发送离开消息：框的关闭回调 `TradeSelectPokeModel$$CheckComplete` [1.3.0 main 0x1c26810] 发送 `NetDataCurrentFlowCancelData{0}` (0x25, `SendCancel` 0x1c26bf0) 和
 `UnionTradeManager$$Cancel` [0x1c33780] 发送 `NetCharacterStateData{0}`，两者都在一个数据包中，无需等待合作伙伴。
 
+<a id="lan-mode"></a>
+## 局域网模式
+
+
+BDSP 1.3.0 不会初始化局域网模式。其 Pia 通过任天堂 Unity 插件工作；框架初始化过程
+（约 `0x16886d0`）虽然会为 LAN 模式构建 Lan 工厂（构造器 `0x169fdcc`），但该模式需要先注册 LAN 设置。
+`INL1.IlcaNetBase.PlatformInitialize` 注册互联网设置（`0x1e13800`），`PlatformInitialize2`
+注册本地设置（`0x1e139dc`）；没有代码调用 `PiaPlugin.RegisterInitializeLanSetting`
+（`0x227caf0`）或其原生实现 `0x227cac0`。`global-metadata.dat` 中也没有提到 LAN 的 C# 名称。
+
 <a id="measurement-methods"></a>
 ## 测量方法
 

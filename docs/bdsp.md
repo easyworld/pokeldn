@@ -34,6 +34,5 @@ title: 晶灿钻石／明亮珍珠
 <a id="unresolved"></a>
 ## 未解决
 
-- 游戏机屏幕上是否会显示替换后的问候名称（[问候中的名称](bdsp_protocol.md#the-name-in-the-greeting)）。
-- 未发起对战的实机收到 0x08 后会显示什么：代码会写入地址 0x18，既没有空指针检查，游戏模块也没有用户异常处理程序。此前发送的 0x08 使用了可靠传输窗口已接收过的序列号，因此尚未到达该路径（[对战流程](bdsp_protocol.md#the-battle-ladder)）。
+- 未招募对战时，反汇编似乎会写入地址 0x18，但实机《明亮珍珠》收到 0x08 后画面没有变化，其原因仍未解决（[对战流程](bdsp_protocol.md#the-battle-ladder)）。
 - 非地下大洞窟会话主机的实机是否接受 pokeldn 发来的 0x61；已测量的地下会话均由游戏机担任主机，pokeldn 尚未主持此类会话。公共分发逻辑和 `UgNetworkManager` 处理程序都不筛选发送方（[协议页面](bdsp_protocol.md#the-grand-underground)）。

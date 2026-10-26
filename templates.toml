@@ -1,4 +1,4 @@
-# UTF-8. pokeldn plugin API 1.9.
+# UTF-8. pokeldn language resource format 1.9.
 " and {value0} more" = "，另有 {value0} 张"
 " offered for {value0}" = "，用于交换 {value0}"
 "A .wc3 has 1420 or 1252 bytes; this file has {value0}." = ".wc3 文件应为 1420 或 1252 字节，此文件为 {value0} 字节。"
@@ -33,6 +33,7 @@
 "Could not clear local files: {value0}" = "无法清理本地文件：{value0}"
 "Could not read the options: {value0}" = "无法读取选项：{value0}"
 "Could not read {value0}: {value1}" = "无法读取 {value0}: {value1}"
+"Counts down to the next shiny {term_species}, top right of the screen" = "在屏幕右上角倒数至下一次异色{term_species}出现"
 "Downloading {value0} MB" = "正在下载 {value0} MB"
 "Downloading {value0} of {value1} MB" = "正在下载 {value0} / {value1} MB"
 "Drawn as the game draws them{value0}" = "由游戏随机安排{value0}"

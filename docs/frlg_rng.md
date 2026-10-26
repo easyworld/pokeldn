@@ -171,6 +171,9 @@ distance    2,595 turns
 平均值 +9.2 帧（取消的固定偏移），标准偏差 4.5，范围 11。所有四个转动计数都是偶数。
 
 每约 8192 帧（约 137 秒）到达一个异色帧；在 4.5 帧展开的情况下，压力机大约有 9% 的时间击中选定的帧，因此手动瞄准异色需要大约 25 分钟，而随机遭遇大约需要 23 小时。准确测量未命中。 `pokeldn/frlg/rom/rng_countdown.py`为倒计时； `--aimed-at STATE` 将未命中转换为带符号的帧计数。当RAM脚本槽持有神奇反馈时，这仍然是路线。
+在脚本等待按键时，钩子也可以在精确的目标帧代为按键，而不写入 `gRngValue`：
+参见 [`shiny-press`](frlg_rom.md#shiny-shiny-press-ivs-noencounter)，即应用中的“异色传说宝可梦”。
+
 <a id="the-stub-that-does-the-search"></a>
 ## 执行搜索的存根
 

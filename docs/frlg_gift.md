@@ -60,6 +60,15 @@ title: 神秘礼物
                --keys PROD_KEYS --gift beast-cutscene --flag-id 1005
     (them) join the host when it appears; YES on the replace-card prompt if one shows
  无线收发设备设置：[ESP32 无线收发设备](hardware_esp32.md)。 `bin/frlg_mg_host.py` 每次运行服务一台游戏机，并在其离开 LDN 后停止（[主机实现](frlg_host.md)，关闭和清理）；第二台游戏机需要重新运行。 `tests/test_mystery_gift_flow.py` 对块接收门、`MGL_Receive` 和每帧一个客户端命令进行建模； `tests/test_mystery_gift_end_to_end.py` 添加受损的可靠/RFU 路径。
+`--save-to-board` 会改为将礼物保存到 ESP32 开发板并退出。此后使用任意 USB 充电器供电，
+开发板即可为每台加入的游戏机独立执行此会话，一次服务一台，并使用各卡带对应的数据。
+参见[主机镜像](hardware_esp32.md#a-host-image)。
+
+```bash
+POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/frlg_mg_host.py --live \
+    --keys PROD_KEYS --gift celebi --save-to-board
+```
+
 <a id="what-the-link-can-carry"></a>
 ## 链接可以携带什么
 

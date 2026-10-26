@@ -473,6 +473,15 @@ Pia 头部与游戏主机自身礼物通告的开头相同（[《剑》的会话
 | 7 | 食材 | 100 |
 | 8 | 重要物品 | 64 |
 
+<a id="the-board-as-a-gift-beacon"></a>
+## 开发板独立广播礼物
+
+`bin/swsh_gift_host.py --save-to-board`（界面的“保存在开发板上”）将卡片的广播循环保存到
+ESP32 开发板并退出。使用任意 USB 充电器供电后，开发板会独立广播卡片，按启动器的
+`--dwell` 发送三个片段，直到应用再次连接。参见[独立信标](hardware_esp32.md#portable-beacon)。
+每次上电使用相同网络与密钥，但广播 nonce 每次从随机值开始。
+实机从仅由开发板广播的信标领取卡片，尚未完成测量。
+
 <a id="official-event-cards"></a>
 ## 官方活动卡
 

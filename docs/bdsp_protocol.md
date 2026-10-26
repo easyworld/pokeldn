@@ -143,7 +143,7 @@ title: 游戏协议
 <a id="sending-messages-the-game-acts-on"></a>
 ## 发送游戏所作用的消息
 
-可靠的序列ID与游戏机自己的发送共享，并且在其确认名称的ID下方的消息被默默地丢弃。每次发送前立即读取 id。
+可靠的序列ID与游戏机自己的发送共享，并且在其确认名称的ID下方的消息被默默地丢弃。每次发送前立即读取 id。零售版《明亮珍珠》会处理使用己方最后一条消息序列号的回复，但丢弃更低序列号的回复：状态消息为 27、宝可梦消息为 28 时，以 27 返回的宝可梦会被确认，却不会进入检查。
 
 按确认序列发送的加入将起作用：在间隔 0.4 秒发送的 15 个加入中，游戏机请求 0x04 12 到 15，即第一次加入后的前 0.10 到 0.57 秒。
 `--room-pattern fixed` 在第一个请求时停止，为每个连接提供 `--join-wait` 秒（默认 1.0）。
@@ -340,7 +340,7 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 `ChangeStateJob::StartupSessionBegin`（`0x01690c70`）会直接进入 StartupSession；若框架 +0x7c 为 0，则先经过 `StartupSessionJob`（`0x0168ec7c`，设置位于任务 +0x70）和 `WaitStartupSessionLdnInitialize`（`0x01690e30`）。`StartupSessionJob` 只有一个实际执行的步骤 InitializeLdn（`0x0168ed74`），不会复制 PlayerInfo。法语游戏机发送的 30 个 PlayerInfo（17 个连接响应、13 个连接请求）中，字节 0x7A 均为 3，字节 0x51 均为 0。
 
 `bin/bdsp_connect.py` 和 `bin/bdsp_host.py` 都使用 `pokeldn/bdsp/host.py` 构建 PlayerInfo
-`player_info`（编码1，UTF-8名称，字节0x51 0）并发送`--language`，默认3；桌面应用程序通过其培训语言。 3岁以下，11个字符的名字显示完整。
+`player_info`（编码1，UTF-8名称，字节0x51 0）并发送`--language`，默认3；桌面应用程序通过其培训语言。 语言值为 3 时，十一字符的名称可完整显示。语言值为 1 时，法语实机《明亮珍珠》将十一字符名称替换为“Perlo.”，问候语为“Konnichiwa!”。
 
 替换取决于对话角色的 `CharaData.cassetVersion`，其字节 2
 `NetJoinData`，这两个呼叫者的问候语（`SwitchSpokenStateMine` 0x01e53b58，
@@ -433,6 +433,8 @@ cassetVersion, 1)` [0x01e54ae8]。 0x07 无需状态测试 [0x01e52610]，即可
 流程表中的 0x08 是在已经招募对战的主机上测得的。客户端已使用过的序列号会被可靠窗口丢弃（[Pia 页](pia.md#what-the-receiver-discards-in-silence)）；向尚未招募对战、正在对话的主机发送的 22 条消息，使用了客户端此前某条 0x64 回复的序列号，因此没有一条进入空指针路径。
 
 只有主机自身的 0x04 表明状态为 3 且 `isRecruiment` 为 1 时，才可发送 0x08。
+
+按此反汇编推断，若本次进入房间后尚未招募对战，0x08 会通过空指针写入地址 0x18。但实机《明亮珍珠》在交换画面与训练家卡片交换中都确认了 `08 00 01 00`，画面却没有变化，是否实际执行到接收器仍不明确。除非游戏机自己的 0x04 表明状态为 3 且 `isRecruiment` 为 1，否则不要发送 0x08。
 
 <a id="the-grand-underground"></a>
 ### 地下大洞窟

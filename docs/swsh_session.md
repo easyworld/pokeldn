@@ -238,6 +238,37 @@ UPDATE_MESH 启动后0.07秒安静。
 - START_HOST_MIGRATION 不携带任何序列（其串行器 `0x017abc60` 在 0xC 处写入 0）并且没有重新发送作业：没有任何内容对其进行确认。
 
 `bin/swsh_connect.py --answer-migration --update-mesh --leave-with-host`（在 `--preset trade` 中）发送完成和 UPDATE_MESH 作为主机，确认主机迁移更新会话并在 START_HOST_MIGRATION 上离开网络。
+<a id="lan-mode"></a>
+## 局域网模式
+
+
+在《剑》的“选项”中同时按下 L、R 与左摇杆，可以启用 LAN 模式。游戏会提示
+“Mode réseau local activé”，并说明仅保证极巨团体战正常工作。Pia 此时通过普通 IP 网络通信，
+无需无线开发板，YY 通讯的连接交换搜索也可以在此网络上工作。
+
+`bin/swsh_connect.py --lan auto`（界面的“交换 → 连接方式 → Wi-Fi（无需开发板） → 游戏机主持”）
+会搜索所有本地 /24 子网。`bin/swsh_host.py --lan` 则主持游戏机可加入的交换会话。
+两者均已与 Switch 2 上的零售版《剑》通过 Wi-Fi 完成交换。游戏机连续静默达到
+`--lan-quiet`（默认 3 秒）后，加入方判定其离开。电脑有多个地址时，主机若未指定
+`--our-ip`，会等待游戏机首次搜索，再选择该子网中的本机地址。
+
+YY 通讯的附近玩家列表搜索最多 4 人的会话；交换的随机匹配搜索则寻找场景 60001、最多 2 人的会话。
+后者会加入收到的首个匹配会话，没有结果时自行主持。团体战场景为 60006、最多 4 人；
+极巨大冒险场景为 50000、最多 4 人，其搜索还包含特定属性条件。
+
+主机指定 `--raid-boss`、`--raid-event` 或 `--lair-legendary` 时，使用对应大厅数据主持 4 人会话。
+模拟器中的《盾》与 Switch 2 上的实机《剑》均已列出、加入并进行团体战。
+加入方指定 `--preset raid` 或 `--preset lair` 可搜索相应场景；实机冒险已完成租借宝可梦选择，
+并加载首场对战。冒险主机会复制同类搜索中的属性，使游戏机能够匹配。
+
+<a id="the-link-code-over-lan"></a>
+### 局域网中的连接码
+
+LAN 匹配实现不读取保存连接码的字段 `+0x278`，创建、搜索和随机加入设置中也没有密码。
+因此 LAN 模式下有连接码和无连接码的交换发送相同搜索，可能加入任意符合条件的会话，
+界面的连接码不会限制这类局域网交换。
+完整会话布局与测量记录见[当前英文原文](https://github.com/Decryptu/pokeldn/blob/7793069/docs/swsh_session.md#lan-mode)。
+
 <a id="operational-notes"></a>
 ## 操作注意事项
 
