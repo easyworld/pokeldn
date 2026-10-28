@@ -178,10 +178,21 @@ def test_localized_document_titles_anchors_search_and_missing_page_fallback(inst
     page = docs.Page("frlg.md", "FireRed and LeafGreen", 1)
     assert HAN.search(docs.page_title(page))
     assert docs.document_path("plugins.md") == Path(docs.DOCS) / "plugins.md"
-    for file in ("frlg_rom.md", "pia.md", "sv_raid.md"):
+    for file in ("frlg_rom.md", "pia.md", "sv_raid.md", "rse_switch_build.md"):
         assert docs.document_path(file) == Path(docs.DOCS) / file
         assert docs.document_body(file)[1] is None
     assert docs.search(docs.index([page], "指南"), "宝可梦")
+
+
+def test_split_emerald_docs_keep_current_english_section_links(installed):
+    from gui.views import docs
+    from gui.views.widgets import heading_sections
+    for name in ("rse.md", "rse_gift.md", "rse_link.md"):
+        body, reference = docs.document_body(name)
+        english = {key for key, title, _ in heading_sections(reference) if title}
+        translated = {key for key, title, _ in heading_sections(body, reference=reference) if title}
+        assert english <= translated, (name, english - translated)
+    assert "五轮" in docs.document_body("rse_link.md")[0]
 
 
 def test_new_legendary_boost_options_and_countdown_are_chinese(installed):
@@ -194,6 +205,24 @@ def test_new_legendary_boost_options_and_countdown_are_chinese(installed):
         _, lines = boost.compose({"legendary": identity})
         assert all(HAN.search(translate(line)) for line in lines)
         assert not any(word in translate(lines[0]) for word in ("Mewtwo", "Articuno", "Zapdos", "Moltres"))
+        instructions = translate(lines[1])
+        if identity == "mewtwo":
+            assert "自行按 A" in instructions and "不要按任何按钮" in instructions
+            assert "按住 B" not in instructions
+        else:
+            assert "上方向键" in instructions and "按住 B" in instructions
+        i18n.select()
+        assert translate(lines[1]) == lines[1]
+        i18n.select(installed.id)
+
+
+def test_new_help_covers_rom_probe_and_emerald_five_rounds(installed):
+    for tool in ("frlg-gift", "rse-gift"):
+        assert "软重置" in i18n.help_text(tool, "--buffer-script", "missing")
+        assert "--write-unsafe" in i18n.help_text(tool, "--rom-fold-n", "missing")
+        assert "EMER" in i18n.help_text(tool, "--rom-fill-base", "missing")
+    for tool in ("frlg-trade-host", "frlg-trade-online", "rse-trade-host", "rse-trade-online"):
+        assert "--version emerald 时为 5 轮" in i18n.help_text(tool, "--save-rounds", "missing")
 
 
 def test_activity_labels_translate_but_tool_variants_and_protocol_values_stay_identical(tmp_path):

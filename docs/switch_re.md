@@ -94,6 +94,20 @@ NCA 部分在标题密钥下是 AES-128-CTR（计数器：该部分的 CTR 值�
 ## 调用nnSdk
 
 对 nnSdk 的调用会经过一个由 JUMP_SLOT 重定位填充的 GOT 槽，命名该符号：交叉引用槽 (`tools/switch/nso_imports.py`)，然后计算其一个 PLT 存根的调用者。
+<a id="trainer-names"></a>
+## 训练家姓名
+
+每个 Switch 游戏的训练家记录都在姓名旁保存语言 ID（PKHeX LanguageID：1 日语、2 英语、3 法语、4 意大利语、5 德语、7 西班牙语、8 韩语、9 和 10 中文），游戏按该语言的字体绘制姓名。实机日文《朱》中，语言为英语（2）的记录把假名姓名 キリコ 显示为较窄的半角字形，而日文存档中的相同姓名使用全角字形。`pokeldn.trainer_language.for_name` 按书写内容选择 ID：假名用日语，谚文用韩语，汉字在记录原本为中文时保持中文，否则用日语；拉丁字母姓名保持原有 ID。各游戏的身份写入器均应用此规则。
+
+| 游戏 | 语言位置 |
+|---|---|
+| 朱／紫 | 记录 1 `+0x11` |
+| 传说 Z-A | 1400 身份值的第三个整数，姓名前一字节 |
+| 剑／盾 | MyStatus `+0xA7`、TrainerCard `+0x1B`、配置的语言位 |
+| 晶灿钻石／明亮珍珠 | PlayerInfo、`TradeTranerData` 的语言字节 |
+| Let's Go | 第一条消息的 MyStatus `+0x35` |
+| 传说 阿尔宙斯 | 数据交换记录 `+0x22` |
+
 <a id="the-tools"></a>
 ## 工具
 

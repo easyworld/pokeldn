@@ -91,6 +91,8 @@ POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/frlg_mg_host.py --live \
 
 下一个神奇关联重新绑定插槽（`magic` 保持 51，坐标 0xFF），卡片回来；缓冲区脚本不发送任何卡，并保留插槽。通过绑定脚本交付的普通卡会重写+0x32E0处的卡和+0x361C处的RAM脚本，两者都在一个保存扇区中，并且SaveBlock2中没有任何内容；经过测量，SaveBlock1 的 15872 个字节中有 564 个不同。
 
+存档本身也可携带同一组合：`pokeldn/frlg/save/save_inject.py` 的 `inject_gift`、`build_ram_script_struct` 向原始存档写入有效卡片和 RamScript。通过神奇卡片导入的存档随后可在对应 NPC 处运行脚本，无需在线主机。脚本的 `callnative` 操作码可进入客户 ARM 代码，`resident-save` 礼物借此绑定 MOM 的加载器。
+
 该插槽的校验和（`ramScript.checksum`，SaveBlock1 + 0x361C）是`CalcCRC16WithTable`
 `sizeof(RamScriptData)`，即 1000 字节：999 个声明字节和 1 个填充字节
 `InitRamScript` 首先将 [script.c:500] 归零。 `CalculateRamScriptChecksum` 通过 `250 << 2`（`0x0806D43C` BPRE、`0x0806D5A0` BPRF）。每个游戏写入的槽读回都携带 1000 字节的 CRC。 CRC 仅覆盖 999 字节的槽在第一次与其对象对话时被 `GetRamScript` 擦除

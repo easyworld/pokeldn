@@ -344,7 +344,7 @@ RTTI 名称来自二进制文件的 type_info 记录（`tools/switch/rtti_names.
 |开幕|加入响应、首台列表、频道表、双流打开、时钟应答、Net 0x50 以及座席后的所有 44 条记录（零售主机：0.3 秒内）；钥匙-0x80 在游戏机的交换屏幕绘制之前打开（[打开频道](#opening-the-channel)) |
 
 每个会话的四十个游戏广告字节变化：零，或+0x21处的非零值（`648cf4`，
-`8170f0` 和 `fb149700` 见），其余为零。对于 `--channel 6`、`--player-name RyuPlayer` 和 `--host-player-id
+`8170f0` 和 `fb149700` 见），其余为零。对于 `--channel 6`、将 `--player-name` 设为模拟主机的玩家姓名，以及 `--host-player-id
 00000000000000010000000000000000`，除了会话 id 之外，NetworkInfo 还匹配实时模拟的朱主机。通过这些设置，游戏机的第一个加入保持不变；在席位之上失败的会话会导致重复连接（测量十六到五十七次）。
 
 <a id="lowest-pending-and-the-gap-at-5-and-6"></a>
