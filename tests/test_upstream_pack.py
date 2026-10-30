@@ -253,7 +253,29 @@ print(json.dumps({"labels":labels,"identities":identities}, ensure_ascii=False))
         outputs.append(json.loads(result.stdout))
     assert outputs[0]["identities"] == outputs[1]["identities"]
     assert not any(HAN.search(value) for value in outputs[0]["labels"])
-    assert {"交换", "极巨大冒险", "极巨团体战", "太晶团体战", "连接方式", "你的游戏机"} <= set(outputs[1]["labels"])
+    assert {"交换", "极巨大冒险", "极巨团体战", "太晶团体战", "连接方式", "pokeldn", "主持", "加入"} <= set(outputs[1]["labels"])
+
+
+@pytest.mark.parametrize("line, action, retry", [
+    ("[esp32] The board's USB connection failed", "board", True),
+    ("prod.keys has no master_key_12", "settings", False),
+    ("the board could not join", "", True),
+    ("Resource busy", "board", False),
+])
+def test_run_failure_translates_text_but_preserves_actions_and_retry(installed, line, action, retry):
+    from pokeldn.app.failure import Watch
+    results = []
+    for language in (installed.id, ""):
+        i18n.select(language)
+        watch = Watch(True)
+        watch.line(line)
+        result = watch.verdict(1, False)
+        assert (result.action, result.retry) == (action, retry)
+        assert bool(HAN.search(result.text)) == bool(language)
+        if "master_key_12" in line:
+            assert "master_key_12" in result.text
+        results.append(result.text)
+    assert results[0] != results[1]
 
 
 def test_selected_pack_loads_without_babel(tmp_path):

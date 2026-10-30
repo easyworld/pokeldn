@@ -730,3 +730,9 @@ Reliable 0x7C（一个站）和BroadcastReliable 0x80（每个站）的端口2�
 - 哪个条件阻止了加入 `bin/sv_host.py` 的游戏机：它确认了公告，却没有发送端口 2 加入消息。此消息仅由 BoxTrade 状态 4（`0x1e51c40`）生成。此前状态 1 无计时器地等待两份完整身份数据块（`0x1e51ae4`）；状态 4 等待最多 15 秒，要求存在仅由类型 7 创建的种类 1 中继槽（`0x1e51c10`），主机或本站 ID 的离开事件会清除此槽（`0x12fbc68`、`0x12fbc84`）。0x80 窗口在游戏轮询器读取公告前就确认它，因此此确认无法区分上述条件。唯一记录的案例早于主机身份重试功能。`bin/sv_host.py --announce` 在公告后 20 秒仍未收到 `0x7c` 端口 2 消息时报告条件：以 `the state-1
   gate` 结尾的行列出未确认的身份记录（[流中的第一份记录携带 INITIALIZED](#the-first-record-on-a-stream-carries-initialized)），以 `the state-4 gate` 结尾则表示全部已确认；抓包以 `port2_gate` 行记录。
 - 玩家退出到首条离开消息之间，游戏机在做什么：现有抓包都没有标记按键时间。一次加入端入座中，取消消息 `8000040100` 比类型 7 早 1.5 秒。
+
+
+<a id="ending-after-queued-trades"></a>
+## 队列交换完成后结束
+
+--hold-after-trade N 下，加入方在队列最后一次交换后 N 秒发送类型 3 离开消息，与 --hold 到期时相同；主机按 --seconds 到期时的方式关闭网络。默认在游戏机离开后退出。

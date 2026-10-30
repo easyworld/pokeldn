@@ -111,3 +111,9 @@ stateDiagram-v2
 | `pokeldn/frlg/link/host_trade.py` | `HostTradeEngine`，`HostTradeTiming` |
 | `pokeldn/frlg/link/linkplayer.py` | LinkPlayer 和训练卡编码器 |
 | `pokeldn/ldn/ldntrace.py` |可选 JSONL 诊断 |
+
+
+<a id="ending-after-queued-trades"></a>
+## 队列交换完成后结束
+
+房间仅在双方选择 CANCEL 后正常结束，主机无法直接让游戏机退出。--hold-after-trade N 使交换启动器在队列最后一次交换后等待 N 秒，再执行与 Ctrl-C 相同的拆除流程；若玩家尚未取消，游戏机会显示无线连接错误，按 A 返回柜台并重新加载存档。已完成的交换已保存在该存档中。

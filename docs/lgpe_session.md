@@ -792,3 +792,9 @@ obj+0x188  +0x10  the received Pokemon, [obj+0xf0]
 | `0x51c1e0` |删除一条消息，其计数在 [0xC] 不超过发件人的最后 |
 
 元素偏移：+0x34 站、+0x40 状态、+0x50 时钟、+0x7a0 发送时间、+0x32c 结果。
+
+
+<a id="ending-after-queued-trades"></a>
+## 队列交换完成后结束
+
+加入方的 --hold-after-trade N 在队列最后一次交换后 N 秒执行离开；不在交换中时 --connect-seconds 或 --hold 到期也执行离开。未应答的离开请求在首次发送后 5 秒放弃，退出不解除交换锁。主机在 --seconds、--hold-after-trade N 或 Ctrl-C 时通过 HostLeaver 离开：克隆状态 4、参数 3，每 100 毫秒重发释放消息，最多 2.5 秒，然后开始迁移。游戏机离开或 20 秒后停止网络；再次 Ctrl-C 立即停止。

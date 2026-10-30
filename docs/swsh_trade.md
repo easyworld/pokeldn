@@ -520,3 +520,9 @@ French 剑 1.3.2 对已编辑记录的作用：
 
 收到的宝可梦在0xC4处带有`CurrentHandler` 1，在
 `HandlingTrainerName` at 0xA8 发送者的初训家。 `--offer-echo` 交回游戏机自己的记录，因此只有不同的种类才能证明转移。
+
+
+<a id="ending-after-queued-trades"></a>
+## 队列交换完成后结束
+
+任一启动器的 --hold-after-trade SECONDS 可在最后一次队列交换完成后指定秒数结束任务，详见[离开流程](swsh_session.md#leaving)。

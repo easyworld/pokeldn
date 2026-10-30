@@ -922,3 +922,9 @@ Pia 内部没有计时器先于第一个类型 3（[pia.md](pia.md)，离开会�
 
 - 析构（模拟站点中为步骤 1 后 3.36 秒）到地图出现（实机类型 3 后 3.77 秒）之间的 0.4 秒做什么；模拟器不提供地图标记。
 - 盒子代码的哪些流程调用 `0x26dcc74`（`0xc17ce0`、`0xc17e8c`）。
+
+
+<a id="ending-after-queued-trades"></a>
+## 队列交换完成后结束
+
+bin/pla_host.py --hold-after-trade N 在队列最后一次交换后 N 秒，向各站点发送与 --leave-after 相同的离开消息并结束任务。
