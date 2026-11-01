@@ -30,9 +30,10 @@ title: 神秘礼物
 `MG_LINK_BUFFER_SIZE` 和 `SVR_COPY_SAVED_RAM_SCRIPT` 从不设置 `ramScriptSize`
 [mystery_gift_server.c:275]，因此RAM脚本和`CLI_SEND_READY_END`是完整的1024字节消息。 CRC 覆盖填充的缓冲区。
 
-块调步没有确认。 `SEND_BLOCK_INIT` 被忽略，除非接收器的插槽是
-`RECV_STATE_READY` [link_rfu_2.c:1146]，仅由游戏机的`MGL_ResetReceived`恢复。父节点自己的`MGL_HasReceived`标志立即被设置为[link_rfu_2.c:1044]；四VBlank倒计时
-[link_rfu_2.c:1220] 仅适用于子节点区块。 `MysteryGiftTiming.inter_block_gap_frames` 为 36：游戏机模型每块最多占用 13 帧，没有任何内容丢失，在传输死亡之前为 16 帧。掉落的方块会让游戏机永远等待。游戏机发送遵循[镜像规则](frlg_link.md#row-one-of-the-parents-table-is-the-consoles-own-command-mirrored-back)时停顿。
+数据块节奏没有确认：只有接收槽处于 `RECV_STATE_READY` 时，游戏机才接受 `SEND_BLOCK_INIT` [link_rfu_2.c:1146]。`MysteryGiftTiming.inter_block_gap_frames` 为 36；丢块会使游戏机一直等待。客户端跨多个帧调用的载荷会一直占用接收槽；服务端发送此类消息时，用 `after` 指定最后一个数据块发出后游戏机仍忙碌的帧数。下一条消息的头部块可以在此期间到达，但主机会等游戏机空闲后才发送第二块。
+
+游戏机发送时的停顿遵循[镜像规则](frlg_link.md#row-one-of-the-parents-table-is-the-consoles-own-command-mirrored-back)。
+
 <a id="modules"></a>
 ### 模块
 

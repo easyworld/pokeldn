@@ -338,7 +338,7 @@ mode)` 构建它们，仅通过 `0x00b1cdd0` 从 `StateBtlSpotTop` (`0x00b23080`
 `SetMode` (`0x01096d10`, `str w1,[x0,#0x70]`) 由 Link 交换 ([session](swsh_session.md#how-a-searching-sword-finds-a-partner)) 用 2 调用，用 0, 1, 6 调用。
 
 训练家员姓名出现四次（我的状态、训练家员卡、队伍记录、个人资料）；
-`pokeldn/swsh/trade_payload.rewrite` 移动所有四个，并交换屏幕名称该训练家。空的队伍槽位为零； 0x810 处的计数一致。
+`pokeldn/swsh/trade_payload.rewrite` 移动所有四个，并交换屏幕名称该训练家。空队伍槽位是全零记录，可以直接发送全零字节，也可以在加密常数为 0 时加密后发送；两者解密后均为零，且与 0x810 处的数量一致。仅凭加密常数为 0 不能判定槽位为空：HOME 3.0.0 以前的礼物沿用卡片中的零加密常数，例如捷拉奥拉礼物 WC8 9011 [PKHeX `WC8.cs`]。`pokeldn.gen8.is_empty` 检查解密后的记录。
 
 <a id="the-pk8"></a>
 ## PK8

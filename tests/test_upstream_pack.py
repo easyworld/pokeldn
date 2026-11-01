@@ -153,6 +153,27 @@ def test_real_pkhex_names_follow_display_language_without_changing_ids(installed
     assert i18n.message("Gives an Egg containing Pikachu.") == "赠送皮卡丘的蛋。"
 
 
+def test_encounter_context_does_not_override_identically_named_types_or_abilities(installed):
+    from gui.localization import SERVICE, translate
+    from gui.views.pokemon import encounter_label
+    assert translate("Normal") == "一般"
+    assert translate("Grass") == "草"
+    assert translate("Static") == "静电"
+    trainer = {"ot": "POKELDN", "tid": 12345, "sid": 54321, "language": 2, "gender": 0}
+    for game in ("frlg", "lgpe", "swsh", "bdsp", "pla", "sv", "za"):
+        english = pokemon.SERVICE.encounters(game, 25, trainer)
+        shown = SERVICE.encounters(game, 25, trainer)
+        assert [e["key"] for e in shown] == [e["key"] for e in english]
+        for entry in shown:
+            label = encounter_label(entry, True)
+            assert not any(word in label for word in ("Wild Encounter", "Static Encounter", "Event Gift", "Stock Raid", "Scarlet", "FireRed")), label
+    source = "Wild Encounter (SW) [HiddenMain] - Normal"
+    assert "晴天" in translate(source)
+    assert "固定遭遇" == translate("Static Encounter")
+    i18n.select()
+    assert translate(source) == source and translate("Static") == "Static"
+
+
 def test_custom_firered_giver_and_location_summaries_translate_nested_module_values(installed):
     from gui.localization import gift_description
     from pokeldn.frlg.gift import builder

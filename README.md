@@ -1,13 +1,13 @@
 # pokeldn 简体中文语言插件
 
 独立数据插件，适用于上游保留的 **插件 API 1.9** 语言包格式。
-版本 3.3.0 对应上游 `main` 的 `30cbb0a4`（pokeldn 0.48.0，主程序插件 API 1.12）。
+版本 3.4.0 对应上游 `main` 的 `f41c0f7b`（pokeldn 0.53.0，主程序插件 API 1.12）。
 本包只需要既有的 1.9 语言包能力，不需要 Babel 或额外的 Python 运行代码。
 
 ## 安装
 
-从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.3.0)
-下载 `community-zh-hans-3.3.0.pokeplugin`，在程序的 Plugins 页面安装。
+从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.4.0)
+下载 `community-zh-hans-3.4.0.pokeplugin`，在程序的 Plugins 页面安装。
 然后在 Settings → App language 选择“简体中文”，**重启 pokeldn 后生效**。
 
 插件 ID 为 `community-zh-hans`，可覆盖安装此前使用同一 ID 的版本。
@@ -15,18 +15,23 @@
 
 ## 资源
 
-- `strings.toml`：全部 1,835 个当前界面文案键。
-- `help.toml`：全部 2,877 条按工具和参数区分的高级说明，包含本版 48 条已有说明的修订。
-- `messages.toml`：3,044 条模块文案，包括礼物预设、增强功能和剑盾活动。
-- `templates.toml`：287 条动态消息模板，保留命名参数。
-- `terms.toml`：222 条界面术语和选项词语。
+- `strings.toml`：全部 1,874 个当前界面文案键。
+- `help.toml`：全部 2,892 条按工具和参数区分的高级说明，包含本版 15 条新增高级说明。
+- `messages.toml`：3,065 条模块文案，包括礼物预设、增强功能和剑盾活动。
+- `templates.toml`：320 条动态消息模板，保留命名参数。
+- `terms.toml`：271 条界面术语和选项词语。
 - `docs/`：37 篇中文文档，包含新版绿宝石交换、神秘礼物及操作指南。
   未提供及尚未同步的协议研究页面完整回退到上游最新版英文，包括 `frlg_rom.md`、`pia.md`、
   `sv_raid.md`；旧版译文仍保存在 3.0.0 的源码标签中。
 
-本版新增覆盖：银行批量传送与交换队列、连接状态、故障原因与重试提示、密钥文件检查、
-设置损坏恢复和大字体选项。角色按钮以 pokeldn 为主体显示主持／加入。
-开发板像素屏幕保留固件原有内容。未翻译的研究页面按整篇回退英文。
+本版新增覆盖：遭遇来源、形态与糖饰、太晶属性、超极巨化和极巨化等级、一键满值、
+各游戏独立训练家、导入记录的初训家变更说明及极巨团体战首领限制。
+高级帮助补齐 ROM 传输参数和保留首领原始数据的选项。开发板像素屏幕保留固件原有内容。
+未翻译的研究页面按整篇回退英文。
+
+上游 0.53.0 的遭遇地点、版本名、遭遇类别和初训家变更备注存在显示层漏翻，
+修正已提交 [上游 PR #47](https://github.com/Decryptu/pokeldn/pull/47)。本包仍可安装于原版 0.53.0；
+这些位置需程序侧修正后才能完整使用显示语言，本地预览包含修正。
 
 宝可梦、招式、特性、性格、属性、精灵球等游戏名称由上游 PKHeX 显示语言服务提供。
 本包不携带实体名称数据库，也不修改实体 ID、游戏记录、文件路径、昵称或连接码。
@@ -42,7 +47,7 @@
 
 ```bash
 python scripts/check_language_pack.py /path/to/zh-hans-plugin
-python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.3.0.pokeplugin
+python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.4.0.pokeplugin
 ```
 
 缺失文案、未知文案、参数差异、缺失高级说明和未知高级说明均应为 0。
