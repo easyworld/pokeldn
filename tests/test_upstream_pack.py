@@ -174,6 +174,50 @@ def test_encounter_context_does_not_override_identically_named_types_or_abilitie
     assert translate(source) == source and translate("Static") == "Static"
 
 
+def test_wild_mark_names_and_return_trade_card_are_localized_without_changing_ids(installed):
+    from gui.localization import SERVICE, translate
+    from pokeldn import trade_back
+    request = {"cmd": "wild_species", "game": "sv", "species": 25, "form": 0}
+    english = pokemon.SERVICE._ask(request)["marks"]
+    chinese = SERVICE._ask(request)["marks"]
+    assert len(chinese) == 42
+    assert [m["id"] for m in english] == [m["id"] for m in chinese]
+    assert all(HAN.search(m["name"]) for m in chinese)
+    assert not any(HAN.search(m["name"]) for m in english)
+    assert 58 in {m["id"] for m in chinese}
+    assert translate(trade_back.CARD_TITLE) == "交换后送回"
+    assert "再次交换" in translate(trade_back.CARD_LINE)
+    i18n.select()
+    assert translate(trade_back.CARD_LINE) == trade_back.CARD_LINE
+
+
+def test_version_trainer_labels_change_language_but_selected_trainer_stays_the_same(tmp_path):
+    code = '''
+import json, os
+from pokeldn.app import i18n
+i18n.select(os.environ["TEST_PACK"])
+from gui.views.settings import TRAINER_GAMES
+from pokeldn.app.settings import Settings
+selected = Settings(tid=12345, sid=54321, per_game_trainer=True, game_trainers={"firered":{"ot":"RED"},"leafgreen":{"ot":"GREEN"}}, played={"frlg":"leafgreen"})
+print(json.dumps({"choices":TRAINER_GAMES, "picked":selected.version("frlg"), "split":selected.split("frlg"), "trainer":selected.trainer("frlg")}, ensure_ascii=False))
+'''
+    results = []
+    for pack in ("", "community-zh-hans"):
+        environment = dict(os.environ, PYTHONPATH=str(APP), PYTHONIOENCODING="utf-8", TEST_PACK=pack,
+                           POKELDN_PLUGINS=str(PACK), POKELDN_DATA=str(tmp_path / (pack or "english")))
+        result = subprocess.run([sys.executable, "-c", code], cwd=APP, env=environment,
+                                capture_output=True, text=True, encoding="utf-8", timeout=60)
+        assert result.returncode == 0, result.stderr
+        results.append(json.loads(result.stdout))
+    assert [key for key, _ in results[0]["choices"]] == [key for key, _ in results[1]["choices"]]
+    assert not any(HAN.search(label) for _, label in results[0]["choices"])
+    assert all(HAN.search(label) for _, label in results[1]["choices"])
+    for result in results:
+        assert result["picked"] == "leafgreen" and result["split"]
+        assert result["trainer"]["ot"] == "GREEN"
+    assert results[0]["trainer"] == results[1]["trainer"]
+
+
 def test_custom_firered_giver_and_location_summaries_translate_nested_module_values(installed):
     from gui.localization import gift_description
     from pokeldn.frlg.gift import builder
