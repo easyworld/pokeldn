@@ -109,6 +109,7 @@ def test_advanced_help_is_tool_specific_and_complete(installed):
         tool, option = key.split(":", 1)
         assert i18n.help_text(tool, option, source) == resources[key]
     assert "训练家" in i18n.help_text("frlg-trade-host", "--language", "missing")
+    assert "40040" in i18n.help_text("swsh-join", "--ladder-refresh", "missing")
 
 
 def test_gift_and_event_metadata_and_cjk_tooltips(installed):
@@ -363,3 +364,45 @@ assert translate("Item") == "道具"
     result = subprocess.run([sys.executable, "-c", code], env=environment, cwd=APP,
                             capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("language", ["community-zh-hans", ""])
+def test_radio_confirmation_translates_without_starting_the_test(installed, language):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from gui.localization import app_log
+    from gui.views.boards import BoardView
+
+    i18n.select(language)
+    page = SimpleNamespace(show_dialog=Mock(), pop_dialog=Mock())
+    view = BoardView.__new__(BoardView)
+    view.app = SimpleNamespace(page=page)
+    view._radio_test = Mock()
+    view._radio_test_confirm(None)
+
+    dialog = page.show_dialog.call_args.args[0]
+    assert dialog.title.value == ("测试无线通信？" if language else "Test the radio?")
+    lines = [control.value for control in dialog.content.controls]
+    assert all(bool(HAN.search(line)) == bool(language) for line in lines)
+    assert "POKELDN-TEST" in lines[2] and "60" in lines[2]
+    view._radio_test.assert_not_called()
+
+    device = "COM123 {PLAYER} C:/unchanged"
+    source = f"[app] Radio test on {device}; the board may restart."
+    shown = app_log(source)
+    assert device in shown
+    assert bool(HAN.search(shown)) == bool(language)
+    if not language:
+        assert shown == source
+
+
+@pytest.mark.parametrize("power", [0, 20, 15, 11, 8.5])
+def test_transmit_power_translation_preserves_saved_numeric_values(installed, power):
+    selected = settings.load()
+    selected.tx_power = power
+    selected.save()
+    for language in (installed.id, ""):
+        i18n.select(language)
+        shown = i18n.t("settings.transmit_power", ENGLISH["settings.transmit_power"])
+        assert shown == ("发射功率" if language else "Transmit power")
+        assert settings.load().tx_power == power

@@ -125,6 +125,7 @@
 "Puts {quantity} pieces of clothing in the wardrobe; the player gets the version for their own character" = "将 {quantity} 件服装放入衣柜，领取与玩家角色对应的款式"
 "Queue it for a {value0} trade:" = "加入 {value0} 的交换队列："
 "Queued in {value0}. It leaves the bank when that trade completes." = "已加入 {value0} 的队列，完成交换后将从银行移出。"
+"Radio test on {value0}; the board may restart." = "正在 {value0} 上测试无线通信，开发板可能会重启。"
 "Radio: {value0}" = "无线通信后端：{value0}"
 "Reading {value0}" = "正在读取 {value0}"
 "Remove {value0} files and free about {value1}. This deletes saved session records, logs, temporary offers and unused built Pokemon. Save any records needed for a bug report first. Your received Pokemon, selected offers, keys, firmware and settings are kept." = "删除 {value0} 个文件，约可释放 {value1}。将删除已保存的会话记录、日志、临时交换文件和未使用的已生成宝可梦。请先保存问题报告需要的记录。保留已接收的宝可梦、已选择的交换文件、密钥、固件和设置。"

@@ -1,13 +1,13 @@
 # pokeldn 简体中文语言插件
 
 独立数据插件，适用于上游保留的 **插件 API 1.9** 语言包格式。
-版本 3.5.0 对应上游 `main` 的 `547fb085`（pokeldn 0.54.0，主程序插件 API 1.12）。
+版本 3.6.0 对应上游 `main` 的 `951853e8`（pokeldn 0.56.2，主程序插件 API 1.12）。
 本包只需要既有的 1.9 语言包能力，不需要 Babel 或额外的 Python 运行代码。
 
 ## 安装
 
-从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.5.0)
-下载 `community-zh-hans-3.5.0.pokeplugin`，在程序的 Plugins 页面安装。
+从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.6.0)
+下载 `community-zh-hans-3.6.0.pokeplugin`，在程序的 Plugins 页面安装。
 然后在 Settings → App language 选择“简体中文”，**重启 pokeldn 后生效**。
 
 插件 ID 为 `community-zh-hans`，可覆盖安装此前使用同一 ID 的版本。
@@ -15,21 +15,22 @@
 
 ## 资源
 
-- `strings.toml`：全部 1,885 个当前界面文案键。
-- `help.toml`：全部 2,896 条按工具和参数区分的高级说明，包含本版 4 条新增证章参数说明。
+- `strings.toml`：全部 1,896 个当前界面文案键。
+- `help.toml`：全部 2,902 条按工具和参数区分的高级说明，包含本版 6 条新增交换重发参数说明。
 - `messages.toml`：3,067 条模块文案，包括礼物预设、增强功能和剑盾活动。
-- `templates.toml`：320 条动态消息模板，保留命名参数。
+- `templates.toml`：321 条动态消息模板，保留命名参数。
 - `terms.toml`：271 条界面术语和选项词语。
 - `docs/`：37 篇中文文档，包含新版绿宝石交换、神秘礼物及操作指南。
   未提供及尚未同步的协议研究页面完整回退到上游最新版英文，包括 `frlg_rom.md`、`pia.md`、
   `sv_raid.md`；旧版译文仍保存在 3.0.0 的源码标签中。
 
-本版新增覆盖：每个游戏版本分别设置训练家、工具中的“你使用的版本”、集友圈宝可梦证章、
-生成宝可梦在地面游走的说明、导出为文件与导出结果、开发板安装就绪、交换后送回操作卡片。
-证章名称由 PKHeX 按显示语言提供，保留其 RibbonIndex 编号。
+本版新增覆盖：设置中的发射功率及自动选择规则、开发板无线测试按钮、测试前的操作说明、
+确认对话框、测试启动消息，以及剑盾 6 个工具中的 `--ladder-refresh` 高级说明。
+中文指南同步说明 C3 默认 8.5 dBm、无线收发测试和剑盾传说宝可梦交换修复。
+剑盾交换协议页补充传说宝可梦确认阶梯的最新测量。
 
-[上游 PR #47](https://github.com/Decryptu/pokeldn/pull/47) 已合入 0.54.0。
-本包直接匹配当前上游，不需要额外补丁。未翻译研究页面按整篇回退英文；开发板屏幕保持固件原样。
+本包直接匹配当前上游。开发板诊断日志按上游设计保留英文，测试网络名称 `POKELDN-TEST`、
+串口名、发射功率数值和协议参数保持原值。未翻译研究页面按整篇回退英文；开发板屏幕保持固件原样。
 
 宝可梦、招式、特性、性格、属性、精灵球等游戏名称由上游 PKHeX 显示语言服务提供。
 本包不携带实体名称数据库，也不修改实体 ID、游戏记录、文件路径、昵称或连接码。
@@ -45,7 +46,7 @@
 
 ```bash
 python scripts/check_language_pack.py /path/to/zh-hans-plugin
-python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.5.0.pokeplugin
+python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.6.0.pokeplugin
 ```
 
 缺失文案、未知文案、参数差异、缺失高级说明和未知高级说明均应为 0。
