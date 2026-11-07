@@ -406,3 +406,27 @@ def test_transmit_power_translation_preserves_saved_numeric_values(installed, po
         shown = i18n.t("settings.transmit_power", ENGLISH["settings.transmit_power"])
         assert shown == ("发射功率" if language else "Transmit power")
         assert settings.load().tx_power == power
+
+
+def test_non_legal_offer_keeps_its_identity_in_both_display_languages(installed, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from gui.localization import SERVICE
+    from gui.views.settings import SettingsView
+
+    monkeypatch.setattr(pokemon, "POKEMON", tmp_path / "pokemon")
+    monkeypatch.setattr(pokemon.SERVICE, "allow_illegal", False)
+    view = SettingsView.__new__(SettingsView)
+    view.app = SimpleNamespace(settings=settings.load())
+    assert not view.app.settings.allow_illegal
+    view._allow_illegal(True)
+    assert settings.load().allow_illegal
+    trainer = {"ot": "POKELDN", "tid": 12345, "sid": 54321, "language": 2, "gender": 0}
+
+    for language, title, species in ((installed.id, "允许不合法的宝可梦", "皮卡丘"),
+                                     ("", "Allow non-legal Pokemon", "Pikachu")):
+        i18n.select(language)
+        assert i18n.t("settings.allow_illegal", ENGLISH["settings.allow_illegal"]) == title
+        info = SERVICE.make("sv", 25, trainer, level=7, nickname="KEEP-ME", options={"moves": [147]})
+        assert not info["legal"] and info["species_id"] == 25
+        assert info["species"] == species and info["nickname"] == "KEEP-ME"
+        assert info["report"] and bool(HAN.search(info["report"])) == bool(language)

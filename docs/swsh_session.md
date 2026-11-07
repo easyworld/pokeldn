@@ -60,7 +60,7 @@ Pia 标头携带版本 4，其形状与 [Pia 层](pia.md) 上的两个频段不�
 ## 入座
 
     POKELDN_RADIO=esp32:auto ./.venv/bin/python bin/swsh_join.py --keys PROD_KEYS --scan-only
-扫描主机屏幕并将每个广告写入`scratchpad/swsh_net_facts.json`；
+扫描主持画面并将每条广播写入 JSON 文件。
 默认为 `--pw-mode raw`。
 
 |屏幕|本地通讯 ID |版本 |场景|应用程序版本 |

@@ -27,11 +27,9 @@ Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
 英文对（`BPRE`、`BPGE`、版本 0x0A、基本 v0 包）的字节相同
 `pokefirered_switch.gba` 和 `pokeleafgreen_switch.gba` 作为 `pret/pokefirered` 固定它们：分解是英文版本的精确地图。
 
-程序NCA有一个CTR RomFS部分并且没有更新，因此`bktr_read.py`拒绝它；
-`scratchpad/base_romfs.py` 读到：
+`tools/frlg/extract_cartridges.py` 从各安装包的程序 NCA 读取单一 CTR RomFS 区段并提取镜像：
 
-    ./.venv/bin/python scratchpad/base_romfs.py "$NSP" --list
-    ./.venv/bin/python scratchpad/base_romfs.py "$NSP" --extract /FireRed_f.gba --out scratchpad/FireRed_f.gba
+    ./.venv/bin/python tools/frlg/extract_cartridges.py --packages DIR --keys PROD_KEYS --out DIR
 
 `rom_map.CREATE_MON` 是 0x08041150，图像上写着 `f0b5 4746 80b4 87b0`，序言
 `asm/create-mon.s` 依靠。任何函数体都可以从图像中离线读取。
@@ -45,7 +43,7 @@ Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
     gPlayerPartyCount     0x02024025
  IWRAM 不传输：`gSaveBlock1Ptr` 在英文版中是 0x030042D8，在卡带上是 0x03004228。
 
-从该区域中减去 ELF 中每个大小的 EWRAM 符号，留下一个跨度无符号声明（`nm -S pokefirered_switch.elf`、`scratchpad/ram_survey.py`）：
+ELF 中已知 EWRAM 符号的最高结束地址至 EWRAM 末尾之间没有符号占用（`nm -S pokefirered_switch.elf`）：
 
     highest symbol end   0x0203FBAC
     EWRAM end            0x02040000
@@ -70,7 +68,7 @@ Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
 
 英语版数值：`gRngValue` 0x030042D0、`gSaveBlock1Ptr` 0x030042D8、`gSaveBlock2Ptr` 0x030042DC、`gIntrTable[4]` 0x030027E0、`gLastWrittenSector` 0x03004650、`gSaveCounter` 0x03004660。英语版《叶绿》的 RAM 与英语版《火红》相同；常驻钩子使用的地址中只有 `m4aSoundMain` 改变（0x081E07C4 对应 0x081E07E8）。
 
-`tests/test_frlg_english_cartridges.py` 通过各卡带自身的 `Client_RunBufferScript`，在两个零售版镜像上执行英语版载荷；`scratchpad/frlg_en/` 中没有镜像时跳过。
+`tests/test_frlg_english_cartridges.py` 通过各卡带自身的 `Client_RunBufferScript`，在两个零售版镜像上执行英语版载荷。没有镜像时跳过，可通过 `tools/frlg/extract_cartridges.py` 提取镜像。
 
 英语版《火红》（USA v0，`0100554023408000`）在游戏数据中报告 `BPRE`，能接收并显示神奇卡片，也能运行英语版 `call-chain`：`0x08046A41` 处的 `SpeciesToNationalPokedexNum` 对种类 277 返回 252，`0x08071CD5` 处的 `VarGet` 正常返回。已在模拟主机上验证；两种会话均以成功消息结束并触发保存 [mystery_gift_menu.c:1379]。
 
@@ -93,7 +91,7 @@ Switch 版本将 GBA ROM 作为其 RomFS 中的唯一文件。
 <a id="the-first-anchor"></a>
 ## 第一个锚点
 
-`anchors`返回`Client_RunBufferScript`调用后的地址，`0x08148C75`。从它到达每个其他地址：调用者的文字池和 `bl` 目标命名下一个函数，它命名的指针表提供更多，并且每个条目必须落在已知的序言（`scratchpad/rom_read.py`）上。
+`anchors` 返回调用 `Client_RunBufferScript` 后的地址 `0x08148C75`。其余地址从字面量池、`bl` 目标和指针表追踪得到，每个地址都落在已知的函数序言上。
 
 0x08148A00 处的转储在 0x08148C74 处反汇编为 `Client_RunBufferScript` [mystery_gift_client.c:274]、`cmp r0,#1`。它的文字池：
 
@@ -192,8 +190,7 @@ sMysteryEventScriptContext` [mystery_event_script.c:27]。 `table-scan --table-d
 `ScrCmd_additem` 与指令的反编译指令匹配（`(u8)quantity` 转换为
 `lsls r1, #24; lsrs r1, #24`）并通过0x020370CC、`gSpecialVar_Result`存储。 `ScrCmd_random`的第三个调用是0x080486B0，`Random`，独立于它自己的文字池找到。
 
-`scratchpad/handler_workers.py` 按顺序打印每个处理程序的 `bl` 目标，并命名已知的目标。
-`tools/frlg/rom_functions.py --table specials|field|mystery-event|callable` 在表格中执行此操作，通过下一个条目及其自己的尾声将每个正文界定，并打印下一次运行的计划：未保留的条目聚集到排名的 `--dump-address` 窗口中。
+`tools/frlg/rom_functions.py --table specials|field|mystery-event|callable` 按顺序打印表中各处理程序的 `bl` 目标，并规划下一次读取的 `--dump-address` 范围。
 
 ROM 是 agbcc 构建的，并结束 THUMB 函数 `pop {r4,r5,r6}; pop {r1}; bx r1` (BC70 BC02 4708)，而不是 `pop {..., pc}`。只寻找 0xBDxx 的读者会进入下一个函数。
 `pokeldn/frlg/rom/thumb.py` 也与 `bx Rn` 匹配，并且仅当序言跟随时才将返回视为边界。
@@ -423,7 +420,7 @@ ROM 是 agbcc 构建的，并结束 THUMB 函数 `pop {r4,r5,r6}; pop {r1}; bx r
 
 全部 44 张卡片均在该 ROM 上，通过模拟的主持端与客户端对话接收，并在 mGBA 中绑定到妈妈执行。随附的四倍速卡片跳板将 0x0203FC01 安装到 `gIntrTable[4]`，并在 0x0203FBFC 保存 0x0800071D。按下 R、释放、再次按下时，分别分发三、三、零组额外地图回调，以及四、四、零次文字处理；每帧仍调用一次原始 VBlank 处理器（`tests/test_team_cards.py`）。
 
-`tests/test_frlg_english_cartridges.py`、`tests/test_noclip.py` 和 `tests/test_follower.py` 包含 `scratchpad/frlg_es/FireRed_s.gba` 处的西班牙语版镜像；镜像不存在时跳过依赖 ROM 的检查。卡带自身的神秘礼物客户端能从训练家探测代码返回，生成语言为 7 且校验和有效的皮卡丘，调用 `GetVarPointer`，安装常驻钩子，并加载存档中的钩子。碰撞和跟随检查也使用西班牙语版地址表执行。
+`tests/test_frlg_english_cartridges.py`、`tests/test_noclip.py` 和 `tests/test_follower.py` 会在西班牙语版镜像可用时使用它。卡带自身的神秘礼物客户端能从训练家探测代码返回，生成语言为 7 且校验和有效的皮卡丘，调用 `GetVarPointer`，安装常驻钩子，并加载存档中的钩子。碰撞和跟随检查也使用西班牙语版地址表执行。
 
 <a id="the-french-easy-chat-vocabulary"></a>
 # 法语 Easy Chat 词汇
@@ -476,11 +473,6 @@ easychat_french.check(ids, strict=True)              # raises on anything unread
     POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/frlg_mg_host.py --live --keys PROD_KEYS \
         --buffer-script string-gather --gather-address 0x083DF5C0 --gather-count 42 \
         --gather-stride 12 --dump-file DUMP.bin --version firered    # one group per run
-    ./.venv/bin/python scratchpad/ec_words.py --group 4 DUMP.bin
-    ./.venv/bin/python scratchpad/ec_words.py --report
-
-`scratchpad/ec_locate.py` 在扫描答案中找到该表，并根据 decomp 的计数检查转储；
-`scratchpad/ec_words.py` 保存 22 个字数组地址。
 
 叶绿的整个 Easy Chat 区域比火红移动了 −0x1C4，具有相同的词汇：22 个条目，每个计数相等，并且一组的 `string-gather` 在相同的槽中读取相同的单词。
 `easychat_french` 两个控制台的答案。

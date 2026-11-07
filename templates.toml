@@ -118,6 +118,7 @@
 "PKHeX finds {value0} not legal." = "PKHeX 判定 {value0} 不合法。"
 "PKHeX flags it: {value0}" = "PKHeX 提示：{value0}"
 "PKHeX has no Mystery Gift Pokemon {value0} for this game." = "PKHeX 没有适用于此游戏的神秘礼物宝可梦 {value0}。"
+"PKHeX has no record to start {term0} from." = "PKHeX 找不到可用于生成{term0}的基础记录。"
 "PKHeX has no transfer route ({value0})." = "PKHeX 没有可用的传送路径（{value0}）。"
 "PKHeX made an illegal {value0}: {value1}" = "PKHeX 生成的 {value0} 不合法：{value1}"
 "Places {term_clothing} in the wardrobe." = "将{term_clothing}放入衣柜。"

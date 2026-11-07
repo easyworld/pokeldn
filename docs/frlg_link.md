@@ -140,7 +140,17 @@ S4_PARTY并在60帧后再次选择。用 `PARTNER_CANCEL_TRADE` 回答 `REQUEST_
         }
     #endif
 
-`svc_51` (`swi 0x51`) 由模拟器 [sloopsvc.c:120] 应答。非零表示 `CloseLink()`，然后 `Task_MysteryGift` 下的 `RfuSoftReset()`，否则 `RfuReloadSave()` [link.c:1674]：切换错误 2318-0006。在 RFU 级别上主机干净的死亡指向 LDN/Pia。
+`svc_51` (`swi 0x51`) 由模拟器 [sloopsvc.c:120] 应答。非零表示 `CloseLink()`，然后 `Task_MysteryGift` 下的 `RfuSoftReset()`，否则 `RfuReloadSave()` [link.c:1674]：切换错误 2318-0006。若主机在 RFU 层正常退出，问题可能出在 LDN 或 Pia。
+
+`svc_51` 返回的值来自会话对象的失败处理函数 `main + 0x051004`。12 个调用点传入
+`nn::Result`，模块 `0x13E`（318，对应 `2318-` 系列错误）中未被预期错误过滤器拦下的结果
+写入会话 `+0x3404`，供 `svc_51` 读取并清零；`+0x277C` 保留首个错误。网络关闭时会话
+对象被释放，因此只能在其存活时通过断点读取。
+
+游戏自身也可能显示通信错误，此时 `svc_51` 没有返回错误。神秘礼物接收检查失败时调用
+`LinkRfu_FatalError`（mystery_gift_link.c:104、109、141、199），留下 `errorInfo` 值
+`0x9000`（`F_RFU_ERROR_5 | F_RFU_ERROR_8`，link_rfu_2.c:998）。在报错画面上，BPRE 的
+`sLinkErrorBuffer`（`0x02022850`）首字读为 `0x90000000`。
 
 | SVC |致电 |它是做什么的 |
 |---|---|---|
