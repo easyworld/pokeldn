@@ -244,10 +244,31 @@ def test_localized_document_titles_anchors_search_and_missing_page_fallback(inst
     page = docs.Page("frlg.md", "FireRed and LeafGreen", 1)
     assert HAN.search(docs.page_title(page))
     assert docs.document_path("plugins.md") == Path(docs.DOCS) / "plugins.md"
-    for file in ("frlg_rom.md", "pia.md", "sv_raid.md", "rse_switch_build.md"):
-        assert docs.document_path(file) == Path(docs.DOCS) / file
-        assert docs.document_body(file)[1] is None
+    assert docs.document_path("rse_switch_build.md") == Path(docs.DOCS) / "rse_switch_build.md"
+    assert docs.document_body("rse_switch_build.md")[1] is None
     assert docs.search(docs.index([page], "指南"), "宝可梦")
+
+
+@pytest.mark.parametrize(("name", "query", "anchor"), [
+    ("frlg_rom.md", "异色超梦", "shiny-shiny-press-ivs-noencounter"),
+    ("pia.md", "局域网模式", "lan-mode"),
+    ("sv_raid.md", "速度相同", "speed-ties"),
+])
+def test_research_document_search_uses_localized_text_and_upstream_anchors(installed, name, query, anchor):
+    from gui.views import docs
+    from gui.views.widgets import heading_sections
+
+    body, reference = docs.document_body(name)
+    assert reference is not None
+    assert [key for key, title, _ in heading_sections(body) if title] == [
+        key for key, title, _ in heading_sections(reference) if title
+    ]
+    page = docs.Page(name, "English title", 1)
+    assert HAN.search(docs.page_title(page))
+    hits = docs.search(docs.index([page], "指南"), query)
+    assert any(hit.file == name and hit.anchor == anchor for hit in hits)
+    i18n.select()
+    assert docs.document_body(name) == (reference, None)
 
 
 def test_split_emerald_docs_keep_current_english_section_links(installed):

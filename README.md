@@ -1,13 +1,13 @@
 # pokeldn 简体中文语言插件
 
 独立数据插件，适用于上游保留的 **插件 API 1.9** 语言包格式。
-版本 3.9.0 对应上游 `main` 的 `5786f8b0`（pokeldn 0.61.0，主程序插件 API 1.13）。
+版本 3.9.1 对应上游 `main` 的 `5786f8b0`（pokeldn 0.61.0，主程序插件 API 1.13）。
 本包只需要既有的 1.9 语言包能力，不需要 Babel 或额外的 Python 运行代码。
 
 ## 安装
 
-从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.9.0)
-下载 `community-zh-hans-3.9.0.pokeplugin`，在程序的 Plugins 页面安装。
+从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.9.1)
+下载 `community-zh-hans-3.9.1.pokeplugin`，在程序的 Plugins 页面安装。
 然后在 Settings → App language 选择“简体中文”，**重启 pokeldn 后生效**。
 
 插件 ID 为 `community-zh-hans`，可覆盖安装此前使用同一 ID 的版本。
@@ -20,9 +20,8 @@
 - `messages.toml`：3,238 条模块文案，包括礼物预设、增强功能和剑盾活动。
 - `templates.toml`：326 条动态消息模板，保留命名参数。
 - `terms.toml`：271 条界面术语和选项词语。
-- `docs/`：37 篇中文文档，包含新版绿宝石交换、神秘礼物及操作指南。
-  未提供及尚未同步的协议研究页面完整回退到上游最新版英文，包括 `frlg_rom.md`、`pia.md`、
-  `sv_raid.md`；旧版译文仍保存在 3.0.0 的源码标签中。
+- `docs/`：40 篇中文文档，包含新版绿宝石交换、神秘礼物及操作指南，以及与上游 0.61.0 同步的
+  《火红／叶绿》游戏机代码（`frlg_rom.md`）、Pia 层（`pia.md`）和太晶团体战（`sv_raid.md`）三篇研究文档。
 
 本版补齐备份与恢复、Android USB 连接提示、带屏无线固件和保存展示宝可梦的界面文案。
 高级说明新增 43 条，更新 10 条，移除 4 条上游已撤下的参数。
@@ -46,7 +45,7 @@
 
 ```bash
 python scripts/check_language_pack.py /path/to/zh-hans-plugin
-python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.9.0.pokeplugin
+python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.9.1.pokeplugin
 ```
 
 缺失文案、未知文案、参数差异、缺失高级说明和未知高级说明均应为 0。
