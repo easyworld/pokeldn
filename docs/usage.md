@@ -198,7 +198,7 @@ POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/za_host.py --keys prod.keys -
   --hold 450 --quiet-seat 25 --connect-timeout 6 --game --trade-offer offer.bin --offer-delay 4
 ```
 
-在交换盒子选择宝可梦，看到对方的宝可梦后确认。两种角色都可在同一会话响应下一次提供；重复 `--trade-offer` 为每次交换排队。完成后按 B 退出；游戏机离开时主持方关闭。`--offer-out FILE` 保存游戏机提供的宝可梦。局域网的模拟游戏机使用 `za_host.py --ip-host --our-ip IP --comm-id ffffffffffffffff` 和 `za_join.py --ip-join --host-ip IP --our-ip IP --comm-id ffffffffffffffff`。提供文件为 354 字节（九字节头部、344 字节记录、一个尾字节）；Z-A 的布局与朱相同，因此用 `pokeldn.gen9.build` 组成记录。参见[传说 Z-A](za.md)。
+在交换盒子选择宝可梦，看到对方的宝可梦后确认。两种角色都可在同一会话响应下一次提供；重复 `--trade-offer` 为每次交换排队。完成后按 B 退出；游戏机离开时主持方关闭。`--offer-out FILE` 在交换完成后保存收到的宝可梦，后续文件名加 `-2` 等编号。`--save-shown DIR` 保存游戏机在交换画面展示过的记录。局域网的模拟游戏机使用 `za_host.py --ip-host --our-ip IP --comm-id ffffffffffffffff` 和 `za_join.py --ip-join --host-ip IP --our-ip IP --comm-id ffffffffffffffff`。提供文件为 354 字节（九字节头部、344 字节记录、一个尾字节）；Z-A 的布局与朱相同，因此用 `pokeldn.gen9.build` 组成记录。参见[传说 Z-A](za.md)。
 
 <a id="diagnostics"></a>
 ## 诊断

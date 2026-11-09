@@ -525,8 +525,12 @@ French 剑 1.3.2 对已编辑记录的作用：
         --preset trade --save-offered offered.pk8 --capture trade.jsonl
  发回的快照是游戏机自己的来自同一会话的快照（`--send-snapshot live`，预设的默认值）：三个 0x84 片段在到达时重新组合，训练家名称、TID 和 SID 被重写为 `--snapshot-name/-tid/-sid`，一旦游戏机的快照被删除，它就会消失。重新组装，因此不需要早期的捕获会话。 `--send-snapshot FILE` 发送一个已保存的 3456 字节的 TCP（`--preset capture`，然后 `tools/switch/swsh_snapshot.py`，写入 1）。
 
-`--offer-file FILE` 将 `.pk8` 放入提供的队伍槽位，其 OT 移至快照的训练家处。如此重复，它会在会话中的每个交换中排队一个记录；最后一个服务于以后的交换，在带有 `--fresh-pid` 的新 PID 下，并且交换 N 用 `-N` 写入 `--save-offered`。游戏机提供的交换，其阶梯尚未完成，使会话持续到 `--grace` 秒 (300) 过去
-`--hold`。没有队伍统计数据的存储格式交易记录；游戏机根据经验计算等级。
+`--offer-file FILE` 将 `.pk8` 放入提供的队伍槽位，并使其初训家与快照中的训练家一致。重复指定可按顺序
+提供多个记录。队列用完后继续使用最后一个记录，配合 `--fresh-pid` 可使用新的 PID。
+确认阶梯完成后，收到的记录写入 `--save-offered` 指定的文件，第 N 次交换的文件名加上 `-N`。
+游戏机撤回的宝可梦不会写入该文件。若要保存所有展示过的记录，可另用 `--save-shown DIR`。
+已有提议但确认阶梯尚未完成时，会话在 `--hold` 到期后还可延续 `--grace` 秒（默认 300）。
+交换记录采用不含队伍能力值的存储格式，游戏机根据经验值计算等级。
 
 <a id="the-penalty-and-ending-a-run-cleanly"></a>
 ## 处罚，干净利落地结束比赛
