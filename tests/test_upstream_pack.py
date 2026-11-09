@@ -430,3 +430,31 @@ def test_non_legal_offer_keeps_its_identity_in_both_display_languages(installed,
         assert not info["legal"] and info["species_id"] == 25
         assert info["species"] == species and info["nickname"] == "KEEP-ME"
         assert info["report"] and bool(HAN.search(info["report"])) == bool(language)
+
+
+def test_simulated_gift_titles_cover_the_real_pkhex_catalog(installed):
+    from gui.localization import SERVICE, translate
+
+    titles = set()
+    for game in ("lgpe", "swsh", "bdsp", "pla", "sv", "za"):
+        trainer = settings.Settings(tid=12345, sid=54321).trainer(game)
+        titles.update(event["title"] for event in SERVICE.gift_events(game, trainer))
+    assert titles and "Happy Birthday!" in titles
+    for title in titles:
+        shown = translate(title)
+        assert shown != title and HAN.search(shown), title
+        assert not shown.endswith(" Gift"), title
+    i18n.select()
+    assert all(translate(title) == title for title in titles)
+
+
+def test_ribbon_summary_uses_localized_names_in_the_selected_order(installed):
+    from gui.localization import SERVICE, gift_description
+    from pokeldn.swsh import gift_builder
+
+    names = {entry["id"]: entry["name"] for entry in SERVICE.names("swsh", "ribbons")}
+    chosen = [36, 25]
+    state = {**gift_builder.blank(), "ribbons": chosen}
+    _, lines = gift_description("swsh", state, lambda kind, number: names[number] if kind == "ribbons" else "皮卡丘")
+    assert f"所带奖章：{names[36]}, {names[25]}。" in lines
+    assert gift_builder.ribbon_list(state) == tuple(chosen)
