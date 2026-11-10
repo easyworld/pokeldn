@@ -7,7 +7,9 @@ has_children: true
 
 红宝石、蓝宝石与绿宝石尚无 Switch 发行版。pokeldn 根据 [pret/pokeemerald](https://github.com/pret/pokeemerald) 和 [pret/pokeruby](https://github.com/pret/pokeruby)，为它们在火红、叶绿所用 GBA 应用中的可能发行版预备了支持。这里的地址均来自 GBA 英文版。应用仅在源码运行时显示这些游戏（见[未发行游戏](gui.md#unreleased-titles)）。
 
-为该应用构建的绿宝石可以替换火红卡带运行，并连接 pokeldn 主机（见 [Switch 构建版](rse_switch_build.md)）。在正式发行版出现前，这些页面以此构建版作为实验工具。
+为该应用构建的绿宝石可以替换火红或叶绿的运行中 ROM，并连接 pokeldn 主机（见 [Switch 构建版](rse_switch_build.md)）。在正式发行版出现前，这些页面以此构建版作为实验工具。
+
+pokeldn 0.62.1 支持通过神秘礼物向英语、法语、德语、意大利语和西班牙语的火红与叶绿传输 ROM。Emerald Swap 1.2.0 向这些版本传输时需要 pokeldn 0.62.1 或更新版本。日语卡带暂不支持。传输修复了全 `0x00` 与全 `0xFF` 数据块被误判为相同，以及跨数据块复制时读到已覆盖数据的问题。详见 [无需 Atmosphere 的传输](rse_switch_build.md#delivery-without-atmosphere)。
 
 | 页面 | 内容 |
 |---|---|
