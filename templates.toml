@@ -185,6 +185,7 @@
 "The source is not a plugin listing ({value0})." = "来源不是有效的插件列表（{value0}）。"
 "The {value0} firmware talks over the native USB port. Move the cable to the port marked USB (not COM or UART)." = "{value0} 固件通过原生 USB 接口通信。请将线缆连接到标有 USB 的接口，避开 COM 或 UART。"
 "These boosts take {value0} bytes together; the console has room for {value1}. Untick one." = "这些增强功能共占用 {value0} 字节，游戏机仅能容纳 {value1} 字节。请取消其中一项。"
+"This Pokemon has no ribbon {value0}." = "这只宝可梦没有奖章 {value0}。"
 "This file does not load: {value0}" = "无法加载此文件：{value0}"
 "This gift file has no {value0} cartridge variant." = "此礼物文件没有 {value0} 卡带版本。"
 "This gift has no {value0} variant." = "此礼物没有 {value0} 版本。"
