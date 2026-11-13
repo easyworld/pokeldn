@@ -69,6 +69,7 @@
 "bank.dex_no_shiny" = "未收录异色"
 "bank.done_selecting" = "完成"
 "bank.drop_a_file_here" = " 将宝可梦文件、游戏存档或 PKSM 银行拖到此处，即可导入其中的宝可梦。"
+"bank.duplicate" = "复制"
 "bank.edit_44b87f" = "编辑 {value0}"
 "bank.edit_464c4f" = "编辑"
 "bank.evs" = "努力值"
