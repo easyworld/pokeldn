@@ -180,20 +180,32 @@ elementId 10000 上的四个字节，由 `0x006d7b40` 在 `element+0xa8` 构建�
  时钟可以在发送消息之前更改。与主机的哈希相呼应的方加入完成了与托管剑的交换。
 
 <a id="the-party-payload-on-protocol-0x84"></a>
-## 协议 0x84 上的队伍恐惧
+## 协议 0x84 的队伍载荷
 
 `ReliableBroadcastProtocol` 在三个片段中携带 3456 字节的交换快照，直到被确认；第三个是zlib（Pia标志0x10）：1404 + 1404 + 157 raw，最后膨胀到648。
 `trade_payload.py` 拒绝任何其他总计。布局（如`kwsch/PokePiaSWSH`，
 `lincoln-lm/swsh-lan-client`）：
 
     0x000  six PK8 records, party form, 0x158 each          -> 0x810
-    0x810  u32   party count
+    0x810  u8    队伍成员数量
+    0x811  u8    队伍槽位索引
+    0x812  u16   零
     0x814  MyStatus, 272 bytes      TID/SID at 0xA0, trainer name at 0xB0
     0x924  TrainerCard, 456 bytes   trainer name at 0x00, save start date at 0x170
     0xAEC  the player profile, 266 bytes                     -> 0xBF6
     0xBF6  392 bytes, the Battle Stadium block; zero for Link Trade
     0xD7E  2 bytes of padding                                -> 0xD80 = 3456
- MyStatus 和 TrainerCard 是 PKHeX 保存块 (`Saves/Substructures/Gen8/SWSH/`)。
+
+写入函数 `0x00784f90` 将队伍对象的 `+0x88`（成员数量）和 `+0x89` 逐字节写入
+`0x810` 和 `0x811`，再将 `0x812` 处的 u16 清零（`0x00785130`）。读取函数
+`0x007856b8` 将这两个字节读回 `+0x88` 和 `+0x89`。如果成员数量与实际读取的
+槽位数量不一致，便采用实际数量。读取函数会跳过 `0x812`。
+
+`+0x89` 保存槽位索引。添加队伍成员时，它会设为首个通过 `0x77d610` 模式 2 检查的槽位
+（`0x00784188`）。互换槽位时，索引随对应成员移动（`0x00784580`）。模式 2 的检查条件
+尚未确定。零售版《剑》在队伍有六只宝可梦时发送 `06 02 00 00`，有五只时发送 `05 02 00 00`。
+
+MyStatus 和 TrainerCard 是 PKHeX 存档块（`Saves/Substructures/Gen8/SWSH/`）。
 
 构建器 `0x0110c180`：`0x00784f90`（队伍）、`0x01424f10`（MyStatus）、0x1C8 memcpy（训练家卡）、`0x01124fa0`（个人资料）、可选块的 0x188 memcpy 或一个内存集。 `0x010fcff0`的呼叫者中，链接交换（`0x010967f0`）和密码匹配（`0x00bd80f4`，
 `ChikaMatchingStateSession`) 通行无阻；对战体育场（`0x00b2d7d0`、`StateBtlSpot*Battle`、休闲、排名、竞技）通过一项。接收器 `0x0110cff0` 复制每个电台的两个区域。
