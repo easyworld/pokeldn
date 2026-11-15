@@ -2053,7 +2053,6 @@
 "Updating the event gallery..." = "正在更新活动图库…"
 "Upgrades the Pokedex to the National Pokedex." = "将图鉴升级为全国图鉴。"
 "Use" = "使用"
-"Use a classic ESP32 (ESP32-D0WD, WROOM-32E), or an ESP32-S3, C3 or C6 through its native USB port, the one marked USB. S2 boards are not supported." = "请使用经典 ESP32（ESP32-D0WD、WROOM-32E），或将 ESP32-S3、C3、C6 连接到原生 USB 接口（标有 USB 的接口）。不支持 S2 开发板。"
 "Use a preset" = "使用预设"
 "Use for trades" = "用于交换"
 "Use the board's other USB port" = "请使用开发板的另一个 USB 接口"
