@@ -1,6 +1,6 @@
 id = "community-zh-hans"
 name = "简体中文"
-version = "3.11.3"
+version = "3.11.4"
 api = "1.9"
 author = "easyworld"
 homepage = "https://github.com/easyworld/pokeldn/tree/codex/zh-hans-pack"
