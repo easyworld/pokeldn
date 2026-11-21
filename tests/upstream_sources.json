@@ -1,5 +1,5 @@
 {
-  "upstream": "bf8888ac3ccddcda62960f156dac35a58e23431d",
+  "upstream": "3c193b3037345fad828227d335b7a06adf70e4fe",
   "strings": {
     "app.add_yourself_to_the_group_sudo_usermod_ag_user_then_log_b0f6cb": "Add yourself to the {value0} group (sudo usermod -aG {value1} $USER), then log out and back in.",
     "app.android_allow_usb": "Allow USB access",

@@ -1,13 +1,13 @@
 # pokeldn 简体中文语言插件
 
 独立数据插件，适用于上游保留的 **插件 API 1.9** 语言包格式。
-版本 3.11.6 对应上游 `v0.66.8`（`bf8888ac`，主程序插件 API 1.13）。
+版本 3.11.7 对应上游 `v0.66.9`（`3c193b30`，主程序插件 API 1.13）。
 本包只需要既有的 1.9 语言包能力，不需要 Babel 或额外的 Python 运行代码。
 
 ## 安装
 
-从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.11.6)
-下载 `community-zh-hans-3.11.6.pokeplugin`，在程序的 Plugins 页面安装。
+从 [Release](https://github.com/easyworld/pokeldn/releases/tag/plugin-zh-hans-v3.11.7)
+下载 `community-zh-hans-3.11.7.pokeplugin`，在程序的 Plugins 页面安装。
 然后在 Settings → App language 选择“简体中文”，**重启 pokeldn 后生效**。
 
 插件 ID 为 `community-zh-hans`，可覆盖安装此前使用同一 ID 的版本。
@@ -23,7 +23,7 @@
 - `docs/`：40 篇中文文档，包含新版绿宝石交换、神秘礼物及操作指南，以及与上游 0.61.0 同步的
   《火红／叶绿》游戏机代码（`frlg_rom.md`）、Pia 层（`pia.md`）和太晶团体战（`sv_raid.md`）三篇研究文档。
 
-本版汉化开发板的原生 USB 设备提示和极巨大冒险的属性种子搜索，并在中文指南中补充这些功能及体型「最大」按钮的用法。
+本版同步无线固件 1.12.0 的 USB 接口说明，并在中文指南中说明 Windows 原地更新和《剑／盾》极巨团体战主机的改动。
 
 本包直接匹配当前上游。开发板诊断日志按上游设计保留英文，测试网络名称 `POKELDN-TEST`、
 串口名、发射功率数值和协议参数保持原值。未翻译研究页面按整篇回退英文；开发板屏幕保持固件原样。
@@ -42,7 +42,7 @@
 
 ```bash
 python scripts/check_language_pack.py /path/to/zh-hans-plugin
-python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.11.6.pokeplugin
+python scripts/pack_plugin.py /path/to/zh-hans-plugin -o community-zh-hans-3.11.7.pokeplugin
 ```
 
 缺失文案、未知文案、参数差异、缺失高级说明和未知高级说明均应为 0。
