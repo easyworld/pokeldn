@@ -14,7 +14,9 @@ Linux 主机可以作为 root 直接驱动支持 AP 的 Wi-Fi 卡，代替 [ESP3
 <a id="windows-usb-wi-fi-through-ldnrs"></a>
 ## 通过 ldnrs 使用 Windows USB Wi-Fi
 
-Windows 可通过 [ldnrs 0.0.3](https://github.com/unlimitedcoder2/ldnrs/releases/tag/0.0.3) 使用外置 USB Wi-Fi 适配器。请另行安装 ldnrs，完成适配器向导并保持其守护进程运行。在 pokeldn 的“插件”页面，从“无线后端”中选择“USB Wi-Fi（Windows，ldnrs）”。Switch 密钥仍使用 pokeldn 设置中的文件。
+Windows 可通过 [ldnrs 0.0.3](https://github.com/unlimitedcoder2/ldnrs/releases/tag/0.0.3) 使用外置 USB Wi-Fi 适配器。请另行安装 ldnrs，完成适配器向导并保持其守护进程运行。在 pokeldn 的“插件”页面，在“无线通信后端”中选择“USB 无线网卡（Windows，ldnrs）”。Switch 密钥仍使用 pokeldn 设置中的文件。
+
+从 v0.66.12 起，若已选择 ldnrs 但守护进程尚未运行，会话面板会在启动前提示。可以启动 ldnrs 守护进程，或连接 ESP32 开发板并点击“使用开发板”。若会话因无法连接 ldnrs 而结束，错误提示会引导你回到“插件”页的无线通信后端设置。
 
 ldnrs 向导会将选定适配器绑定到 WinUSB，并下载所需的 Linux 驱动固件。WinUSB 接管期间，该适配器无法再提供普通 Windows Wi-Fi，请使用其他连接访问互联网。要恢复普通联网，请在设备管理器中恢复原驱动。兼容性取决于 ldnrs 中的驱动及固件；下方的 Linux 网卡测量不能证明 Windows 兼容性。
 
