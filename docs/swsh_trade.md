@@ -497,8 +497,8 @@ Oui 将其原封不动地保存在保存块 `0x28e707f5` 中：来自 `album+0x2
 | `--offer-level N` | 0x148 处的等级字节 |
 | `--offer-experience N` |经验词0x10 |
 | `--offer-ivs` |六个 IV |
-| `--offer-file FILE` |四种形状中任意一种的 `.pk8`（存储或队列、加密或 PKHeX 的解密导出，由标头校验和区分）； OT 名称和 ID 已移至快照的训练家 |
-| `--offer-file-as-is` |保留文件的 OT |
+| `--offer-file FILE` | 提供 `.pk8`，支持盒子或队伍格式，接受加密记录或 PKHeX 导出的解密记录。保留文件中的初训家。 |
+| `--receiver-owns N` | 交换时，尝试将游戏机快照中的训练家设为第 N 个文件的初训家。参见[选择初训家](gui.md#original-trainer)。 |
 | `--save-offer FILE` |在触摸收音机之前写入构建的记录|
 
 French 剑 1.3.2 对已编辑记录的作用：
@@ -525,8 +525,8 @@ French 剑 1.3.2 对已编辑记录的作用：
         --preset trade --save-offered offered.pk8 --capture trade.jsonl
  发回的快照是游戏机自己的来自同一会话的快照（`--send-snapshot live`，预设的默认值）：三个 0x84 片段在到达时重新组合，训练家名称、TID 和 SID 被重写为 `--snapshot-name/-tid/-sid`，一旦游戏机的快照被删除，它就会消失。重新组装，因此不需要早期的捕获会话。 `--send-snapshot FILE` 发送一个已保存的 3456 字节的 TCP（`--preset capture`，然后 `tools/switch/swsh_snapshot.py`，写入 1）。
 
-`--offer-file FILE` 将 `.pk8` 放入提供的队伍槽位，并使其初训家与快照中的训练家一致。重复指定可按顺序
-提供多个记录。队列用完后继续使用最后一个记录，配合 `--fresh-pid` 可使用新的 PID。
+`--offer-file FILE` 将 `.pk8` 放入用于交换的队伍槽位。重复指定可按顺序提供多个记录。
+可用 `--receiver-owns N` 为第 N 只指定接收方初训家，从 1 开始计数。队列用完后继续使用最后一个记录，配合 `--fresh-pid` 可使用新的 PID。
 确认阶梯完成后，收到的记录写入 `--save-offered` 指定的文件，第 N 次交换的文件名加上 `-N`。
 游戏机撤回的宝可梦不会写入该文件。若要保存所有展示过的记录，可另用 `--save-shown DIR`。
 已有提议但确认阶梯尚未完成时，会话在 `--hold` 到期后还可延续 `--grace` 秒（默认 300）。

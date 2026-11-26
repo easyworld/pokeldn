@@ -326,3 +326,7 @@
 "updated to {value0}" = "已更新到 {value0}"
 "while {button} is held" = "按住 {button} 时"
 "{stars}-Star Tera Raid Encounter" = "{stars} 星太晶团体战遭遇"
+"Offer {number} could not be made the receiving player's own: {message_reason}. It goes with the original trainer it has." = "队列中的第 {number} 只宝可梦无法将接收方设为初训家：{message_reason}。交换时将保留其原初训家。"
+"Offer {number} could not be made the receiving player's own: for {trainer}, {message_reason}. It goes with the original trainer it has." = "队列中的第 {number} 只宝可梦无法将 {trainer} 设为初训家：{message_reason}。交换时将保留其原初训家。"
+"The Pokemon could not be made the receiving player's own: neither the Pokemon the console offered nor the session names its save: {message_reason}. It goes with the original trainer it has." = "无法从游戏机提供的宝可梦或会话确认接收方存档：{message_reason}。交换时将保留原初训家。"
+"it came from another trainer, {trainer}" = "它来自另一位训练家 {trainer}"

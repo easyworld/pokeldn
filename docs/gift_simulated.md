@@ -88,12 +88,12 @@ HOME 分发时写入追踪码。Let's Go 没有 HOME 追踪码，其美录坦无
 
 “按接收玩家生成”（`--for-receiver`，应用默认开启）在交换时按游戏机存档生成礼物，使宝可梦像该存档自行领取卡片一样归玩家所有。它适用于以接收玩家为初训家的礼物；卡片有自己的初训家时按原样提供。当队列中所有礼物均按原样提供时，应用锁定并关闭该开关。必须有当前训练家才合法的礼物也按原样提供：接收存档与宝可梦初训家相同时会清除当前训练家（[交换改写的内容](sv.md#what-a-trade-rewrites)），PKHeX 随后会拒绝 HOME 的新叶喵、呆火鳄、润水鸭、菊草叶、暖暖猪和小锯鳄（“Current handler cannot be the OT”）。`gift_event` 将此类卡片标为 `handled`，使用设置中的训练家，让游戏机玩家成为其当前训练家（[神秘礼物 - 模拟](gui.md#mystery-gift---simulated)）。应用通过 `--gift-event KEY` 传递每份提供记录的卡片（`command._args`）。
 
-启动时，主机用不会被任何卡片指定的训练家请求 `gift_event`（`receiver_gift.PROBE`），只有以接收玩家为初训家的副本会保留此训练家（`your_ot`）。这也会在游戏机加入前启动服务。五个主机共享 `pokeldn.receiver_gift`，其 `ReceiverGift` 代替主机已支持的在线交换伙伴（[启动器中的集成](online.md#in-a-launcher)）。
+启动时，主机用不会被任何卡片指定的训练家请求 `gift_event`（`for_receiver.PROBE`），只有以接收玩家为初训家的副本会保留此训练家（`your_ot`）。这也会在游戏机加入前启动服务。五个主机共享 `pokeldn.for_receiver`，其 `ReceiverGift` 代替主机已支持的在线交换伙伴（[启动器中的集成](online.md#in-a-launcher)）。 同一组件也处理交换队列中将[初训家设为接收方](gui.md#original-trainer)的宝可梦。礼物从活动卡片重新生成，队列中的普通宝可梦则在通过 PKHeX 检查时更改自身的初训家。
 
 <a id="whose-save-it-is"></a>
 ### 识别存档训练家
 
-优先读取游戏机提供的、由此存档捕获的宝可梦：它仍由初训家持有（当前训练家标志为 0），来自该组游戏的某个版本，且不是蛋。记录提供 OT 姓名、16 位 TID 和 SID、OT 性别、语言及版本（`receiver_gift.own_trainer`）。服务在工作线程读取记录，不占用主机循环（`Service.owner`）；朱／紫在 Python 中读取（`receiver_gift.sv_owner`）。
+优先读取游戏机提供的、由此存档捕获的宝可梦：它仍由初训家持有（当前训练家标志为 0），来自该组游戏的某个版本，且不是蛋。记录提供 OT 姓名、16 位 TID 和 SID、OT 性别、语言及版本（`for_receiver.own_trainer`）。服务在工作线程读取记录，不占用主机循环（`Service.owner`）；朱／紫在 Python 中读取（`for_receiver.sv_owner`）。
 
 | 游戏 | 接收玩家为初训家的卡片 | 游戏机提供记录 | 版本 |
 |---|---|---|---|
@@ -103,7 +103,7 @@ HOME 分发时写入追踪码。Let's Go 没有 HOME 追踪码，其美录坦无
 | 朱／紫 | 9 张卡片，包括梦幻（1521）和皮卡丘（1501） | `80 00 02 00` 的 348 字节消息体（[交换消息记录](sv.md#the-record-a-trade-message-carries)） | 50 朱，51 紫 |
 | 传说 Z-A | 喷火龙（1607）、拉鲁拉丝（1601） | 354 字节选择记录 | 52 |
 
-提供记录无法识别训练家时，使用游戏机自身的会话数据。每组游戏都会在宝可梦之前发送存档训练家，主机据此传递信息（`receiver_gift.hear`）：
+提供记录无法识别训练家时，使用游戏机自身的会话数据。每组游戏都会在宝可梦之前发送存档训练家，主机据此传递信息（`for_receiver.hear`）：
 
 | 游戏 | 游戏机消息 | 包含字段 |
 |---|---|---|
@@ -145,7 +145,7 @@ trainer)`。存档捕获的宝可梦优先于会话：后续交换提供时会�
 | 朱／紫 | `trade.load_offer` | 交换消息的 348 字节消息体 |
 | 传说 Z-A | `za_host.gift_offer` | 可解密的 354 字节记录；普通 `--trade-offer` 解密失败可按坏蛋处理，礼物不允许 |
 
-无法为存档生成卡片或副本检查失败时，也使用应用原先生成的记录；日志（`[gift] could not be made ...`）和弹窗说明原因。弹窗显示存档姓名、ID、版本及失败阶段（`receiver_gift.maker`）：
+无法为存档生成卡片或副本检查失败时，也使用应用原先生成的记录；日志（`[gift] could not be made ...`）和弹窗说明原因。弹窗显示存档姓名、ID、版本及失败阶段（`for_receiver.maker`）：
 
 | 阶段 | 原因示例 |
 |---|---|
