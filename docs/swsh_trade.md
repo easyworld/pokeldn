@@ -498,7 +498,7 @@ Oui 将其原封不动地保存在保存块 `0x28e707f5` 中：来自 `album+0x2
 | `--offer-experience N` |经验词0x10 |
 | `--offer-ivs` |六个 IV |
 | `--offer-file FILE` | 提供 `.pk8`，支持盒子或队伍格式，接受加密记录或 PKHeX 导出的解密记录。保留文件中的初训家。 |
-| `--receiver-owns N` | 交换时，尝试将游戏机快照中的训练家设为第 N 个文件的初训家。参见[选择初训家](gui.md#original-trainer)。 |
+| `--receiver-owns N` | 交换时，尝试将游戏机快照中的训练家设为第 N 个文件的初训家。参见[交换时的初训家](gui.md#original-trainer)。 |
 | `--save-offer FILE` |在触摸收音机之前写入构建的记录|
 
 French 剑 1.3.2 对已编辑记录的作用：
