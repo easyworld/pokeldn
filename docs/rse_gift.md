@@ -44,11 +44,22 @@ nav_order: 2
 | 陈旧的海图 | 1002 | 海图和 `FLAG_ENABLE_SHIP_FARAWAY_ISLAND` |
 | 变化洞窟传闻 | 1003 | 切换至洞窟九张野生宝可梦表中的下一张 |
 | 无限船票 | 1007 | 游戏自身的交付流程 [cable_club.inc:33]：船票和 `FLAG_ENABLE_SHIP_SOUTHERN_ISLAND` |
-| 大师球、神奇糖果 ×5、会冲浪的皮丘的蛋 | 1004..1006 | 使用 `EMERALD_RULES` 编译 |
 
     POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/frlg_mg_host.py --live --version emerald --gift-file old-sea-map.pokegift --keys "$HOME/Documents/Switch/23.0.0 keys/prod.keys"
 
-可用 `pokeldn.gifts.save(PATH, pokeldn.rse.gift_builder.compile(PRESET[key].state))` 将预设保存为文件。绿宝石礼物文件只有 `emerald` 一个变体（见[神秘礼物文件](gifts.md)）。绿宝石不接受原生代码、存档备份和火红预设。
+绿宝石也提供[火红与叶绿共用的神奇卡片](frlg_gift.md#cards-every-gba-title-shares)。
+卡片按 `EMERALD_RULES` 生成。官方船票和海图保留自己的领取标志，组合卡片无法使用已经保留的标志 ID。
+
+<a id="event-pokemon"></a>
+## 活动宝可梦
+
+在预设中选择“活动宝可梦”或“GameCube 与奖励光盘”，可发送[第三世代活动宝可梦](frlg_gift.md#event-pokemon)。
+命令行使用 `--gift event-pokemon --event-pokemon NAME`，例如 `NAME` 取 `WISHMKR Jirachi`。
+保存卡片时，若队伍有空位，宝可梦会直接加入队伍。
+
+神奇卡片预设可以保存为 `.pokegift` 文件，活动宝可梦可用 `--export-gift PATH` 导出。文件只有
+`emerald` 一个变体，包含神奇卡片、派送脚本和可选的神秘事件数据，见[神秘礼物文件](gifts.md)。
+原生代码、存档备份、神奇新闻、问卷和火红专用预设在绿宝石中不可用。
 
 <a id="unresolved"></a>
 ## 尚未解决的问题

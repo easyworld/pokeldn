@@ -114,7 +114,9 @@ POKELDN_RADIO=esp32:auto ./.venv/bin/python -u bin/frlg_mg_host.py --live \
 | `event-pokemon` | 3代分布宝可梦，直入队伍；查看活动宝可梦 |
 | `starter-egg` |九个第一伙伴之一的蛋，由 `random` 绘制 |
 | `rare-berries` |一个 谜芝果、一个 兰萨果 和一个 星桃果，各一个阶段 |
-| `national-dex` | `EnableNationalPokedex`（特殊367）除非`IsNationalPokedexEnabled`（403）回答1|
+| `national-dex` | 未设置 `FLAG_SYS_NATIONAL_DEX`（`0x840`）时调用 `EnableNationalPokedex`（特殊命令 367） |
+| `rare-candy` | 神奇糖果 ×5 |
+| `box-swablu`、`box-zigzagoon`、`box-skitty`、`surf-pichu` | Pokémon Box《红宝石与蓝宝石》的奖励蛋 |
 | `nature-mint`、`pc-anywhere` 及其他 42 个 | GB-Link 团队卡；查看 GB-Link 团队卡 |
 | `battle-count-card` |官方战斗计数卡|
 | `visiting-trainer` |身份 26 的战斗塔训练家（仅限火红）|
@@ -196,13 +198,33 @@ else:                      save the stamp, run activation, STAMP_RECEIVED
 | `pc-japan-egg` (宝可梦中心日本) | 喇叭芽 (摇晃舞)、喵喵 (花瓣舞)、走路草 (寄生种子)、蚊香蝌蚪 (天使之吻) |
 
 相遇地点为 0xFF 或设置了命运般的相遇标志时，概要界面显示“Drôle d'ŒUF de POKéMON obtenu dans un bel endroit”（在美好地点获得的特别宝可梦蛋）[pokemon_summary_screen.c:2799]。
+
+<a id="cards-every-gba-title-shares"></a>
+### GBA 游戏共用的卡片
+
+火红、叶绿和[绿宝石](rse_gift.md#gifts)共用大师球、神奇糖果、三种官方分发蛋、最初伙伴的蛋、
+稀有树果、全国图鉴、战斗计数卡与 Pokémon Box 的四种奖励蛋。卡片按照目标游戏的规则生成。
+
+| Pokémon Box 奖励蛋 | 孵化后掌握的招式 |
+| --- | --- |
+| 青绵鸟 | 啄、叫声、点到为止 |
+| 蛇纹熊 | 撞击、叫声、摇尾巴、神速 |
+| 向尾喵 | 叫声、撞击、摇尾巴、聚宝功 |
+| 皮丘 | 电击、撒娇、冲浪 |
+
+这些蛋带有命运般的相遇标志，相遇地点记录为 `0xFF`。
+
 <a id="event-pokemon"></a>
 ### 活动宝可梦
 
-`--gift event-pokemon --event-pokemon NAME` 发送 Gen 3 发行版的新副本：PKHeX.Core 通过该事件的 PID/IV 方法从其自己的事件表（`EncounterGift3`，非蛋、非日本条目）中制作它，包含其训练家姓名、训练家 ID、级别、动作、持有物、奖章和命运般的相遇位，并且其合法性检查必须通过。记录在卡被保存的那一刻就通过神秘事件 `givepokemon` 进入队伍，就像 `mystery-event-celebi` 一样；满队回答状态3并且什么也得不到，并且可以再次收到卡。如果没有 `--event-pokemon`，卡会发送存储的 WISHMKR 基拉祈。
+`--gift event-pokemon --event-pokemon NAME` 发送 Gen 3 发行版的新副本：PKHeX.Core 按活动规则从第三世代分发表或 GameCube 活动表生成宝可梦，包含其训练家姓名、训练家 ID、级别、动作、持有物、奖章和命运般的相遇位，并且其合法性检查必须通过。记录在卡被保存的那一刻就通过神秘事件 `givepokemon` 进入队伍，就像 `mystery-event-celebi` 一样；满队回答状态3并且什么也得不到，并且可以再次收到卡。如果没有 `--event-pokemon`，卡会发送存储的 WISHMKR 基拉祈。
 
-`NAME` 是训练家名称、空格和种类：`WISHMKR Jirachi`、`CHANNEL Jirachi`、
+`NAME` 使用活动名称，例如 `WISHMKR Jirachi`、`CHANNEL Jirachi`、`RUBY Zigzagoon`、`SAPHIRE Zigzagoon`、
 `Aura Mew`、`MYSTRY Mew`、`DOEL Deoxys`、`SPACE C Deoxys`、`ROCKS Metang`、`10 ANIV Pikachu`及其他所有`10 ANIV`品种、欧洲`10ANNIV`、 `10JAHRE`、`10ANNI` 和 `10ANIV` 发布。如果事件以多种语言发布，则发送匹配 `--language` 的事件。
+
+GameCube 活动包括 `MATTLE Ho-Oh`、`DUKING Plusle`、`Colosseum Pikachu`、`AGETO Celebi`、
+`XD Eevee`、`XD Chikorita`、`XD Cyndaquil`、`XD Totodile` 和 `XD Lugia`。PKHeX 按活动及
+来源游戏生成记录并检查合法性。日版竞技场皮卡丘与时拉比保留日文初训家姓名。
 
 这种卡片不依赖特定卡带构建：神秘事件虚拟机的 17 项命令表、其中的 `givepokemon`，以及礼物客户端 `Client_Run` 的 23 个选择分支，在全部十二种卡带上都具有相同布局。`tests/test_frlg_english_cartridges.py` 通过各卡带自身的 `RunMysteryEventScript` 执行卡片脚本（成功时返回状态 2，宝可梦记录进入队伍；队伍已满时返回状态 3，不添加记录）。
 
@@ -218,7 +240,7 @@ GB-Link Team 的自定义神奇卡片（GB-Link-Switch-LDN `cards/`，GPL-3.0）
 | 修改宝可梦 | `nature-mint`, `ability-capsule`, `poke-ball-changer`, `pokemon-gender`, `nickname`, `stat-judge`, `hidden-power`, `hidden-power-type`, `ev-training`, `friendship`, `pp-max`, `max-conditions`, `pokerus`, `unown-letters`, `trade-evolution`, `espeon-umbreon`, `move-tutor` |
 | 逐帧钩子 | `speed-2`, `speed-3`, `speed-4`, `speed-0-75`, `speed-0-5`, `fast-text`, `travel-anywhere`, `pc-anywhere`, `hm-moves`, `reusable-tms`, `physical-special-split`, `exp-share`, `shiny-hunting`, `roamer` |
 | 其他 | `no-encounters`, `legendary-respawn`, `instant-eggs`, `gift-box`, `pocket-casino`, `gift-ribbons`, `trainer-ids`, `gender-swap`, `rival-name` |
-| 活动宝可梦 | `box-eggs`, `colosseum-pikachu`, `ageto-celebi`, `mattle-ho-oh` |
+| 活动宝可梦 | `box-eggs`、`colosseum-pikachu`、`ageto-celebi`、`mattle-ho-oh` 仅在命令行可用。界面提供共用的 Pokémon Box 奖励蛋和 PKHeX 生成的活动宝可梦。 |
 
 与原构建的区别：
 
